@@ -1,0 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 10px;
+}
+
+@media (max-width: 768px) {
+  html {
+    font-size: 8px;
+  }
+}
+
+body {
+  background: #eee;
+  font-size: 1.6rem;
+  font-family: "Lora", serif;
+}
+
+ul li {
+  list-style: none;
+}
