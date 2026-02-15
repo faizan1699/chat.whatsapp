@@ -13,8 +13,7 @@ interface VideoCallProps {
   callNotification?: { message: string; type: 'start' | 'end' } | null;
   onRemoteVideoRef?: (ref: HTMLVideoElement | null) => void;
   showRemoteVideo?: boolean;
-  startCamera?: boolean;
-  onStreamReady?: (stream: MediaStream) => void;
+  localStream?: MediaStream | null; // Added prop
   callTimer?: number;
   isCallActive?: boolean;
   onUsernameChange?: (username: string) => void;
@@ -24,12 +23,11 @@ interface VideoCallProps {
   isMuted?: boolean;
 }
 
-export default function VideoCall({ username, onUsernameCreated, onEndCall, showEndCallButton, incomingCall, onAcceptCall, onRejectCall, callNotification, onRemoteVideoRef, showRemoteVideo = false, startCamera = false, onStreamReady, callTimer = 0, isCallActive = false, onUsernameChange, onClearData, connectionState, onToggleMute, isMuted = false }: VideoCallProps) {
+export default function VideoCall({ username, onUsernameCreated, onEndCall, showEndCallButton, incomingCall, onAcceptCall, onRejectCall, callNotification, onRemoteVideoRef, showRemoteVideo = false, localStream, callTimer = 0, isCallActive = false, onUsernameChange, onClearData, connectionState, onToggleMute, isMuted = false }: VideoCallProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const usernameInputRef = useRef<HTMLInputElement>(null);
   const editUsernameRef = useRef<HTMLInputElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   // Remove localMuted state as it is handled by parent prop isMuted
   // const [localMuted, setLocalMuted] = useState(false);
@@ -39,11 +37,15 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
     onToggleMute?.();
   };
 
+  // Handle local video stream
   useEffect(() => {
-    if (startCamera) {
-      startMyVideo();
+    if (localVideoRef.current && localStream) {
+      console.log('📹 Setting local video stream from prop');
+      localVideoRef.current.srcObject = localStream;
+    } else if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
     }
-  }, [startCamera]);
+  }, [localStream]);
 
   useEffect(() => {
     if (onRemoteVideoRef && remoteVideoRef.current) {
@@ -64,48 +66,6 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
       window.removeEventListener('openEditModal', handleOpenEditModal);
     };
   }, []);
-
-  useEffect(() => {
-    if (!startCamera) {
-      stopCamera();
-    }
-  }, [startCamera]);
-
-  const startMyVideo = async () => {
-    try {
-      console.log('🎥 Requesting camera and microphone access...');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-      console.log('✅ Stream obtained successfully');
-      console.log('Stream tracks:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, muted: t.muted, readyState: t.readyState })));
-
-      streamRef.current = stream;
-      if (localVideoRef.current) {
-        console.log('📹 Setting local video stream');
-        localVideoRef.current.srcObject = stream;
-        localVideoRef.current.onloadedmetadata = () => {
-          console.log('📹 Local video metadata loaded');
-        };
-      }
-      // Notify parent component that stream is ready
-      if (onStreamReady) {
-        console.log('📤 Notifying parent component of stream readiness');
-        onStreamReady(stream);
-      }
-    } catch (error: any) {
-      console.error('❌ Error accessing media devices:', error);
-      console.error('Error details:', error.name, error.message);
-    }
-  };
-
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = null;
-    }
-  };
 
   const handleCreateUser = () => {
     if (usernameInputRef.current && usernameInputRef.current.value !== "") {
@@ -358,41 +318,42 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
             className="w-full h-full"
           />
         </div>
-        {showRemoteVideo && (
-          <div className="remote-video flex-1 w-full min-h-[20rem] md:min-h-[40rem] md:w-[50rem] md:max-h-[50rem] bg-black overflow-hidden rounded-lg">
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              className="w-full h-full object-cover"
-              onLoadStart={() => console.log('Remote video loading started')}
-              onCanPlay={() => console.log('Remote video can play')}
-              onError={(e) => console.error('Remote video error:', e)}
-            />
-          </div>
-        )}
+        <div className={`remote-video flex-1 w-full min-h-[20rem] md:min-h-[40rem] md:w-[50rem] md:max-h-[50rem] bg-black overflow-hidden rounded-lg ${showRemoteVideo ? '' : 'hidden'}`}>
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            className="w-full h-full object-cover"
+            onLoadStart={() => console.log('Remote video loading started')}
+            onCanPlay={() => console.log('Remote video can play')}
+            onError={(e) => console.error('Remote video error:', e)}
+          />
+        </div>
       </div>
 
       {showEndCallButton && (
         <div className="flex gap-4 justify-center">
           <button
             onClick={toggleMute}
-            className={`px-6 py-3 rounded-lg font-semibold transition-colors ${isMuted
-              ? 'bg-red-500 hover:bg-red-600 text-white'
-              : 'bg-gray-500 hover:bg-gray-600 text-white'
-              }`}
+            className={`w-[200px] h-16 md:h-20 font-bold bg-white shadow-[0_0_15px_15px_rgba(0,0,0,0.2)] rounded-lg m-4 md:m-8 cursor-pointer flex items-center justify-center gap-2 transition-colors ${isMuted ? 'text-red-500' : 'text-gray-700 hover:text-gray-900'}`}
             title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
           >
             {isMuted ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="1" y1="1" x2="23" y2="23"></line>
-                <path d="M9 9v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2z" />
-              </svg>
+              <>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="1" y1="1" x2="23" y2="23"></line>
+                  <path d="M9 9v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2z" />
+                </svg>
+                <span className="text-lg">Unmute</span>
+              </>
             ) : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 1a3 3 0 0 0-3 3v10.5L7.5 17.5a3 3 0 0 0 4.242 4.242L12 19.5V13a3 3 0 0 0 3-3z" />
-                <path d="M17 11.305a3 3 0 0 0 0 4.242l-4.5 4.242V8.69a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v11.5l6.5-6.5z" />
-              </svg>
+              <>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 1a3 3 0 0 0-3 3v10.5L7.5 17.5a3 3 0 0 0 4.242 4.242L12 19.5V13a3 3 0 0 0 3-3z" />
+                  <path d="M17 11.305a3 3 0 0 0 0 4.242l-4.5 4.242V8.69a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v11.5l6.5-6.5z" />
+                </svg>
+                <span className="text-lg">Mute</span>
+              </>
             )}
           </button>
           <button

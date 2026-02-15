@@ -45,21 +45,19 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
       socket.on('join-user', (username) => {
         console.log(`User ${username} joining with socket ${socket.id}`);
         console.log('Current allusers before adding user:', allusers);
-        
+
         // Validate username
         if (!username || username.trim() === '' || username.length < 2) {
           console.log('Attempted to join with empty or invalid username');
           socket.emit('username-taken', { message: 'Username must be at least 2 characters long' });
           return;
         }
-        
-        // Check if username already exists
+
         if (allusers[username]) {
-          console.log(`Username ${username} already exists`);
           socket.emit('username-taken', { message: `Username ${username} is already taken` });
           return;
         }
-        
+
         allusers[username] = socket.id;
         socket.username = username;
         console.log('Current users:', allusers);

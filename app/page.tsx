@@ -20,7 +20,9 @@ export default function Home() {
   const [callNotification, setCallNotification] = useState<{ message: string; type: 'start' | 'end' } | null>(null);
   const [showRemoteVideo, setShowRemoteVideo] = useState<boolean>(false);
   const [remoteDescriptionSet, setRemoteDescriptionSet] = useState<boolean>(false);
-  const [startCamera, setStartCamera] = useState<boolean>(false);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  // Removed startCamera state as we manage stream in parent
+  // const [startCamera, setStartCamera] = useState<boolean>(false);
   const [callTimer, setCallTimer] = useState(0);
   const [isCallActive, setIsCallActive] = useState<boolean>(false);
   const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
@@ -190,7 +192,7 @@ export default function Home() {
         });
 
         socketRef.current.on('call-ended', () => {
-          setShowRemoteVideo<boolean>(false);
+          setShowRemoteVideo(false);
           endCall();
         });
 
@@ -357,23 +359,48 @@ export default function Home() {
     }
   };
 
-  const startMyVideo = async () => {
+  const startLocalStream = async (): Promise<MediaStream | null> => {
     try {
+      if (localStreamRef.current) {
+        return localStreamRef.current;
+      }
+
+      console.log('🎥 Requesting camera and microphone access in parent...');
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Media API not available. Secure context needed.');
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-      console.log({ stream });
+      console.log('✅ Stream obtained:', stream.id);
       localStreamRef.current = stream;
-    } catch (error) {
-      console.error('Error accessing media devices:', error);
+      setLocalStream(stream);
+      return stream;
+    } catch (error: any) {
+      console.error('❌ Error accessing media devices:', error);
+      alert(`Camera Access Error: ${error.message}`);
+      return null;
     }
   };
 
+  const stopLocalStream = () => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+      setLocalStream(null);
+    }
+  };
+
+  // Original startMyVideo replaced by startLocalStream but kept startMyVideo name if needed, 
+  // but better to use the new robust one. Let's redirect logic.
+
   const endCall = () => {
     PeerConnection.reset();
-    setShowEndCallButton<boolean>(false);
-    setShowRemoteVideo<boolean>(false);
-    setRemoteDescriptionSet<boolean>(false);
-    setStartCamera<boolean>(false);
-    setIsCallActive<boolean>(false);
+    setShowEndCallButton(false);
+    setShowRemoteVideo(false);
+    setRemoteDescriptionSet(false);
+    // setStartCamera(false); // Removed
+    stopLocalStream(); // Stop stream on end call
+    setIsCallActive(false);
     setCallTimer(0);
     setConnectionState('disconnected');
     iceCandidatesBuffer.current = [];
@@ -416,96 +443,98 @@ export default function Home() {
     console.log('Incoming call offer type:', incomingCall.offer.type);
 
     // Start camera when accepting a call
-    setStartCamera(true);
+    const stream = await startLocalStream();
+    if (!stream) {
+      console.error('Could not get local stream');
+      return;
+    }
 
-    // Wait a bit for camera to start
-    setTimeout(async () => {
-      const pc = peerConnectionRef.current || PeerConnection.getInstance();
-      console.log('Peer connection state before setting remote description:', pc.signalingState);
+    // Wait a bit for processing
+    const pc = peerConnectionRef.current || PeerConnection.getInstance();
+    console.log('Peer connection state before setting remote description:', pc.signalingState);
 
-      // Add local stream to peer connection BEFORE setting remote description
-      if (localStreamRef.current) {
-        console.log('Adding local stream to peer connection in handleAcceptCall');
-        localStreamRef.current.getTracks().forEach(track => {
-          if (!pc.getSenders().some(sender => sender.track === track)) {
-            pc.addTrack(track, localStreamRef.current!);
-          }
-        });
-      } else {
-        console.log('❌ No local stream available in handleAcceptCall');
-      }
-
-      // Check connection state before setting remote description
-      if (pc.signalingState === 'stable') {
-        try {
-          console.log('Setting remote description from incoming call...');
-          await pc.setRemoteDescription(incomingCall.offer);
-          setRemoteDescriptionSet(true);
-          console.log('✅ Remote offer set successfully in handleAcceptCall');
-
-          // Process buffered ICE candidates immediately after setting remote description
-          await processBufferedIceCandidates(pc);
-        } catch (error) {
-          console.error('❌ Failed to set remote offer in handleAcceptCall:', error);
-          return;
+    // Add local stream to peer connection BEFORE setting remote description
+    if (stream) {
+      console.log('Adding local stream to peer connection in handleAcceptCall');
+      stream.getTracks().forEach(track => {
+        if (!pc.getSenders().some(sender => sender.track === track)) {
+          pc.addTrack(track, stream);
         }
-      } else {
-        console.error('❌ Cannot set remote offer: Connection not in stable state, current state:', pc.signalingState);
-        // Try to reset the connection and try again
-        try {
-          PeerConnection.reset();
-          const newPc = PeerConnection.getInstance();
-          peerConnectionRef.current = newPc; // Update reference
+      });
+    } else {
+      console.log('❌ No local stream available in handleAcceptCall');
+    }
 
-          // Add local stream to new peer connection
-          if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach(track => {
-              if (!newPc.getSenders().some(sender => sender.track === track)) {
-                newPc.addTrack(track, localStreamRef.current!);
-              }
-            });
-          }
+    // Check connection state before setting remote description
+    if (pc.signalingState === 'stable') {
+      try {
+        console.log('Setting remote description from incoming call...');
+        await pc.setRemoteDescription(incomingCall.offer);
+        setRemoteDescriptionSet(true);
+        console.log('✅ Remote offer set successfully in handleAcceptCall');
 
-          await newPc.setRemoteDescription(incomingCall.offer);
-          setRemoteDescriptionSet(true);
-          console.log('✅ Remote offer set successfully after connection reset');
-
-          // Process buffered ICE candidates after reset
-          await processBufferedIceCandidates(newPc);
-        } catch (resetError) {
-          console.error('❌ Failed to set remote offer even after reset:', resetError);
-          return;
-        }
+        // Process buffered ICE candidates immediately after setting remote description
+        await processBufferedIceCandidates(pc);
+      } catch (error) {
+        console.error('❌ Failed to set remote offer in handleAcceptCall:', error);
+        return;
       }
+    } else {
+      console.error('❌ Cannot set remote offer: Connection not in stable state, current state:', pc.signalingState);
+      // Try to reset the connection and try again
+      try {
+        PeerConnection.reset();
+        const newPc = PeerConnection.getInstance();
+        peerConnectionRef.current = newPc; // Update reference
 
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
+        // Add local stream to new peer connection
+        if (stream) {
+          stream.getTracks().forEach(track => {
+            if (!newPc.getSenders().some(sender => sender.track === track)) {
+              newPc.addTrack(track, stream);
+            }
+          });
+        }
 
-      socketRef.current?.emit('answer', {
-        from: incomingCall.to,
-        to: incomingCall.from,
-        answer: pc.localDescription
-      });
+        await newPc.setRemoteDescription(incomingCall.offer);
+        setRemoteDescriptionSet(true);
+        console.log('✅ Remote offer set successfully after connection reset');
 
-      setCaller([incomingCall.from, incomingCall.to]);
-      setIncomingCall(null);
-      setShowEndCallButton(true);
-      setShowRemoteVideo(true);
-      setIsCallActive(true);
-      setCallTimer(0);
-      setConnectionState('connected');
+        // Process buffered ICE candidates after reset
+        await processBufferedIceCandidates(newPc);
+      } catch (resetError) {
+        console.error('❌ Failed to set remote offer even after reset:', resetError);
+        return;
+      }
+    }
 
-      // Show call start notification
-      setCallNotification({
-        message: `Call started with ${incomingCall.from}`,
-        type: 'start'
-      });
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
 
-      // Hide notification after 3 seconds
-      setTimeout(() => {
-        setCallNotification(null);
-      }, 3000);
-    }, 1000);
+    socketRef.current?.emit('answer', {
+      from: incomingCall.to,
+      to: incomingCall.from,
+      answer: pc.localDescription
+    });
+
+    setCaller([incomingCall.from, incomingCall.to]);
+    setIncomingCall(null);
+    setShowEndCallButton(true);
+    setShowRemoteVideo(true);
+    setIsCallActive(true);
+    setCallTimer(0);
+    setConnectionState('connected');
+
+    // Show call start notification
+    setCallNotification({
+      message: `Call started with ${incomingCall.from}`,
+      type: 'start'
+    });
+
+    // Hide notification after 3 seconds
+    setTimeout(() => {
+      setCallNotification(null);
+    }, 3000);
   };
 
   const handleRejectCall = () => {
@@ -539,18 +568,16 @@ export default function Home() {
   const handleRemoteVideoRef = (ref: HTMLVideoElement | null) => {
     setRemoteVideoElement(ref);
     remoteVideoElementRef.current = ref;
-    console.log('Remote video element set:', !!ref);
 
     // If we already have a peer connection, update its ontrack handler
     if (peerConnectionRef.current && ref) {
-      console.log('Updating ontrack handler for existing peer connection');
       peerConnectionRef.current.ontrack = function (event) {
-        console.log('Received remote track (updated handler):', event.track.kind, event.streams.length, 'streams');
+        // console.log('Received remote track (updated handler):', event.track.kind, event.streams.length, 'streams');
         if (ref && event.streams[0]) {
-          console.log('Setting remote video stream (updated handler):', event.streams[0].getTracks().length, 'tracks');
+          // console.log('Setting remote video stream (updated handler):', event.streams[0].getTracks().length, 'tracks');
           ref.srcObject = event.streams[0];
           ref.play().catch(error => {
-            console.error('Error playing remote video (updated handler):', error);
+            // console.error('Error playing remote video (updated handler):', error);
           });
         }
       };
@@ -624,26 +651,28 @@ export default function Home() {
     setConnectionState('connecting');
 
     // Start camera when making a call
-    setStartCamera(true);
+    const stream = await startLocalStream();
+    if (!stream) {
+      console.error('Could not get local stream');
+      setConnectionState('disconnected');
+      return;
+    }
 
-    // Wait a bit for camera to start
-    setTimeout(async () => {
-      const pc = peerConnectionRef.current || PeerConnection.getInstance();
+    const pc = peerConnectionRef.current || PeerConnection.getInstance();
 
-      // Add local stream to peer connection BEFORE creating offer
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => {
-          if (!pc.getSenders().some(sender => sender.track === track)) {
-            pc.addTrack(track, localStreamRef.current!);
-          }
-        });
-      }
+    // Add local stream to peer connection BEFORE creating offer
+    if (stream) {
+      stream.getTracks().forEach(track => {
+        if (!pc.getSenders().some(sender => sender.track === track)) {
+          pc.addTrack(track, stream);
+        }
+      });
+    }
 
-      const offer = await pc.createOffer();
-      console.log({ offer });
-      await pc.setLocalDescription(offer);
-      socketRef.current?.emit('offer', { from: username, to: user, offer: pc.localDescription });
-    }, 1000);
+    const offer = await pc.createOffer();
+    console.log({ offer });
+    await pc.setLocalDescription(offer);
+    socketRef.current?.emit('offer', { from: username, to: user, offer: pc.localDescription });
   };
 
   const handleEditUser = () => {
@@ -687,8 +716,7 @@ export default function Home() {
         callNotification={callNotification}
         onRemoteVideoRef={handleRemoteVideoRef}
         showRemoteVideo={showRemoteVideo}
-        startCamera={startCamera}
-        onStreamReady={handleStreamReady}
+        localStream={localStream}
         callTimer={callTimer}
         isCallActive={isCallActive}
         onUsernameChange={handleUsernameChange}
