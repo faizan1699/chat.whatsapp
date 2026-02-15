@@ -6,9 +6,10 @@ import VideoCall from './VideoCall';
 interface AuthOverlayProps {
     username: string;
     onUsernameCreated: (username: string) => void;
+    onClearData: () => void;
 }
 
-export default function AuthOverlay({ username, onUsernameCreated }: AuthOverlayProps) {
+export default function AuthOverlay({ username, onUsernameCreated, onClearData }: AuthOverlayProps) {
     if (username !== "") return null;
 
     return (
@@ -18,7 +19,7 @@ export default function AuthOverlay({ username, onUsernameCreated }: AuthOverlay
                 onUsernameCreated={onUsernameCreated}
                 onEndCall={() => { }}
                 showEndCallButton={false}
-                onClearData={() => { }}
+                onClearData={onClearData}
             />
         </div>
     );

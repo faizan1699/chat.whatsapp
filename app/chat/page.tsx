@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
-import { Video, Phone, PhoneOff, Mic, MicOff, Camera, MoreVertical, Search, Paperclip, Smile, Send, ArrowLeft } from 'lucide-react';
+// import { Video, Phone, PhoneOff, Mic, MicOff, Camera, MoreVertical, Search, Paperclip, Smile, Send, ArrowLeft } from 'lucide-react';
 import VideoCall from '@/components/VideoCall';
 import IncomingCallModal from '@/components/IncomingCallModal';
 import MessageItem from '@/components/MessageItem';
@@ -438,6 +438,19 @@ export default function ChatPage() {
                 setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'failed' } : m));
             }, 500);
         }
+    };
+
+    const handleClearData = () => {
+        localStorage.removeItem('webrtc-username');
+        setUsername('');
+        setSelectedUser(null);
+        setMessages([]);
+        setUsers({});
+        if (socketRef.current) {
+            socketRef.current.disconnect();
+            socketRef.current = null;
+        }
+        router.push('/');
     };
 
     const currentChatMessages = messages.filter(

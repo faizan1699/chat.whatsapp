@@ -82,12 +82,10 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
   return (
     <section className="flex-1 flex flex-col items-center justify-center relative bg-[#f0f2f5] overflow-hidden">
 
-      {/* WhatsApp Green Header Background */}
       {username === "" && !isCallActive && (
         <div className="absolute top-0 left-0 w-full h-[220px] bg-[#00a884] z-0"></div>
       )}
 
-      {/* Connection State Badge */}
       {username !== "" && connectionState && (
         <div className={`absolute top-4 right-4 z-40 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm border ${connectionState === 'connected' ? 'bg-[#d9fdd3] text-[#00a884] border-[#00a884]/20' :
           connectionState === 'connecting' ? 'bg-yellow-50 text-yellow-600 border-yellow-200 animate-pulse' :
@@ -116,7 +114,7 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
               <li className="text-[#00a884] font-medium">Point your phone to this screen to capture the code (Enter username)</li>
             </ol>
             <div className="mt-auto pt-10 border-t border-[#f0f2f5]">
-              <a href="#" className="text-[#00a884] hover:underline font-medium">Need help to get started?</a>
+              <button className="text-[#00a884] hover:underline font-medium">Need help to get started?</button>
             </div>
           </div>
           <div className="w-full md:w-[400px] bg-white border-l border-[#f0f2f5] flex flex-col items-center justify-center p-10">
