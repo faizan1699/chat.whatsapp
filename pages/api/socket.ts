@@ -160,6 +160,18 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
           if (callback) callback({ status: 'error', message: 'User offline or not found' });
         }
       });
+
+      socket.on('delete-message', ({ id, to }) => {
+        if (allusers[to]) {
+          io.to(allusers[to]).emit('delete-message', { id });
+        }
+      });
+
+      socket.on('pin-message', ({ id, isPinned, to }) => {
+        if (allusers[to]) {
+          io.to(allusers[to]).emit('pin-message', { id, isPinned });
+        }
+      });
     });
   }
   res.end();

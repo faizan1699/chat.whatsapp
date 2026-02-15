@@ -3,10 +3,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
-// import { Video, Phone, PhoneOff, Mic, MicOff, Camera, MoreVertical, Search, Paperclip, Smile, Send, ArrowLeft } from 'lucide-react';
+import { Pin } from 'lucide-react';
 import VideoCall from '@/components/VideoCall';
 import IncomingCallModal from '@/components/IncomingCallModal';
-import MessageItem from '@/components/MessageItem';
+import MessageItem, { Message } from '@/components/MessageItem';
 import CallNotification from '@/components/CallNotification';
 import Sidebar from '@/components/Sidebar';
 import ResizableSidebar from '@/components/ResizableSidebar';
@@ -19,15 +19,6 @@ import AuthOverlay from '@/components/AuthOverlay';
 
 interface User {
     [key: string]: string;
-}
-
-interface Message {
-    id?: string;
-    from: string;
-    to: string;
-    message: string;
-    timestamp: Date;
-    status?: 'pending' | 'sent' | 'failed';
 }
 
 interface PeerConnectionManager {
@@ -46,6 +37,7 @@ export default function ChatPage() {
     const [isConnected, setIsConnected] = useState(false);
     const socketRef = useRef<Socket | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [replyingTo, setReplyingTo] = useState<Message | null>(null);
 
     const [isWindowFocused, setIsWindowFocused] = useState(true);
     const isWindowFocusedRef = useRef(true);
@@ -62,6 +54,7 @@ export default function ChatPage() {
     const [callNotification, setCallNotification] = useState<{ message: string; type: 'start' | 'end' } | null>(null);
     const [isAudioOnly, setIsAudioOnly] = useState(false);
     const [callParticipant, setCallParticipant] = useState<string>('');
+    const [unreadCounts, setUnreadCounts] = useState<{ [key: string]: number }>({});
 
     // Refs
     const localStreamRef = useRef<MediaStream | null>(null);
@@ -79,6 +72,16 @@ export default function ChatPage() {
     useEffect(() => {
         isWindowFocusedRef.current = isWindowFocused;
     }, [isWindowFocused]);
+
+    // Clear unread counts when user is selected
+    useEffect(() => {
+        if (selectedUser) {
+            setUnreadCounts(prev => ({
+                ...prev,
+                [selectedUser]: 0
+            }));
+        }
+    }, [selectedUser]);
 
 
     // Request Notification Permission
@@ -134,6 +137,14 @@ export default function ChatPage() {
                     if (data.from !== savedUsername) {
                         if (!isWindowFocusedRef.current || selectedUserRef.current !== data.from) {
                             showNotification(data);
+
+                            // Increment unread count if chat is not open or window not focused
+                            if (selectedUserRef.current !== data.from) {
+                                setUnreadCounts(prev => ({
+                                    ...prev,
+                                    [data.from]: (prev[data.from] || 0) + 1
+                                }));
+                            }
                         }
                     }
 
@@ -141,6 +152,14 @@ export default function ChatPage() {
                         if (data.id && prev.some(m => m.id === data.id)) return prev;
                         return [...prev, { ...data, timestamp: new Date(data.timestamp), status: 'sent' }];
                     });
+                });
+
+                socket.on('delete-message', ({ id }) => {
+                    setMessages(prev => prev.filter(m => m.id !== id));
+                });
+
+                socket.on('pin-message', ({ id, isPinned }) => {
+                    setMessages(prev => prev.map(m => m.id === id ? { ...m, isPinned } : m));
                 });
 
                 socket.on('offer', async ({ from, to, offer, isAudioOnly: incomingIsAudioOnly }) => {
@@ -416,12 +435,13 @@ export default function ChatPage() {
             to: selectedUser,
             message: inputMessage.trim(),
             timestamp: new Date(),
-            status: 'pending'
+            status: 'pending',
+            replyTo: replyingTo || undefined
         };
 
         setMessages((prev) => [...prev, newMessage]);
-        const currentMsg = inputMessage;
         setInputMessage('');
+        setReplyingTo(null);
 
         if (socketRef.current?.connected) {
             sendMessageInternal(newMessage);
@@ -444,6 +464,18 @@ export default function ChatPage() {
         }
     };
 
+    const handleDeleteMessage = (id: string) => {
+        if (!confirm('Delete this message?')) return;
+        setMessages(prev => prev.filter(m => m.id !== id));
+        socketRef.current?.emit('delete-message', { id, to: selectedUser });
+    };
+
+    const handlePinMessage = (msg: Message) => {
+        const isPinned = !msg.isPinned;
+        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isPinned } : m));
+        socketRef.current?.emit('pin-message', { id: msg.id, isPinned, to: selectedUser });
+    };
+
     const handleClearData = () => {
         localStorage.removeItem('webrtc-username');
         setUsername('');
@@ -463,9 +495,11 @@ export default function ChatPage() {
             (msg.from === selectedUser && msg.to === username)
     );
 
+    const pinnedMessages = currentChatMessages.filter(m => m.isPinned);
+
     return (
-        <div className="flex h-screen w-screen overflow-hidden bg-[#f0f2f5] md:p-4 font-sans">
-            <div className="flex h-full w-full overflow-hidden bg-white shadow-2xl md:rounded-sm">
+        <div className="min-h-screen h-screen flex bg-[#f0f2f5] md:p-4 font-sans">
+            <div className="relative flex h-full w-full bg-white shadow-2xl md:rounded-sm">
 
                 <ResizableSidebar selectedUser={selectedUser}>
                     <Sidebar
@@ -476,6 +510,7 @@ export default function ChatPage() {
                         searchQuery={searchQuery}
                         setSearchQuery={setSearchQuery}
                         messages={messages}
+                        unreadCounts={unreadCounts}
                     />
                 </ResizableSidebar>
 
@@ -490,16 +525,39 @@ export default function ChatPage() {
                                 onStartAudioCall={() => startCall(true)}
                             />
 
+                            {/* Pinned Messages Banner */}
+                            {pinnedMessages.length > 0 && (
+                                <div className="z-20 bg-white/90 backdrop-blur px-4 py-2 border-b border-[#f0f2f5] flex items-center gap-2 shadow-sm animate-in fade-in duration-300">
+                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00a884]/10 text-[#00a884]">
+                                        <Pin size={16} className="fill-current" />
+                                    </div>
+                                    <div className="flex-1 overflow-hidden">
+                                        <p className="text-[12px] font-bold text-[#00a884]">Pinned Message</p>
+                                        <p className="text-[13px] text-[#54656f] truncate">
+                                            {pinnedMessages[pinnedMessages.length - 1].message}
+                                        </p>
+                                    </div>
+                                    <span className="text-[10px] bg-[#f0f2f5] px-1.5 py-0.5 rounded text-[#667781] font-bold">
+                                        {pinnedMessages.length}
+                                    </span>
+                                </div>
+                            )}
+
                             <MessageList
                                 messages={currentChatMessages}
                                 username={username}
                                 onRetry={handleRetry}
+                                onReply={(msg) => setReplyingTo(msg)}
+                                onDelete={handleDeleteMessage}
+                                onPin={handlePinMessage}
                             />
 
                             <ChatFooter
                                 inputMessage={inputMessage}
                                 setInputMessage={setInputMessage}
                                 onSendMessage={handleSendMessage}
+                                replyingTo={replyingTo}
+                                onCancelReply={() => setReplyingTo(null)}
                             />
                         </>
                     ) : (

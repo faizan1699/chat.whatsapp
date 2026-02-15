@@ -1,23 +1,36 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
+import { Reply, Trash2, Pin, ChevronDown } from 'lucide-react';
 
-interface Message {
+export interface Message {
     id?: string;
     from: string;
     to: string;
     message: string;
     timestamp: Date;
     status?: 'pending' | 'sent' | 'failed';
+    replyTo?: Message;
+    isPinned?: boolean;
 }
 
 interface MessageItemProps {
     message: Message;
     isMe: boolean;
     onRetry?: (msg: Message) => void;
+    onReply?: (msg: Message) => void;
+    onDelete?: (id: string) => void;
+    onPin?: (msg: Message) => void;
 }
 
-export default function MessageItem({ message, isMe, onRetry }: MessageItemProps) {
+export default function MessageItem({ message, isMe, onRetry, onReply, onDelete, onPin }: MessageItemProps) {
+    const [visibleWords, setVisibleWords] = useState(30);
+    const [showActions, setShowActions] = useState(false);
+
+    const words = message.message.trim().split(/\s+/);
+    const isLongMessage = words.length > 30;
+    const hasMore = words.length > visibleWords;
+
     const formatTime = (date: Date) => {
         return new Date(date).toLocaleTimeString([], {
             hour: '2-digit',
@@ -26,18 +39,95 @@ export default function MessageItem({ message, isMe, onRetry }: MessageItemProps
         });
     };
 
+    const displayedMessage = hasMore
+        ? words.slice(0, visibleWords).join(' ') + '...'
+        : message.message;
+
+    const handleSeeMore = (e: React.MouseEvent) => {
+        e.preventDefault();
+        setVisibleWords(prev => prev + 30);
+    };
+
+    const handleSeeLess = (e: React.MouseEvent) => {
+        e.preventDefault();
+        setVisibleWords(30);
+    };
+
     return (
-        <div className={`flex w-full mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+        <div
+            className={`group flex w-full mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}
+            onMouseEnter={() => setShowActions(true)}
+            onMouseLeave={() => setShowActions(false)}
+        >
             <div
                 className={`flex flex-col max-w-[85%] md:max-w-[65%] px-2 py-1 shadow-sm relative ${isMe
-                        ? 'rounded-l-lg rounded-br-lg bg-[#d9fdd3] text-[#111b21] ml-10'
-                        : 'rounded-r-lg rounded-bl-lg bg-white text-[#111b21] mr-10'
+                    ? 'rounded-l-lg rounded-br-lg bg-[#d9fdd3] text-[#111b21] ml-10'
+                    : 'rounded-r-lg rounded-bl-lg bg-white text-[#111b21] mr-10'
                     } ${message.status === 'failed' ? 'bg-red-50 border border-red-200' : ''}`}
             >
+                {/* Reply Context */}
+                {message.replyTo && (
+                    <div className="mb-1 border-l-4 border-[#06cf9c] bg-black/5 p-2 rounded text-[12px] opacity-80">
+                        <p className="font-bold text-[#06cf9c]">{message.replyTo.from === message.from ? 'You' : message.replyTo.from}</p>
+                        <p className="truncate text-[#54656f]">{message.replyTo.message}</p>
+                    </div>
+                )}
+
+                {/* Pin Indicator */}
+                {message.isPinned && (
+                    <div className="mb-1 flex items-center gap-1 text-[10px] text-[#667781] font-medium italic">
+                        <Pin size={10} className="fill-current" />
+                        <span>Pinned Message</span>
+                    </div>
+                )}
+
+                {/* Actions Trigger (Hidden by default, shown on hover/group-hover) */}
+                <div className={`absolute top-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity ${isMe ? 'left-[-40px]' : 'right-[-40px]'}`}>
+                    <div className="flex flex-col gap-1 bg-white shadow-md rounded-full p-1 border border-[#f0f2f5]">
+                        <button
+                            onClick={() => onReply?.(message)}
+                            className="p-1.5 hover:bg-black/5 rounded-full text-[#667781] transition-colors"
+                            title="Reply"
+                        >
+                            <Reply size={16} />
+                        </button>
+                        <button
+                            onClick={() => onPin?.(message)}
+                            className={`p-1.5 hover:bg-black/5 rounded-full transition-colors ${message.isPinned ? 'text-[#00a884]' : 'text-[#667781]'}`}
+                            title={message.isPinned ? 'Unpin' : 'Pin'}
+                        >
+                            <Pin size={16} className={message.isPinned ? 'fill-current' : ''} />
+                        </button>
+                        <button
+                            onClick={() => message.id && onDelete?.(message.id)}
+                            className="p-1.5 hover:bg-red-50 rounded-full text-red-500 transition-colors"
+                            title="Delete"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    </div>
+                </div>
+
                 {/* Message Content */}
-                <div className="flex flex-wrap items-end gap-2 pr-2">
+                <div className="flex flex-col pr-2">
                     <p className="text-[14.2px] leading-tight whitespace-pre-wrap py-0.5 min-w-[50px]">
-                        {message.message}
+                        {displayedMessage}
+                        {hasMore && (
+                            <button
+                                onClick={handleSeeMore}
+                                className="ml-1 text-[#00a884] font-bold hover:underline text-[12px]"
+                            >
+                                Read more
+                            </button>
+                        )}
+                        {!hasMore && isLongMessage && visibleWords > 30 && (
+                            <button
+                                onClick={handleSeeLess}
+                                className="ml-1 text-[#00a884] font-bold hover:underline text-[12px]"
+                            >
+                                See less
+                            </button>
+                        )}
                     </p>
 
                     {/* Meta data (Time + Status) */}
@@ -67,14 +157,14 @@ export default function MessageItem({ message, isMe, onRetry }: MessageItemProps
 
                 {/* Tail Decoration (Simplified) */}
                 <div className={`absolute top-0 w-2 h-3 ${isMe
-                        ? '-right-1.5 bg-[#d9fdd3] clip-path-right'
-                        : '-left-1.5 bg-white clip-path-left'
+                    ? '-right-1.5 bg-[#d9fdd3] clip-path-right'
+                    : '-left-1.5 bg-white clip-path-left'
                     }`} style={{
                         clipPath: isMe
                             ? 'polygon(0 0, 0 100%, 100% 0)'
                             : 'polygon(100% 0, 100% 100%, 0 0)'
                     }} />
             </div>
-        </div>
+        </div >
     );
 }

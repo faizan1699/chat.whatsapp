@@ -1,24 +1,18 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import MessageItem from './MessageItem';
-
-interface Message {
-    id?: string;
-    from: string;
-    to: string;
-    message: string;
-    timestamp: Date;
-    status?: 'pending' | 'sent' | 'failed';
-}
+import MessageItem, { Message } from './MessageItem';
 
 interface MessageListProps {
     messages: Message[];
     username: string;
     onRetry: (msg: Message) => void;
+    onReply: (msg: Message) => void;
+    onDelete: (id: string) => void;
+    onPin: (msg: Message) => void;
 }
 
-export default function MessageList({ messages, username, onRetry }: MessageListProps) {
+export default function MessageList({ messages, username, onRetry, onReply, onDelete, onPin }: MessageListProps) {
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const scrollToBottom = () => {
@@ -39,6 +33,9 @@ export default function MessageList({ messages, username, onRetry }: MessageList
                         message={msg}
                         isMe={msg.from === username}
                         onRetry={onRetry}
+                        onReply={onReply}
+                        onDelete={onDelete}
+                        onPin={onPin}
                     />
                 ))}
                 <div ref={messagesEndRef} />

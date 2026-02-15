@@ -12,7 +12,7 @@ interface ChatHeaderProps {
 
 export default function ChatHeader({ selectedUser, onBack, onStartVideoCall, onStartAudioCall }: ChatHeaderProps) {
     return (
-        <header className="z-20 flex h-[60px] w-full flex-shrink-0 items-center justify-between bg-[#f0f2f5] px-4 py-2 border-l border-[#d1d7db]">
+        <header className="sticky top-0 z-30 flex h-[60px] w-full flex-shrink-0 items-center justify-between bg-[#f0f2f5] px-4 py-2 border-l border-[#d1d7db]">
             <div className="flex items-center gap-3">
                 <button className="md:hidden text-[#54656f]" onClick={onBack}>
                     <ArrowLeft size={24} />

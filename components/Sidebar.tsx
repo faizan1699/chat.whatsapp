@@ -10,10 +10,19 @@ interface SidebarProps {
     searchQuery: string;
     setSearchQuery: (query: string) => void;
     messages: any[];
-    sidebarWidth: number;
+    unreadCounts?: { [key: string]: number };
 }
 
-export default function Sidebar({ username, users, selectedUser, setSelectedUser, searchQuery, setSearchQuery, messages }: Omit<SidebarProps, 'sidebarWidth'>) {
+export default function Sidebar({
+    username,
+    users,
+    selectedUser,
+    setSelectedUser,
+    searchQuery,
+    setSearchQuery,
+    messages,
+    unreadCounts = {}
+}: SidebarProps) {
     const filteredUsers = Object.keys(users)
         .filter((u) => u !== username)
         .filter(u => u.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -75,6 +84,8 @@ export default function Sidebar({ username, users, selectedUser, setSelectedUser
                 ) : (
                     filteredUsers.map((user) => {
                         const lastMsg = getLastMessage(user);
+                        const unreadCount = unreadCounts[user] || 0;
+
                         return (
                             <button
                                 key={user}
@@ -93,15 +104,20 @@ export default function Sidebar({ username, users, selectedUser, setSelectedUser
                                             )}
                                         </div>
                                         {lastMsg && (
-                                            <span className="text-[12px] text-[#667781]">
+                                            <span className={`text-[12px] ${unreadCount > 0 ? 'text-[#00a884] font-semibold' : 'text-[#667781]'}`}>
                                                 {new Date(lastMsg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                         )}
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="truncate text-sm text-[#667781]">
+                                        <span className={`truncate text-sm ${unreadCount > 0 ? 'text-[#111b21] font-medium' : 'text-[#667781]'}`}>
                                             {lastMsg ? lastMsg.message : 'Start a conversation'}
                                         </span>
+                                        {unreadCount > 0 && (
+                                            <div className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#25d366] px-1.5 text-[11px] font-bold text-white">
+                                                {unreadCount}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </button>

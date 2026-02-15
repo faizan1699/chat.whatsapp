@@ -139,7 +139,7 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
               onClick={handleCreateUser}
               className="w-full bg-[#00a884] hover:bg-[#008069] text-white font-bold py-4 rounded-lg transition-all shadow-md active:scale-95"
             >
-              Get Startedss
+              Get Started
             </button>
             <p className="mt-4 text-xs text-[#8696a0]">Version 1.0.0 — Stable</p>
           </div>

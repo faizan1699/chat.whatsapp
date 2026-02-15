@@ -13,9 +13,9 @@ interface ResizableSidebarProps {
 export default function ResizableSidebar({
     children,
     selectedUser,
-    initialWidth = 400,
+    initialWidth = 300,
     minWidth = 280,
-    maxWidth = 600
+    maxWidth = 300
 }: ResizableSidebarProps) {
     const [sidebarWidth, setSidebarWidth] = useState(initialWidth);
     const isResizing = useRef(false);
