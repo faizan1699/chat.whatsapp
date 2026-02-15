@@ -16,8 +16,10 @@ import MessageList from '@/components/chat/MessageList';
 import EmptyChatState from '@/components/chat/EmptyChatState';
 import CallOverlay from '@/components/video/CallOverlay';
 import AuthOverlay from '@/components/global/AuthOverlay';
+import EditProfileModal from '@/components/global/EditProfileModal';
 import FullPageLoader from '@/components/global/FullPageLoader';
 import { apiService } from '@/services/apiService';
+import api from '@/utils/api';
 import { uploadAudio } from '@/utils/supabase';
 
 interface User {
@@ -64,6 +66,7 @@ export default function ChatPage() {
     const [callParticipant, setCallParticipant] = useState<string>('');
     const [unreadCounts, setUnreadCounts] = useState<{ [key: string]: number }>({});
     const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+    const [showEditProfile, setShowEditProfile] = useState(false);
 
     // Refs
     const localStreamRef = useRef<MediaStream | null>(null);
@@ -809,6 +812,7 @@ export default function ChatPage() {
 
     const handleClearData = () => {
         localStorage.removeItem('webrtc-username');
+        localStorage.removeItem('webrtc-userId');
         setUsername('');
         setSelectedUser(null);
         setMessages([]);
@@ -818,6 +822,23 @@ export default function ChatPage() {
             socketRef.current = null;
         }
         router.push('/');
+    };
+
+    const handleLogout = async () => {
+        try {
+            await api.post('/auth/logout');
+        } catch {
+            /* ignore */
+        }
+        handleClearData();
+    };
+
+    const handleProfileUpdated = (newUsername?: string) => {
+        if (newUsername) {
+            setUsername(newUsername);
+            localStorage.setItem('webrtc-username', newUsername);
+            socketRef.current?.emit('join-user', newUsername);
+        }
     };
 
     const currentChatMessages = messages.filter(
@@ -846,6 +867,8 @@ export default function ChatPage() {
                         setSearchQuery={setSearchQuery}
                         messages={messages}
                         unreadCounts={unreadCounts}
+                        onLogout={handleLogout}
+                        onEditProfile={() => setShowEditProfile(true)}
                     />
                 </ResizableSidebar>
 
@@ -979,15 +1002,23 @@ export default function ChatPage() {
 
             <AuthOverlay
                 username={username}
-                onUsernameCreated={(u) => {
+                onUsernameCreated={(u, userId) => {
                     setUsername(u);
                     localStorage.setItem('webrtc-username', u);
+                    if (userId) localStorage.setItem('webrtc-userId', userId);
                     socketRef.current?.emit('join-user', u);
                 }}
                 onClearData={() => {
                     localStorage.removeItem('webrtc-username');
+                    localStorage.removeItem('webrtc-userId');
                     setUsername('');
                 }}
+            />
+
+            <EditProfileModal
+                isOpen={showEditProfile}
+                onClose={() => setShowEditProfile(false)}
+                onSuccess={handleProfileUpdated}
             />
         </div>
     );

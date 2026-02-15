@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { debounce } from '../../utils/debounce';
-import { Plus, X, Search as SearchIcon } from 'lucide-react';
+import { Plus, X, Search as SearchIcon, LogOut, User } from 'lucide-react';
 import UserSearch from '../chat/UserSearch';
 import { apiService } from '@/services/apiService';
 
@@ -13,6 +13,8 @@ interface SidebarProps {
     setSearchQuery: (query: string) => void;
     messages: any[];
     unreadCounts?: { [key: string]: number };
+    onLogout?: () => void;
+    onEditProfile?: () => void;
 }
 
 export default function Sidebar({
@@ -23,10 +25,24 @@ export default function Sidebar({
     searchQuery,
     setSearchQuery,
     messages,
-    unreadCounts = {}
+    unreadCounts = {},
+    onLogout,
+    onEditProfile,
 }: SidebarProps) {
     const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+    const [showMenu, setShowMenu] = useState(false);
     const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+                setShowMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const debouncedSetSearchQuery = useMemo(
         () => debounce((value: string) => setSearchQuery(value), 300),
@@ -84,11 +100,39 @@ export default function Sidebar({
                     >
                         <Plus size={22} />
                     </button>
-                    <button className="hover:bg-black/5 p-2 rounded-full transition-colors">
-                        <svg viewBox="0 0 24 24" height="20" width="20" fill="currentColor">
-                            <path d="M12 7a2 2 0 1 0-.001-4.001A2 2 0 0 0 12 7zm0 2a2 2 0 1 0-.001 4.001A2 2 0 0 0 12 9zm0 6a2 2 0 1 0-.001 4.001A2 2 0 0 0 12 15z"></path>
-                        </svg>
-                    </button>
+                    <div className="relative" ref={menuRef}>
+                        <button
+                            onClick={() => setShowMenu(!showMenu)}
+                            className="hover:bg-black/5 p-2 rounded-full transition-colors"
+                            title="Menu"
+                        >
+                            <svg viewBox="0 0 24 24" height="20" width="20" fill="currentColor">
+                                <path d="M12 7a2 2 0 1 0-.001-4.001A2 2 0 0 0 12 7zm0 2a2 2 0 1 0-.001 4.001A2 2 0 0 0 12 9zm0 6a2 2 0 1 0-.001 4.001A2 2 0 0 0 12 15z"></path>
+                            </svg>
+                        </button>
+                        {showMenu && (
+                            <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-xl border border-[#e9edef] py-1 z-50 animate-in fade-in duration-150">
+                                <button
+                                    onClick={() => {
+                                        onEditProfile?.();
+                                        setShowMenu(false);
+                                    }}
+                                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-[#111b21] hover:bg-[#f0f2f5]"
+                                >
+                                    <User size={18} className="text-[#667781]" /> Edit Profile
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        onLogout?.();
+                                        setShowMenu(false);
+                                    }}
+                                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50"
+                                >
+                                    <LogOut size={18} /> Logout
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </header>
 
