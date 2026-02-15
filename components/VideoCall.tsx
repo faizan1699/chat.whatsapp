@@ -93,7 +93,6 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
 
   const openEditModal = () => {
     setShowEditModal(true);
-    // Pre-fill the input with current username
     setTimeout(() => {
       if (usernameInputRef.current) {
         usernameInputRef.current.value = username;
@@ -103,6 +102,7 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
 
   return (
     <section className="flex-1 flex flex-col items-center justify-center p-2 md:p-0 relative">
+
       {/* Call Timer */}
       {isCallActive && (
         <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-30 px-4 py-2 bg-black bg-opacity-75 text-white font-mono text-lg rounded-lg shadow-lg">
