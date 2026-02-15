@@ -31,7 +31,7 @@ export default function UsernameEntry({ onUsernameCreated }: UsernameEntryProps)
     };
 
     return (
-        <div className="z-10 w-full md:w-[95%] max-w-[1000px] h-full md:h-auto md:min-h-[500px] bg-white shadow-2xl md:rounded-sm flex flex-col md:flex-row overflow-y-auto md:overflow-visible">
+        <div className="z-10 w-full md:w-[95%] max-w-[1000px] h-screen md:h-auto md:min-h-[500px] bg-white shadow-2xl md:rounded-sm flex flex-col md:flex-row overflow-y-auto">
             <div className="flex-1 p-8 md:p-16 flex flex-col">
                 <h1 className="text-2xl md:text-3xl font-light text-[#41525d] mb-6 md:mb-10">Use NexChat on your device:</h1>
                 <ol className="list-decimal list-inside space-y-4 md:space-y-6 text-[#41525d] text-base md:text-lg">

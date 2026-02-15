@@ -43,7 +43,7 @@ export default function FullPageLoader() {
                         </svg>
                     </div>
                     {/* Ring animation around logo */}
-                    <div className="absolute inset-[-10px] border-4 border-white/30 rounded-full animate-ping"></div>asdfadsfasdfa
+                    <div className="absolute inset-[-10px] border-4 border-white/30 rounded-full animate-ping"></div>
                 </div>
 
                 {/* Typed Text */}

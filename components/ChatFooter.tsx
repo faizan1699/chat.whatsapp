@@ -61,6 +61,9 @@ export default function ChatFooter({
                         className="w-full rounded-lg bg-white px-4 py-2.5 text-[15px] text-[#111b21] outline-none placeholder:text-[#667781]"
                         value={inputMessage}
                         onChange={(e) => setInputMessage(e.target.value)}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
                     />
                     <button
                         type="button"
@@ -76,7 +79,7 @@ export default function ChatFooter({
                     </button>
                 </form>
             </footer>
-            
+
             {/* Voice Recording Overlay */}
             {isVoiceRecording && (
                 <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex items-center justify-center z-30">

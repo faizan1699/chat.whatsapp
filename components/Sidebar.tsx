@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
+import { debounce } from '../utils/debounce';
 
 interface SidebarProps {
     username: string;
@@ -23,6 +24,19 @@ export default function Sidebar({
     messages,
     unreadCounts = {}
 }: SidebarProps) {
+    const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
+
+    const debouncedSetSearchQuery = useMemo(
+        () => debounce((value: string) => setSearchQuery(value), 300),
+        [setSearchQuery]
+    );
+
+    const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setLocalSearchQuery(value);
+        debouncedSetSearchQuery(value);
+    };
+
     const filteredUsers = Object.keys(users)
         .filter((u) => u !== username)
         .filter(u => u.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -69,8 +83,11 @@ export default function Sidebar({
                         type="text"
                         placeholder="Search or start new chat"
                         className="w-full bg-transparent text-sm text-[#111b21] outline-none placeholder:text-[#667781]"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        value={localSearchQuery}
+                        onChange={handleSearchChange}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
                     />
                 </div>
             </div>

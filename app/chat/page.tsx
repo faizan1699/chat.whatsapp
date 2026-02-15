@@ -30,32 +30,32 @@ interface PeerConnectionManager {
 export default function ChatPage() {
     const router = useRouter();
     const [username, setUsername] = useState<string>('');
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState<boolean>(true);
     const [users, setUsers] = useState<User>({});
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
     const selectedUserRef = useRef<string | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputMessage, setInputMessage] = useState('');
-    const [isConnected, setIsConnected] = useState(false);
+    const [isConnected, setIsConnected] = useState<boolean>(false);
     const socketRef = useRef<Socket | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
-    const [showPinsDropdown, setShowPinsDropdown] = useState(false);
+    const [showPinsDropdown, setShowPinsDropdown] = useState<boolean>(false);
 
-    const [isWindowFocused, setIsWindowFocused] = useState(true);
+    const [isWindowFocused, setIsWindowFocused] = useState<boolean>(true);
     const isWindowFocusedRef = useRef(true);
 
     // Call States
-    const [isCallActive, setIsCallActive] = useState(false);
+    const [isCallActive, setIsCallActive] = useState<boolean>(false);
     const [incomingCall, setIncomingCall] = useState<{ from: string; to: string; offer: RTCSessionDescriptionInit; isAudioOnly?: boolean } | null>(null);
-    const [showEndCallButton, setShowEndCallButton] = useState(false);
-    const [showRemoteVideo, setShowRemoteVideo] = useState(false);
+    const [showEndCallButton, setShowEndCallButton] = useState<boolean>(false);
+    const [showRemoteVideo, setShowRemoteVideo] = useState<boolean>(false);
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
     const [callTimer, setCallTimer] = useState(0);
-    const [isMuted, setIsMuted] = useState(false);
+    const [isMuted, setIsMuted] = useState<boolean>(false);
     const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
     const [callNotification, setCallNotification] = useState<{ message: string; type: 'start' | 'end' } | null>(null);
-    const [isAudioOnly, setIsAudioOnly] = useState(false);
+    const [isAudioOnly, setIsAudioOnly] = useState<boolean>(false);
     const [callParticipant, setCallParticipant] = useState<string>('');
     const [unreadCounts, setUnreadCounts] = useState<{ [key: string]: number }>({});
 
@@ -110,6 +110,8 @@ export default function ChatPage() {
         const savedUsername = localStorage.getItem('webrtc-username');
         if (savedUsername) {
             setUsername(savedUsername);
+        } else {
+            setIsLoading(false);
         }
 
         const initSocket = async () => {
@@ -141,7 +143,6 @@ export default function ChatPage() {
                         if (!isWindowFocusedRef.current || selectedUserRef.current !== data.from) {
                             showNotification(data);
 
-                            // Increment unread count if chat is not open or window not focused
                             if (selectedUserRef.current !== data.from) {
                                 setUnreadCounts(prev => ({
                                     ...prev,
@@ -216,13 +217,15 @@ export default function ChatPage() {
 
         initSocket();
 
-        // Simulate a small delay for the loader to feel natural
-        const timer = setTimeout(() => {
-            setIsLoading(false);
-        }, 2000);
+        let timer: NodeJS.Timeout;
+        if (savedUsername) {
+            timer = setTimeout(() => {
+                setIsLoading(false);
+            }, 2000);
+        }
 
         return () => {
-            clearTimeout(timer);
+            if (timer) clearTimeout(timer);
             if (socketRef.current) {
                 socketRef.current.disconnect();
             }
@@ -570,7 +573,7 @@ export default function ChatPage() {
     }
 
     return (
-        <div className="min-h-screen h-screen flex bg-[#f0f2f5] md:p-4 font-sans">
+        <div className="min-h-[100dvh] h-[100dvh] flex bg-[#f0f2f5] md:p-4 font-sans">
             <div className="relative flex h-full w-full bg-white shadow-2xl md:rounded-sm">
 
                 <ResizableSidebar selectedUser={selectedUser}>
