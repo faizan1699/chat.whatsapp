@@ -10,6 +10,16 @@ module.exports = {
       fontFamily: {
         'lora': ['Lora', 'serif'],
       },
+      keyframes: {
+        'progress-indeterminate': {
+          '0%': { transform: 'translateX(-100%)', width: '30%' },
+          '50%': { width: '50%' },
+          '100%': { transform: 'translateX(250%)', width: '30%' },
+        },
+      },
+      animation: {
+        'progress-indeterminate': 'progress-indeterminate 2s infinite linear',
+      },
     },
   },
   plugins: [],

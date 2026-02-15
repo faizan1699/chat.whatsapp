@@ -63,16 +63,11 @@ export default function CallOverlay({
                     onUsernameCreated={() => { }}
                     onEndCall={onEndCall}
                     showEndCallButton={true}
-                    incomingCall={null}
-                    onAcceptCall={() => { }}
-                    onRejectCall={() => { }}
-                    callNotification={callNotification}
                     onRemoteVideoRef={(ref) => { remoteVideoRef.current = ref; }}
                     showRemoteVideo={!isAudioOnly}
                     localStream={localStream}
                     callTimer={callTimer}
                     isCallActive={isCallActive}
-                    onUsernameChange={() => { }}
                     onClearData={onClearData}
                     connectionState={connectionState}
                     onToggleMute={() => {

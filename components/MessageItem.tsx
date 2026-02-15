@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Reply, Trash2, Pin, ChevronDown } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Reply, Trash2, Pin, ChevronDown, Play, Pause } from 'lucide-react';
 
 export interface Message {
     id?: string;
@@ -12,6 +12,9 @@ export interface Message {
     status?: 'pending' | 'sent' | 'failed';
     replyTo?: Message;
     isPinned?: boolean;
+    audioUrl?: string;
+    audioDuration?: number;
+    isVoiceMessage?: boolean;
 }
 
 interface MessageItemProps {
@@ -26,12 +29,16 @@ interface MessageItemProps {
 export default function MessageItem({ message, isMe, onRetry, onReply, onDelete, onPin }: MessageItemProps) {
     const [visibleWords, setVisibleWords] = useState(30);
     const [showActions, setShowActions] = useState(false);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
 
     const words = message.message.trim().split(/\s+/);
     const isLongMessage = words.length > 30;
     const hasMore = words.length > visibleWords;
 
-    const formatTime = (date: Date) => {
+    const formatTimestamp = (date: Date) => {
         return new Date(date).toLocaleTimeString([], {
             hour: '2-digit',
             minute: '2-digit',
@@ -51,6 +58,46 @@ export default function MessageItem({ message, isMe, onRetry, onReply, onDelete,
     const handleSeeLess = (e: React.MouseEvent) => {
         e.preventDefault();
         setVisibleWords(30);
+    };
+
+    useEffect(() => {
+        if (audioRef.current) {
+            const audio = audioRef.current;
+            
+            const updateTime = () => setCurrentTime(audio.currentTime);
+            const updateDuration = () => setDuration(audio.duration);
+            const onEnded = () => {
+                setIsPlaying(false);
+                setCurrentTime(0);
+            };
+            
+            audio.addEventListener('timeupdate', updateTime);
+            audio.addEventListener('loadedmetadata', updateDuration);
+            audio.addEventListener('ended', onEnded);
+            
+            return () => {
+                audio.removeEventListener('timeupdate', updateTime);
+                audio.removeEventListener('loadedmetadata', updateDuration);
+                audio.removeEventListener('ended', onEnded);
+            };
+        }
+    }, [message.audioUrl]);
+
+    const togglePlayback = () => {
+        if (audioRef.current) {
+            if (isPlaying) {
+                audioRef.current.pause();
+            } else {
+                audioRef.current.play();
+            }
+            setIsPlaying(!isPlaying);
+        }
+    };
+
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
     return (
@@ -111,30 +158,73 @@ export default function MessageItem({ message, isMe, onRetry, onReply, onDelete,
 
                 {/* Message Content */}
                 <div className="flex flex-col pr-2">
-                    <p className="text-[14.2px] leading-tight whitespace-pre-wrap py-0.5 min-w-[50px]">
-                        {displayedMessage}
-                        {hasMore && (
+                    {message.isVoiceMessage ? (
+                        <div className="flex items-center gap-3 py-2 min-w-[200px]">
+                            <audio
+                                ref={audioRef}
+                                src={message.audioUrl}
+                                className="hidden"
+                            />
                             <button
-                                onClick={handleSeeMore}
-                                className="ml-1 text-[#00a884] font-bold hover:underline text-[12px]"
+                                onClick={togglePlayback}
+                                className="w-10 h-10 rounded-full bg-[#00a884] hover:bg-[#008069] text-white flex items-center justify-center transition-colors flex-shrink-0"
                             >
-                                Read more
+                                {isPlaying ? <Pause size={16} /> : <Play size={16} />}
                             </button>
-                        )}
-                        {!hasMore && isLongMessage && visibleWords > 30 && (
-                            <button
-                                onClick={handleSeeLess}
-                                className="ml-1 text-[#00a884] font-bold hover:underline text-[12px]"
-                            >
-                                See less
-                            </button>
-                        )}
-                    </p>
+                            <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                    <div className="flex-1 h-1 bg-[#e9edef] rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-[#00a884] transition-all duration-100"
+                                            style={{ width: duration ? `${(currentTime / duration) * 100}%` : '0%' }}
+                                        />
+                                    </div>
+                                    <span className="text-[11px] text-[#667781] whitespace-nowrap">
+                                        {formatTime(currentTime)} / {formatTime(message.audioDuration || duration || 0)}
+                                    </span>
+                                </div>
+                                <div className="mt-1">
+                                    <div className="flex gap-1">
+                                        {[...Array(20)].map((_, i) => (
+                                            <div
+                                                key={i}
+                                                className="w-1 bg-[#00a884]/30 rounded-full"
+                                                style={{
+                                                    height: `${8 + (isPlaying ? Math.random() * 8 : 0)}px`,
+                                                    transition: 'height 0.1s'
+                                                }}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="text-[14.2px] leading-tight whitespace-pre-wrap py-0.5 min-w-[50px]">
+                            {displayedMessage}
+                            {hasMore && (
+                                <button
+                                    onClick={handleSeeMore}
+                                    className="ml-1 text-[#00a884] font-bold hover:underline text-[12px]"
+                                >
+                                    Read more
+                                </button>
+                            )}
+                            {!hasMore && isLongMessage && visibleWords > 30 && (
+                                <button
+                                    onClick={handleSeeLess}
+                                    className="ml-1 text-[#00a884] font-bold hover:underline text-[12px]"
+                                >
+                                    See less
+                                </button>
+                            )}
+                        </p>
+                    )}
 
                     {/* Meta data (Time + Status) */}
                     <div className="flex items-center gap-1 ml-auto pt-1 h-4">
                         <span className="text-[10px] text-[#667781] whitespace-nowrap uppercase">
-                            {formatTime(message.timestamp)}
+                            {formatTimestamp(message.timestamp)}
                         </span>
 
                         {isMe && (

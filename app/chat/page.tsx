@@ -16,6 +16,7 @@ import MessageList from '@/components/MessageList';
 import EmptyChatState from '@/components/EmptyChatState';
 import CallOverlay from '@/components/CallOverlay';
 import AuthOverlay from '@/components/AuthOverlay';
+import FullPageLoader from '@/components/FullPageLoader';
 
 interface User {
     [key: string]: string;
@@ -29,6 +30,7 @@ interface PeerConnectionManager {
 export default function ChatPage() {
     const router = useRouter();
     const [username, setUsername] = useState<string>('');
+    const [isLoading, setIsLoading] = useState(true);
     const [users, setUsers] = useState<User>({});
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
     const selectedUserRef = useRef<string | null>(null);
@@ -214,7 +216,13 @@ export default function ChatPage() {
 
         initSocket();
 
+        // Simulate a small delay for the loader to feel natural
+        const timer = setTimeout(() => {
+            setIsLoading(false);
+        }, 2000);
+
         return () => {
+            clearTimeout(timer);
             if (socketRef.current) {
                 socketRef.current.disconnect();
             }
@@ -447,11 +455,44 @@ export default function ChatPage() {
         if (socketRef.current?.connected) {
             sendMessageInternal(newMessage);
         } else {
-            console.warn('Socket not connected, marking message as failed');
-            setTimeout(() => {
-                setMessages(prev => prev.map(m => m.id === newMessage.id ? { ...m, status: 'failed' } : m));
-            }, 1000);
+            console.log('Socket not connected, message will be sent when reconnected');
         }
+    };
+
+    const handleSendVoice = async (audioBlob: Blob, duration: number) => {
+        if (!selectedUser) {
+            console.log('Cannot send voice: no user selected');
+            return;
+        }
+
+        // Convert blob to base64 for transmission
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64Audio = reader.result as string;
+
+            const newVoiceMessage: Message = {
+                id: Date.now().toString() + '-' + Math.random().toString(36).substr(2, 9),
+                from: username,
+                to: selectedUser,
+                message: '🎤 Voice message',
+                timestamp: new Date(),
+                status: 'pending',
+                isVoiceMessage: true,
+                audioUrl: base64Audio,
+                audioDuration: duration,
+                replyTo: replyingTo || undefined
+            };
+
+            setMessages((prev) => [...prev, newVoiceMessage]);
+            setReplyingTo(null);
+
+            if (socketRef.current?.connected) {
+                sendMessageInternal(newVoiceMessage);
+            } else {
+                console.log('Socket not connected, voice message will be sent when reconnected');
+            }
+        };
+        reader.readAsDataURL(audioBlob);
     };
 
     const handleRetry = (msg: Message) => {
@@ -523,6 +564,10 @@ export default function ChatPage() {
     );
 
     const pinnedMessages = currentChatMessages.filter(m => m.isPinned);
+
+    if (isLoading) {
+        return <FullPageLoader />;
+    }
 
     return (
         <div className="min-h-screen h-screen flex bg-[#f0f2f5] md:p-4 font-sans">
@@ -608,6 +653,7 @@ export default function ChatPage() {
                                 inputMessage={inputMessage}
                                 setInputMessage={setInputMessage}
                                 onSendMessage={handleSendMessage}
+                                onSendVoice={handleSendVoice}
                                 replyingTo={replyingTo}
                                 onCancelReply={() => setReplyingTo(null)}
                             />

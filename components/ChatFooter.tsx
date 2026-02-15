@@ -1,13 +1,15 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Smile, Paperclip, Send, Mic, X } from 'lucide-react';
 import { Message } from './MessageItem';
+import VoiceRecorder from './VoiceRecorder';
 
 interface ChatFooterProps {
     inputMessage: string;
     setInputMessage: (msg: string) => void;
     onSendMessage: (e: React.FormEvent) => void;
+    onSendVoice: (audioBlob: Blob, duration: number) => void;
     replyingTo?: Message | null;
     onCancelReply?: () => void;
 }
@@ -16,9 +18,11 @@ export default function ChatFooter({
     inputMessage,
     setInputMessage,
     onSendMessage,
+    onSendVoice,
     replyingTo,
     onCancelReply
 }: ChatFooterProps) {
+    const [isVoiceRecording, setIsVoiceRecording] = useState(false);
     return (
         <div className="flex flex-col w-full bg-[#f0f2f5]">
             {/* Reply Preview */}
@@ -59,7 +63,8 @@ export default function ChatFooter({
                         onChange={(e) => setInputMessage(e.target.value)}
                     />
                     <button
-                        type="submit"
+                        type="button"
+                        onClick={() => setIsVoiceRecording(true)}
                         disabled={!inputMessage.trim()}
                         className="text-[#54656f] hover:bg-black/5 p-2 rounded-full transition-colors disabled:opacity-50"
                     >
@@ -71,6 +76,19 @@ export default function ChatFooter({
                     </button>
                 </form>
             </footer>
+            
+            {/* Voice Recording Overlay */}
+            {isVoiceRecording && (
+                <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex items-center justify-center z-30">
+                    <VoiceRecorder
+                        onSendVoice={(audioBlob, duration) => {
+                            onSendVoice(audioBlob, duration);
+                            setIsVoiceRecording(false);
+                        }}
+                        onCancel={() => setIsVoiceRecording(false)}
+                    />
+                </div>
+            )}
         </div>
     );
 }
