@@ -44,26 +44,26 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
 
       socket.on('join-user', (username) => {
         console.log(`User ${username} joining with socket ${socket.id}`);
-        console.log('Current allusers before adding user:', allusers);
 
         // Validate username
         if (!username || username.trim() === '' || username.length < 2) {
-          console.log('Attempted to join with empty or invalid username');
           socket.emit('username-taken', { message: 'Username must be at least 2 characters long' });
           return;
         }
 
-        if (allusers[username]) {
-          socket.emit('username-taken', { message: `Username ${username} is already taken` });
-          return;
+        const cleanUsername = username.trim();
+
+        // If username exists, we allow takeover for easier local development/refreshing
+        // In a real app, you'd want auth here
+        if (allusers[cleanUsername]) {
+          console.log(`Username ${cleanUsername} already taken, replacing old socket ID ${allusers[cleanUsername]} with ${socket.id}`);
         }
 
-        allusers[username] = socket.id;
-        socket.username = username;
+        allusers[cleanUsername] = socket.id;
+        socket.username = cleanUsername;
+
         console.log('Current users:', allusers);
-        console.log('Broadcasting to all clients...');
         io.emit('joined', allusers);
-        console.log('Broadcast completed');
       });
 
       socket.on('disconnect', () => {
@@ -137,21 +137,49 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
         }
       });
 
-      socket.on('call-ended', (caller) => {
-        // Only allow call end if both users are authenticated
-        if (allusers[caller[0]] && allusers[caller[1]]) {
-          console.log(`Call ended between ${caller[0]} and ${caller[1]}`);
-          io.to(allusers[caller[0]]).emit('call-ended', caller);
-          io.to(allusers[caller[1]]).emit('call-ended', caller);
+      socket.on('call-ended', ({ from, to }) => {
+        if (allusers[from] && allusers[to]) {
+          console.log(`Call ended from ${from} to ${to}`);
+          io.to(allusers[to]).emit('call-ended');
         } else {
-          console.log(`Call end rejected: ${caller[0]} or ${caller[1]} not authenticated`);
+          console.log(`Call end rejected: ${from} or ${to} not authenticated`);
         }
       });
 
-      socket.on('disconnect', () => {
-        if (socket.username) {
-          delete allusers[socket.username];
-          io.emit('joined', allusers);
+      socket.on('send-message', (data, callback) => {
+        const { to, from, message } = data;
+        if (allusers[to] && allusers[from]) {
+          console.log(`Relaying message from ${from} to ${to}: ${message}`);
+          console.log(`Target socket ID: ${allusers[to]}`);
+          io.to(allusers[to]).emit('receive-message', data);
+          if (callback) callback({ status: 'ok' });
+        } else {
+          console.log(`Message rejected: ${from} or ${to} not authenticated. 'to' in allusers: ${!!allusers[to]}, 'from' in allusers: ${!!allusers[from]}`);
+          if (callback) callback({ status: 'error', message: 'User offline or not found' });
+        }
+      });
+
+      socket.on('delete-message', ({ id, to }) => {
+        if (allusers[to]) {
+          io.to(allusers[to]).emit('delete-message', { id });
+        }
+      });
+
+      socket.on('pin-message', ({ id, isPinned, to }) => {
+        if (allusers[to]) {
+          io.to(allusers[to]).emit('pin-message', { id, isPinned });
+        }
+      });
+
+      socket.on('mark-delivered', ({ messageId, to }) => {
+        if (allusers[to]) {
+          io.to(allusers[to]).emit('message-status-update', { messageId, status: 'delivered' });
+        }
+      });
+
+      socket.on('mark-read', ({ messageId, to }) => {
+        if (allusers[to]) {
+          io.to(allusers[to]).emit('message-status-update', { messageId, status: 'read' });
         }
       });
     });
