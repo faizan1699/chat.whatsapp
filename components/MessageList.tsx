@@ -10,9 +10,18 @@ interface MessageListProps {
     onReply: (msg: Message) => void;
     onDelete: (id: string) => void;
     onPin: (msg: Message) => void;
+    highlightedMessageId?: string | null;
 }
 
-export default function MessageList({ messages, username, onRetry, onReply, onDelete, onPin }: MessageListProps) {
+export default function MessageList({
+    messages,
+    username,
+    onRetry,
+    onReply,
+    onDelete,
+    onPin,
+    highlightedMessageId
+}: MessageListProps) {
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const scrollToBottom = () => {
@@ -36,6 +45,7 @@ export default function MessageList({ messages, username, onRetry, onReply, onDe
                         onReply={onReply}
                         onDelete={onDelete}
                         onPin={onPin}
+                        isHighlighted={highlightedMessageId === msg.id}
                     />
                 ))}
                 <div ref={messagesEndRef} />

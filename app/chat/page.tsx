@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
-import { Pin, ChevronDown } from 'lucide-react';
+import { Pin, ChevronDown, X } from 'lucide-react';
 import VideoCall from '@/components/VideoCall';
 import IncomingCallModal from '@/components/IncomingCallModal';
 import MessageItem, { Message } from '@/components/MessageItem';
@@ -58,6 +58,7 @@ export default function ChatPage() {
     const [isAudioOnly, setIsAudioOnly] = useState<boolean>(false);
     const [callParticipant, setCallParticipant] = useState<string>('');
     const [unreadCounts, setUnreadCounts] = useState<{ [key: string]: number }>({});
+    const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
     // Refs
     const localStreamRef = useRef<MediaStream | null>(null);
@@ -537,12 +538,9 @@ export default function ChatPage() {
         const element = document.getElementById(`msg-${id}`);
         if (element) {
             element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            // Brief highlight effect
-            const container = element.querySelector('.flex.flex-col');
-            if (container) {
-                container.classList.add('ring-4', 'ring-[#00a884]/30');
-                setTimeout(() => container.classList.remove('ring-4', 'ring-[#00a884]/30'), 1500);
-            }
+
+            setHighlightedMessageId(id);
+            setTimeout(() => setHighlightedMessageId(null), 2000);
         }
         setShowPinsDropdown(false);
     };
@@ -628,14 +626,26 @@ export default function ChatPage() {
                                                 <div
                                                     key={msg.id}
                                                     onClick={() => scrollToMessage(msg.id!)}
-                                                    className="px-4 py-3 border-b border-[#f0f2f5] last:border-0 hover:bg-[#f8f9fa] cursor-pointer flex flex-col gap-0.5"
+                                                    className="px-4 py-3 border-b border-[#f0f2f5] last:border-0 hover:bg-[#f8f9fa] cursor-pointer flex flex-col gap-0.5 relative group/pin"
                                                 >
-                                                    <span className="text-[11px] font-bold text-[#00a884]">
-                                                        {msg.from === username ? 'You' : msg.from}
-                                                    </span>
-                                                    <p className="text-[13px] text-[#111b21] line-clamp-2">
-                                                        {msg.message}
-                                                    </p>
+                                                    <div className="flex-1 min-w-0 pr-8">
+                                                        <span className="text-[11px] font-bold text-[#00a884]">
+                                                            {msg.from === username ? 'You' : msg.from}
+                                                        </span>
+                                                        <p className="text-[13px] text-[#111b21] line-clamp-2">
+                                                            {msg.message}
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handlePinMessage(msg);
+                                                        }}
+                                                        className="absolute right-4 top-1/2 -translate-y-1/2 p-2 hover:bg-black/5 rounded-full text-[#667781] transition-colors opacity-0 group-hover/pin:opacity-100"
+                                                        title="Unpin"
+                                                    >
+                                                        <X size={16} />
+                                                    </button>
                                                 </div>
                                             ))}
                                         </div>
@@ -650,6 +660,7 @@ export default function ChatPage() {
                                 onReply={(msg) => setReplyingTo(msg)}
                                 onDelete={handleDeleteMessage}
                                 onPin={handlePinMessage}
+                                highlightedMessageId={highlightedMessageId}
                             />
 
                             <ChatFooter

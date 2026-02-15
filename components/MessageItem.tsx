@@ -24,9 +24,18 @@ interface MessageItemProps {
     onReply?: (msg: Message) => void;
     onDelete?: (id: string) => void;
     onPin?: (msg: Message) => void;
+    isHighlighted?: boolean;
 }
 
-export default function MessageItem({ message, isMe, onRetry, onReply, onDelete, onPin }: MessageItemProps) {
+export default function MessageItem({
+    message,
+    isMe,
+    onRetry,
+    onReply,
+    onDelete,
+    onPin,
+    isHighlighted
+}: MessageItemProps) {
     const [visibleWords, setVisibleWords] = useState(30);
     const [showActions, setShowActions] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -63,18 +72,18 @@ export default function MessageItem({ message, isMe, onRetry, onReply, onDelete,
     useEffect(() => {
         if (audioRef.current) {
             const audio = audioRef.current;
-            
+
             const updateTime = () => setCurrentTime(audio.currentTime);
             const updateDuration = () => setDuration(audio.duration);
             const onEnded = () => {
                 setIsPlaying(false);
                 setCurrentTime(0);
             };
-            
+
             audio.addEventListener('timeupdate', updateTime);
             audio.addEventListener('loadedmetadata', updateDuration);
             audio.addEventListener('ended', onEnded);
-            
+
             return () => {
                 audio.removeEventListener('timeupdate', updateTime);
                 audio.removeEventListener('loadedmetadata', updateDuration);
