@@ -148,6 +148,15 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
         }
       });
 
+      socket.on('send-message', ({ to, message, from, timestamp }) => {
+        if (allusers[to] && allusers[from]) {
+          console.log(`Message from ${from} to ${to}: ${message}`);
+          io.to(allusers[to]).emit('receive-message', { to, message, from, timestamp });
+        } else {
+          console.log(`Message rejected: ${from} or ${to} not authenticated`);
+        }
+      });
+
       socket.on('disconnect', () => {
         if (socket.username) {
           delete allusers[socket.username];

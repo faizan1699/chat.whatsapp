@@ -458,7 +458,7 @@ export default function Home() {
     }
 
     // Wait a bit for processing
-    const pc = peerConnectionRef.current || PeerConnection.getInstance();
+    let pc = peerConnectionRef.current || PeerConnection.getInstance();
     console.log('Peer connection state before setting remote description:', pc.signalingState);
 
     // Add local stream to peer connection BEFORE setting remote description
@@ -494,6 +494,7 @@ export default function Home() {
         PeerConnection.reset();
         const newPc = PeerConnection.getInstance();
         peerConnectionRef.current = newPc; // Update reference
+        pc = newPc; // Update local variable Reference
 
         // Add local stream to new peer connection
         if (stream) {
