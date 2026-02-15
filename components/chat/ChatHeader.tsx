@@ -28,14 +28,14 @@ export default function ChatHeader({ selectedUser, onBack, onStartVideoCall, onS
                     </div>
                 </div>
             </div>
-            <div className="flex items-center gap-4 text-[#54656f]">
+            <div className="flex items-center gap-2 text-[#54656f]">
                 <button onClick={onStartVideoCall} className="hover:bg-black/5 p-2 rounded-full transition-colors" title="Video Call">
                     <Video size={20} />
                 </button>
                 <button onClick={onStartAudioCall} className="hover:bg-black/5 p-2 rounded-full transition-colors" title="Audio Call">
                     <Phone size={20} />
                 </button>
-                <button className="hover:bg-black/5 p-1 rounded-full transition-colors group relative" title="Close Chat" onClick={onBack}>
+                <button className="max-[768px]:hidden hover:bg-black/5 p-1 rounded-full transition-colors group relative" title="Close Chat" onClick={onBack}>
                     <X size={20} className="group-hover:text-red-500 transition-colors" />
                 </button>
                 <div className="w-[1px] h-6 bg-[#d1d7db] mx-1"></div>

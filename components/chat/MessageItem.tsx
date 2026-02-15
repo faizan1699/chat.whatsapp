@@ -16,6 +16,10 @@ export interface Message {
     audioDuration?: number;
     isVoiceMessage?: boolean;
     isEdited?: boolean;
+    // Chunking metadata
+    groupId?: string;
+    chunkIndex?: number;
+    totalChunks?: number;
 }
 
 interface MessageItemProps {
@@ -309,7 +313,7 @@ export default function MessageItem({
                             }
                             >
                                 {message.status === 'pending' ? (
-                                    <div className="w-[10px] h-[10px] border-[1.5px] border-gray-300 border-t-gray-500 rounded-full animate-spin"></div>
+                                    <div className="w-[11px] h-[11px] border-2 border-[#667781]/20 border-t-[#667781] rounded-full animate-spin"></div>
                                 ) : (
                                     {
                                         failed: '!',

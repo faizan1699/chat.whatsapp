@@ -7,6 +7,11 @@ import VoiceRecorder from '../audio/VoiceRecorder';
 import dynamic from 'next/dynamic';
 import { EmojiStyle, Theme, PickerProps } from 'emoji-picker-react';
 
+
+const MAX_MESSAGE_LENGTH = 500;
+const MAX_WORD_COUNT = 10000;
+const MAX_INPUT_LENGTH = 50000;
+
 const EmojiPicker = dynamic<PickerProps>(() => import('emoji-picker-react'), {
     ssr: false,
     loading: () => <div className="w-[300px] h-[400px] bg-white flex items-center justify-center border rounded-lg shadow-lg">Loading...</div>
@@ -37,6 +42,14 @@ export default function ChatFooter({
     const [isVoiceRecording, setIsVoiceRecording] = useState(false);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const emojiPickerRef = useRef<HTMLDivElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // Auto-focus on mount and when editing/replying state changes
+    useEffect(() => {
+        if (!isVoiceRecording && textareaRef.current) {
+            textareaRef.current.focus();
+        }
+    }, [editingMessage, replyingTo, isVoiceRecording]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -144,44 +157,49 @@ export default function ChatFooter({
                             </button>
                         </div>
                         <form onSubmit={(e) => {
-                            const wordCount = inputMessage.trim().split(/\s+/).length;
-                            if (inputMessage.length > 800 || wordCount > 500) {
-                                e.preventDefault();
-                                alert('Limit exceeded: Max 800 characters or 500 words.');
-                                return;
-                            }
                             onSendMessage(e);
-                        }} className="flex flex-1 items-center gap-1 md:gap-2 min-w-0 relative">
-                            <div className="flex-1 relative">
-                                <input
-                                    type="text"
+                        }} className="flex flex-1 items-end gap-1 md:gap-2 min-w-0 relative py-1">
+                            <div className="flex-1 relative flex items-center">
+                                <textarea
+                                    ref={textareaRef}
+                                    autoFocus
                                     placeholder={editingMessage ? "Edit message..." : "Type a message"}
-                                    className={`w-full rounded-lg bg-white px-3 md:px-4 py-2 md:py-2.5 text-[14px] md:text-[15px] text-[#111b21] outline-none placeholder:text-[#667781] min-w-0 ${inputMessage.length > 750 ? 'border border-orange-400' : ''}`}
+                                    rows={1}
+                                    className={`w-full max-h-[120px] rounded-lg bg-white px-3 md:px-4 py-2 md:py-2.5 text-[14px] md:text-[15px] text-[#111b21] outline-none placeholder:text-[#667781] min-w-0 resize-none overflow-y-auto ${inputMessage.length > MAX_MESSAGE_LENGTH ? 'border-[#00a884]' : ''}`}
                                     value={inputMessage}
-                                    onChange={(e) => {
-                                        const newValue = e.target.value;
-                                        const words = newValue.trim().split(/\s+/);
-                                        if (newValue.length <= 800 && (newValue === '' || words.length <= 500)) {
-                                            setInputMessage(newValue);
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            onSendMessage(e as any);
                                         }
                                     }}
-                                    maxLength={800}
+                                    onChange={(e) => {
+                                        const newValue = e.target.value;
+                                        if (newValue.length <= MAX_INPUT_LENGTH) {
+                                            setInputMessage(newValue);
+                                            // Auto-resize
+                                            e.target.style.height = 'auto';
+                                            e.target.style.height = `${e.target.scrollHeight}px`;
+                                        }
+                                    }}
+                                    maxLength={MAX_INPUT_LENGTH}
                                     autoComplete="off"
                                     autoCorrect="off"
                                     spellCheck={false}
-                                    onClick={() => setShowEmojiPicker(false)} // Close picker when typing
+                                    onClick={() => setShowEmojiPicker(false)}
                                 />
-                                {inputMessage.length > 700 && (
-                                    <span className={`absolute -top-5 right-2 text-[10px] font-bold ${inputMessage.length >= 800 ? 'text-red-500' : 'text-orange-500'}`}>
-                                        {inputMessage.length}/800
+                                {inputMessage.length > (MAX_MESSAGE_LENGTH - 100) && (
+                                    <span className={`absolute -top-5 right-2 text-[10px] font-bold ${inputMessage.length > MAX_MESSAGE_LENGTH ? 'text-[#00a884]' : 'text-orange-500'} bg-[#f0f2f5] px-1 rounded`}>
+                                        {inputMessage.length > MAX_MESSAGE_LENGTH
+                                            ? `${Math.ceil(inputMessage.length / MAX_MESSAGE_LENGTH)} parts (${inputMessage.length} chars)`
+                                            : `${inputMessage.length}/${MAX_MESSAGE_LENGTH}`}
                                     </span>
                                 )}
                             </div>
                             {inputMessage.trim() ? (
                                 <button
                                     type="submit"
-                                    disabled={inputMessage.length > 800}
-                                    className="text-[#54656f] hover:bg-black/5 p-2 rounded-full transition-colors disabled:opacity-50 shrink-0"
+                                    className="text-[#54656f] hover:bg-black/5 p-2.5 rounded-full transition-colors shrink-0 mb-0.5"
                                 >
                                     {editingMessage ? <Check className="w-5 h-5 md:w-6 md:h-6 text-[#00a884]" /> : <Send className="w-5 h-5 md:w-6 md:h-6" />}
                                 </button>
@@ -189,7 +207,7 @@ export default function ChatFooter({
                                 <button
                                     type="button"
                                     onClick={() => setIsVoiceRecording(true)}
-                                    className="text-[#54656f] hover:bg-black/5 p-2 rounded-full transition-colors disabled:opacity-50 shrink-0"
+                                    className="text-[#54656f] hover:bg-black/5 p-2.5 rounded-full transition-colors shrink-0 mb-0.5"
                                 >
                                     <Mic className="w-5 h-5 md:w-6 md:h-6" />
                                 </button>)}

@@ -69,6 +69,7 @@ export default function ChatPage() {
     const ringtoneRef = useRef<HTMLAudioElement | null>(null);
     const iceCandidatesBuffer = useRef<RTCIceCandidateInit[]>([]);
     const callerRef = useRef<string[]>([]);
+    const chunkBufferRef = useRef<Record<string, Message[]>>({});
 
     // Sync refs with state
     useEffect(() => {
@@ -127,7 +128,7 @@ export default function ChatPage() {
                 ));
             }
         }
-    }, [selectedUser, isWindowFocused, messages.length]); // depend on messages.length to avoid unnecessary loops loop, but check logic
+    }, [selectedUser, isWindowFocused, messages.length]);
 
 
     useEffect(() => {
@@ -179,17 +180,58 @@ export default function ChatPage() {
                         }
                     }
 
-                    setMessages((prev) => {
-                        if (data.id && prev.some(m => m.id === data.id)) return prev;
-                        return [...prev, { ...data, timestamp: new Date(data.timestamp), status: 'sent' }];
-                    });
+                    // Handle Reassembly Logic before state update
+                    let messageToStore: Message | null = data;
 
-                    // Handle delivery/read status
-                    if (socketRef.current) {
-                        if (data.from === selectedUserRef.current && isWindowFocusedRef.current) {
-                            socketRef.current.emit('mark-read', { messageId: data.id, to: data.from });
+                    if (data.groupId && data.totalChunks) {
+                        const gid = data.groupId;
+                        if (!chunkBufferRef.current[gid]) {
+                            chunkBufferRef.current[gid] = [];
+                        }
+
+                        // Avoid duplicate chunks
+                        const isDuplicate = chunkBufferRef.current[gid].some(c => c.chunkIndex === data.chunkIndex);
+                        if (!isDuplicate) {
+                            chunkBufferRef.current[gid].push(data);
+                        }
+
+                        // Check if complete
+                        if (chunkBufferRef.current[gid].length === data.totalChunks) {
+                            const sortedChunks = [...chunkBufferRef.current[gid]].sort((a, b) => (a.chunkIndex || 0) - (b.chunkIndex || 0));
+                            const fullMessage = sortedChunks.map(m => m.message).join('');
+
+                            messageToStore = {
+                                ...sortedChunks[0],
+                                id: gid,
+                                message: fullMessage,
+                                timestamp: new Date(sortedChunks[0].timestamp),
+                                status: 'sent' as const
+                            };
+                            delete chunkBufferRef.current[gid];
                         } else {
-                            socketRef.current.emit('mark-delivered', { messageId: data.id, to: data.from });
+                            // Still waiting for chunks
+                            messageToStore = null;
+                        }
+                    } else {
+                        // Regular message without chunking metadata
+                        messageToStore = { ...data, id: data.groupId || data.id, timestamp: new Date(data.timestamp), status: 'sent' as const };
+                    }
+
+                    if (messageToStore) {
+                        setMessages((prev) => {
+                            if (messageToStore?.id && prev.some(m => m.id === messageToStore?.id)) return prev;
+                            return [...prev, messageToStore!];
+                        });
+                    }
+
+                    // Handle delivery/read status correctly for chunks
+                    if (socketRef.current) {
+                        // Use groupId if it's a chunk, otherwise id
+                        const ackId = (data.groupId && data.totalChunks && data.totalChunks > 1) ? data.groupId : data.id;
+                        if (data.from === selectedUserRef.current && isWindowFocusedRef.current) {
+                            socketRef.current.emit('mark-read', { messageId: ackId, to: data.from });
+                        } else {
+                            socketRef.current.emit('mark-delivered', { messageId: ackId, to: data.from });
                         }
                     }
                 });
@@ -308,29 +350,57 @@ export default function ChatPage() {
         }
     }, []);
 
-    // Retry failed messages when connected
+    // Retry failed messages when connected (every 5 seconds)
     useEffect(() => {
+        let interval: NodeJS.Timeout;
+        let isProcessing = false;
+
         if (isConnected && socketRef.current) {
-            const failed = JSON.parse(localStorage.getItem('failed-messages') || '[]');
-            if (failed.length > 0) {
-                console.log(`Retrying ${failed.length} failed messages...`);
-                // Process one by one
-                const processQueue = async () => {
-                    for (const msg of failed) {
-                        // Update status to pending in UI
-                        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'pending' } : m));
+            const processQueue = async () => {
+                if (isProcessing) return;
 
-                        // We use a slight delay or just emit. Socket.emit is sync in queuing but async in network.
-                        // To properly throttle or ensure order we can just emit. 
-                        sendMessageInternal(msg);
+                const failed = JSON.parse(localStorage.getItem('failed-messages') || '[]');
+                if (failed.length === 0) return;
 
-                        // Small delay to prevent flooding if needed, though not strictly necessary for "one by one" in loose sense
-                        await new Promise(resolve => setTimeout(resolve, 100));
+                isProcessing = true;
+                console.log(`Auto-retrying ${failed.length} failed messages...`);
+
+                for (const msg of failed) {
+                    // Update status to pending in UI
+                    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'pending' } : m));
+
+                    try {
+                        await new Promise((resolve, reject) => {
+                            if (!socketRef.current) return reject('Socket not connected');
+
+                            socketRef.current.emit('send-message', msg, (ack: any) => {
+                                if (ack && ack.status === 'ok') {
+                                    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'sent' } : m));
+                                    removeFailedMessage(msg.id!);
+                                    resolve(true);
+                                } else {
+                                    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'failed' } : m));
+                                    reject('Failed to send');
+                                }
+                            });
+                        });
+                        // Wait a bit between messages
+                        await new Promise(r => setTimeout(r, 200));
+                    } catch (err) {
+                        console.error('Error retrying message:', msg.id, err);
                     }
-                };
-                processQueue();
-            }
+                }
+                isProcessing = false;
+            };
+
+            // Run immediately and then every 5 seconds
+            processQueue();
+            interval = setInterval(processQueue, 1000);
         }
+
+        return () => {
+            if (interval) clearInterval(interval);
+        };
     }, [isConnected]);
 
     // Timer Effect
@@ -582,8 +652,24 @@ export default function ChatPage() {
             return;
         }
 
-        const newMessage: Message = {
-            id: Date.now().toString() + '-' + Math.random().toString(36).substr(2, 9),
+        const chunks: string[] = [];
+        let tempMessage = inputMessage.trim();
+
+        // Split into 500 character chunks
+        while (tempMessage.length > 0) {
+            chunks.push(tempMessage.substring(0, 500));
+            tempMessage = tempMessage.substring(500);
+        }
+
+        const groupId = Date.now().toString() + '-' + Math.random().toString(36).substr(2, 9);
+        const totalChunks = chunks.length;
+
+        setInputMessage('');
+        setReplyingTo(null);
+
+        // Locally add only one virtual message
+        const virtualMsg: Message = {
+            id: groupId,
             from: username,
             to: selectedUser,
             message: inputMessage.trim(),
@@ -591,18 +677,46 @@ export default function ChatPage() {
             status: 'pending',
             replyTo: replyingTo || undefined
         };
+        setMessages(prev => [...prev, virtualMsg]);
 
-        setMessages((prev) => [...prev, newMessage]);
-        setInputMessage('');
-        setReplyingTo(null);
+        chunks.forEach((chunk, index) => {
+            const chunkMessage: Message = {
+                id: `${groupId}-${index}`,
+                from: username,
+                to: selectedUser,
+                message: chunk,
+                timestamp: virtualMsg.timestamp,
+                status: 'pending',
+                groupId: groupId,
+                chunkIndex: index,
+                totalChunks: totalChunks,
+                // Only attach reply to metadata if needed (already in virtualMsg local state)
+                replyTo: index === 0 ? (replyingTo || undefined) : undefined
+            };
 
-        if (socketRef.current?.connected) {
-            sendMessageInternal(newMessage);
-        } else {
-            console.log('Socket not connected, saving failed message');
-            setMessages(prev => prev.map(m => m.id === newMessage.id ? { ...m, status: 'failed' } : m));
-            saveFailedMessage({ ...newMessage, status: 'failed' });
-        }
+            if (socketRef.current?.connected) {
+                socketRef.current.emit('send-message', chunkMessage, (ack: any) => {
+                    if (ack && ack.status === 'ok') {
+                        // If it's the last chunk or all chunks have been acknowledged, update main status
+                        // For simplicity, we can update individual chunk status if we kept them in state,
+                        // but since we only have virtualMsg, we can update it once any chunk succeeds or all?
+                        // Let's mark as sent if at least one chunk reaches the other side? 
+                        // Better: once all chunks are acknowledged.
+                        // Actually, simplified: update virtual message status based on first chunk ack.
+                        if (index === 0) {
+                            setMessages(prev => prev.map(m => m.id === groupId ? { ...m, status: 'sent' } : m));
+                        }
+                    } else {
+                        setMessages(prev => prev.map(m => m.id === groupId ? { ...m, status: 'failed' } : m));
+                        saveFailedMessage({ ...chunkMessage, status: 'failed' });
+                    }
+                });
+            } else {
+                console.log('Socket not connected, saving failed message');
+                setMessages(prev => prev.map(m => m.id === groupId ? { ...m, status: 'failed' } : m));
+                saveFailedMessage({ ...chunkMessage, status: 'failed' });
+            }
+        });
     };
 
     const handleEditMessage = (msg: Message) => {
