@@ -137,14 +137,12 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
         }
       });
 
-      socket.on('call-ended', (caller) => {
-        // Only allow call end if both users are authenticated
-        if (allusers[caller[0]] && allusers[caller[1]]) {
-          console.log(`Call ended between ${caller[0]} and ${caller[1]}`);
-          io.to(allusers[caller[0]]).emit('call-ended', caller);
-          io.to(allusers[caller[1]]).emit('call-ended', caller);
+      socket.on('call-ended', ({ from, to }) => {
+        if (allusers[from] && allusers[to]) {
+          console.log(`Call ended from ${from} to ${to}`);
+          io.to(allusers[to]).emit('call-ended');
         } else {
-          console.log(`Call end rejected: ${caller[0]} or ${caller[1]} not authenticated`);
+          console.log(`Call end rejected: ${from} or ${to} not authenticated`);
         }
       });
 

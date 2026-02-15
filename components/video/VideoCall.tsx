@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from 'react';
-import UsernameEntry from './UsernameEntry';
-import EditProfileModal from './EditProfileModal';
+import UsernameEntry from '../global/UsernameEntry';
+import EditProfileModal from '../global/EditProfileModal';
 import CallControls from './CallControls';
 
 interface VideoCallProps {
@@ -77,14 +77,17 @@ export default function VideoCall({
         </div>
       )}
 
+      {/* Call Timer Overlay */}
       {isCallActive && (
         <div className="absolute top-8 z-40 bg-black/60 backdrop-blur-md text-white px-5 py-2 rounded-full font-mono text-xl border border-white/20 shadow-2xl">
           {Math.floor(callTimer / 60).toString().padStart(2, '0')}:{(callTimer % 60).toString().padStart(2, '0')}
         </div>
       )}
 
+      {/* Username Entry */}
       {username === "" && <UsernameEntry onUsernameCreated={onUsernameCreated} />}
 
+      {/* Edit Modal */}
       {showEditModal && (
         <EditProfileModal
           username={username}
@@ -93,6 +96,7 @@ export default function VideoCall({
         />
       )}
 
+      {/* Video Call Interface */}
       {username !== "" && (
         <div className="w-full h-full flex flex-col p-4 md:p-8">
           <div className="relative flex-1 flex flex-col md:flex-row gap-4 h-full items-center justify-center">
@@ -104,6 +108,7 @@ export default function VideoCall({
               </div>
             </div>
 
+            {/* Local Video */}
             <div className={`bg-[#202124] rounded-2xl overflow-hidden shadow-2xl border-4 border-white/10 transition-all duration-500 ${showRemoteVideo ? 'absolute bottom-24 right-4 md:bottom-28 md:right-8 w-40 h-56 md:w-64 md:h-48 z-20 hover:scale-105' : 'flex-1 w-full h-full max-w-4xl'}`}>
               <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover -scale-x-100" />
               <div className="absolute bottom-4 left-4 bg-black/40 px-3 py-1 rounded-lg text-white text-sm backdrop-blur-md">
@@ -112,6 +117,7 @@ export default function VideoCall({
             </div>
           </div>
 
+          {/* Control Bar */}
           {showEndCallButton && (
             <CallControls
               onToggleMute={onToggleMute!}
@@ -120,6 +126,7 @@ export default function VideoCall({
             />
           )}
 
+          {/* Settings/Logout shortcut */}
           {!isCallActive && (
             <div className="absolute bottom-6 right-6 flex gap-3 text-xs text-[#667781]">
               <button onClick={onClearData} className="hover:text-red-500 transition-colors uppercase font-bold tracking-widest">Reset Application</button>

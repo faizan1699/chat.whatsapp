@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { createTypedInstance, defaultLoaderStrings } from '../utils/typed';
+import { createTypedInstance, defaultLoaderStrings } from '../../utils/typed';
 
 export default function FullPageLoader() {
     const el = useRef<HTMLSpanElement>(null);

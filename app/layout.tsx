@@ -1,4 +1,4 @@
-import CustomToaster from '@/components/CustomToast';
+import CustomToaster from '@/components/global/CustomToast';
 import './globals.css';
 import { Inter } from 'next/font/google';
 

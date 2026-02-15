@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { debounce } from '../utils/debounce';
+import { debounce } from '../../utils/debounce';
 
 interface SidebarProps {
     username: string;
@@ -24,8 +24,8 @@ export default function Sidebar({
     messages,
     unreadCounts = {}
 }: SidebarProps) {
-    const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
 
+    const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
     const debouncedSetSearchQuery = useMemo(
         () => debounce((value: string) => setSearchQuery(value), 300),
         [setSearchQuery]

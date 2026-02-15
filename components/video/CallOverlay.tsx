@@ -2,7 +2,7 @@
 
 import React from 'react';
 import VideoCall from './VideoCall';
-import AudioCall from './AudioCall';
+import AudioCall from '../audio/AudioCall';
 
 interface CallOverlayProps {
     username: string;

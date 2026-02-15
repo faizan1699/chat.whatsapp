@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import VideoCall from './VideoCall';
+import VideoCall from '../video/VideoCall';
 
 interface AuthOverlayProps {
     username: string;

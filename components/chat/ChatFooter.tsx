@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Smile, Paperclip, Send, Mic, X } from 'lucide-react';
 import { Message } from './MessageItem';
-import VoiceRecorder from './VoiceRecorder';
+import VoiceRecorder from '../audio/VoiceRecorder';
 
 interface ChatFooterProps {
     inputMessage: string;
