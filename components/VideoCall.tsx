@@ -80,7 +80,7 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
   };
 
   return (
-    <section className={`flex-1 flex flex-col items-center ${username === "" ? 'justify-start md:justify-center overflow-y-auto py-8 md:py-0' : 'justify-center overflow-hidden'} relative bg-[#f0f2f5]`}>
+    <section className={`flex-1 flex flex-col items-center ${username === "" ? 'justify-center h-screen overflow-y-auto py-8 md:py-0' : 'justify-center overflow-y-auto h-screen'} relative bg-[#f0f2f5]`}>
 
       {username === "" && !isCallActive && (
         <div className="absolute top-0 left-0 w-full h-[220px] bg-[#00a884] z-0"></div>

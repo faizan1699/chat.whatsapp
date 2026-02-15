@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { screenWidthChecker } from '../utils/window';
 
 interface ResizableSidebarProps {
     children: React.ReactNode;
@@ -14,8 +15,8 @@ export default function ResizableSidebar({
     children,
     selectedUser,
     initialWidth = 300,
-    minWidth = 280,
-    maxWidth = 300
+    minWidth = 100,
+    maxWidth = 550
 }: ResizableSidebarProps) {
     const [sidebarWidth, setSidebarWidth] = useState(initialWidth);
     const isResizing = useRef(false);
@@ -40,8 +41,7 @@ export default function ResizableSidebar({
         if (!isResizing.current) return;
 
         let newWidth = e.clientX;
-        const mdBreakpoint = 768;
-        if (window.innerWidth < mdBreakpoint) return;
+        if (!screenWidthChecker(768)) return;
 
         if (newWidth < minWidth) newWidth = minWidth;
         if (newWidth > maxWidth) newWidth = maxWidth;
@@ -54,8 +54,8 @@ export default function ResizableSidebar({
             <div
                 style={{
                     width: selectedUser
-                        ? (typeof window !== 'undefined' && window.innerWidth >= 768 ? `${sidebarWidth}px` : undefined)
-                        : (typeof window !== 'undefined' && window.innerWidth >= 768 ? `${sidebarWidth}px` : '100%')
+                        ? (screenWidthChecker(768) ? `${sidebarWidth}px` : undefined)
+                        : (screenWidthChecker(768) ? `${sidebarWidth}px` : '100%')
                 }}
                 className={`flex flex-col border-r border-[#e9edef] bg-white transition-all duration-0 ${selectedUser ? 'hidden md:flex w-full' : 'w-full'}`}
             >

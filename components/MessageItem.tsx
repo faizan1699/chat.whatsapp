@@ -55,6 +55,7 @@ export default function MessageItem({ message, isMe, onRetry, onReply, onDelete,
 
     return (
         <div
+            id={`msg-${message.id}`}
             className={`group flex w-full mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}
             onMouseEnter={() => setShowActions(true)}
             onMouseLeave={() => setShowActions(false)}

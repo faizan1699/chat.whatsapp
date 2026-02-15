@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
-import { Pin } from 'lucide-react';
+import { Pin, ChevronDown } from 'lucide-react';
 import VideoCall from '@/components/VideoCall';
 import IncomingCallModal from '@/components/IncomingCallModal';
 import MessageItem, { Message } from '@/components/MessageItem';
@@ -38,6 +38,7 @@ export default function ChatPage() {
     const socketRef = useRef<Socket | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+    const [showPinsDropdown, setShowPinsDropdown] = useState(false);
 
     const [isWindowFocused, setIsWindowFocused] = useState(true);
     const isWindowFocusedRef = useRef(true);
@@ -472,8 +473,34 @@ export default function ChatPage() {
 
     const handlePinMessage = (msg: Message) => {
         const isPinned = !msg.isPinned;
+
+        // Count pins for current chat
+        const currentPins = messages.filter(m =>
+            m.isPinned &&
+            ((m.from === username && m.to === selectedUser) || (m.from === selectedUser && m.to === username))
+        );
+
+        if (isPinned && currentPins.length >= 3) {
+            alert('Aap sirf 3 messages pin kar sakte hain per chat.');
+            return;
+        }
+
         setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isPinned } : m));
         socketRef.current?.emit('pin-message', { id: msg.id, isPinned, to: selectedUser });
+    };
+
+    const scrollToMessage = (id: string) => {
+        const element = document.getElementById(`msg-${id}`);
+        if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Brief highlight effect
+            const container = element.querySelector('.flex.flex-col');
+            if (container) {
+                container.classList.add('ring-4', 'ring-[#00a884]/30');
+                setTimeout(() => container.classList.remove('ring-4', 'ring-[#00a884]/30'), 1500);
+            }
+        }
+        setShowPinsDropdown(false);
     };
 
     const handleClearData = () => {
@@ -527,19 +554,44 @@ export default function ChatPage() {
 
                             {/* Pinned Messages Banner */}
                             {pinnedMessages.length > 0 && (
-                                <div className="z-20 bg-white/90 backdrop-blur px-4 py-2 border-b border-[#f0f2f5] flex items-center gap-2 shadow-sm animate-in fade-in duration-300">
-                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00a884]/10 text-[#00a884]">
-                                        <Pin size={16} className="fill-current" />
+                                <div className="relative z-30">
+                                    <div
+                                        onClick={() => setShowPinsDropdown(!showPinsDropdown)}
+                                        className="bg-white/90 backdrop-blur px-4 py-2 border-b border-[#f0f2f5] flex items-center gap-2 shadow-sm cursor-pointer hover:bg-white transition-colors animate-in fade-in duration-300"
+                                    >
+                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00a884]/10 text-[#00a884]">
+                                            <Pin size={16} className="fill-current" />
+                                        </div>
+                                        <div className="flex-1 overflow-hidden">
+                                            <p className="text-[12px] font-bold text-[#00a884]">
+                                                {pinnedMessages.length === 1 ? 'Pinned Message' : `${pinnedMessages.length} Pinned Messages`}
+                                            </p>
+                                            <p className="text-[13px] text-[#54656f] truncate">
+                                                {pinnedMessages[pinnedMessages.length - 1].message}
+                                            </p>
+                                        </div>
+                                        <ChevronDown size={18} className={`text-[#667781] transition-transform ${showPinsDropdown ? 'rotate-180' : ''}`} />
                                     </div>
-                                    <div className="flex-1 overflow-hidden">
-                                        <p className="text-[12px] font-bold text-[#00a884]">Pinned Message</p>
-                                        <p className="text-[13px] text-[#54656f] truncate">
-                                            {pinnedMessages[pinnedMessages.length - 1].message}
-                                        </p>
-                                    </div>
-                                    <span className="text-[10px] bg-[#f0f2f5] px-1.5 py-0.5 rounded text-[#667781] font-bold">
-                                        {pinnedMessages.length}
-                                    </span>
+
+                                    {/* Pins Dropdown */}
+                                    {showPinsDropdown && (
+                                        <div className="absolute top-full left-0 right-0 bg-white shadow-xl border-b border-[#f0f2f5] max-h-[300px] overflow-y-auto animate-in slide-in-from-top-2 duration-200">
+                                            {pinnedMessages.slice().reverse().map((msg) => (
+                                                <div
+                                                    key={msg.id}
+                                                    onClick={() => scrollToMessage(msg.id!)}
+                                                    className="px-4 py-3 border-b border-[#f0f2f5] last:border-0 hover:bg-[#f8f9fa] cursor-pointer flex flex-col gap-0.5"
+                                                >
+                                                    <span className="text-[11px] font-bold text-[#00a884]">
+                                                        {msg.from === username ? 'You' : msg.from}
+                                                    </span>
+                                                    <p className="text-[13px] text-[#111b21] line-clamp-2">
+                                                        {msg.message}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
