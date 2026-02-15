@@ -20,15 +20,31 @@ interface VideoCallProps {
   onUsernameChange?: (username: string) => void;
   onClearData?: () => void;
   connectionState?: 'connecting' | 'connected' | 'disconnected';
+  onToggleMute?: () => void;
+  isMuted?: boolean;
 }
 
-export default function VideoCall({ username, onUsernameCreated, onEndCall, showEndCallButton, incomingCall, onAcceptCall, onRejectCall, callNotification, onRemoteVideoRef, showRemoteVideo = false, startCamera = false, onStreamReady, callTimer = 0, isCallActive = false, onUsernameChange, onClearData, connectionState }: VideoCallProps) {
+export default function VideoCall({ username, onUsernameCreated, onEndCall, showEndCallButton, incomingCall, onAcceptCall, onRejectCall, callNotification, onRemoteVideoRef, showRemoteVideo = false, startCamera = false, onStreamReady, callTimer = 0, isCallActive = false, onUsernameChange, onClearData, connectionState, onToggleMute, isMuted = false }: VideoCallProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const usernameInputRef = useRef<HTMLInputElement>(null);
   const editUsernameRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [localMuted, setLocalMuted] = useState(false);
+
+  const toggleMute = () => {
+    if (streamRef.current) {
+      const audioTracks = streamRef.current.getAudioTracks();
+      if (audioTracks.length > 0) {
+        const newMutedState = !audioTracks[0].enabled;
+        audioTracks[0].enabled = newMutedState;
+        setLocalMuted(newMutedState);
+        console.log('Microphone', newMutedState ? 'muted' : 'unmuted');
+        onToggleMute?.();
+      }
+    }
+  };
 
   useEffect(() => {
     if (startCamera) {
@@ -39,8 +55,9 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
   useEffect(() => {
     if (onRemoteVideoRef && remoteVideoRef.current) {
       onRemoteVideoRef(remoteVideoRef.current);
+      console.log('Remote video ref provided to parent');
     }
-  }, [onRemoteVideoRef]);
+  }, [onRemoteVideoRef, remoteVideoRef.current]);
 
   useEffect(() => {
     // Listen for custom event to open edit modal
@@ -63,17 +80,27 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
 
   const startMyVideo = async () => {
     try {
+      console.log('🎥 Requesting camera and microphone access...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      console.log('✅ Stream obtained successfully');
+      console.log('Stream tracks:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, muted: t.muted, readyState: t.readyState })));
+      
       streamRef.current = stream;
       if (localVideoRef.current) {
+        console.log('📹 Setting local video stream');
         localVideoRef.current.srcObject = stream;
+        localVideoRef.current.onloadedmetadata = () => {
+          console.log('📹 Local video metadata loaded');
+        };
       }
       // Notify parent component that stream is ready
       if (onStreamReady) {
+        console.log('📤 Notifying parent component of stream readiness');
         onStreamReady(stream);
       }
-    } catch (error) {
-      console.error('Error accessing media devices:', error);
+    } catch (error : any) {
+      console.error('❌ Error accessing media devices:', error);
+      console.error('Error details:', error.name, error.message);
     }
   };
 
@@ -155,7 +182,7 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
 
       {/* Incoming Call Notification */}
       {incomingCall && (
-        <div className="absolute inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div className="absolute inset-0 min-w-[200px] bg-black bg-opacity-75 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-sm mx-4">
             <h2 className="text-xl font-bold mb-4 text-center">Incoming Call</h2>
             <p className="text-lg mb-6 text-center">{incomingCall.from} is calling you...</p>
@@ -345,16 +372,39 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
             <video
               ref={remoteVideoRef}
               autoPlay
-              muted
               playsInline
-              className="w-full h-full"
+              className="w-full h-full object-cover"
+              onLoadStart={() => console.log('Remote video loading started')}
+              onCanPlay={() => console.log('Remote video can play')}
+              onError={(e) => console.error('Remote video error:', e)}
             />
           </div>
         )}
       </div>
       
       {showEndCallButton && (
-        <div>
+        <div className="flex gap-4 justify-center">
+          <button
+            onClick={toggleMute}
+            className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
+              isMuted 
+                ? 'bg-red-500 hover:bg-red-600 text-white' 
+                : 'bg-gray-500 hover:bg-gray-600 text-white'
+            }`}
+            title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+          >
+            {isMuted ? (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+                <path d="M9 9v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2z"/>
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 1a3 3 0 0 0-3 3v10.5L7.5 17.5a3 3 0 0 0 4.242 4.242L12 19.5V13a3 3 0 0 0 3-3z"/>
+                <path d="M17 11.305a3 3 0 0 0 0 4.242l-4.5 4.242V8.69a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v11.5l6.5-6.5z"/>
+              </svg>
+            )}
+          </button>
           <button
             onClick={onEndCall}
             className="w-[200px] h-16 md:h-20 text-red-500 text-bold bg-white shadow-[0_0_15px_15px_rgba(0,0,0,0.2)] rounded-lg m-4 md:m-8 cursor-pointer"

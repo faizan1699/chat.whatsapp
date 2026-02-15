@@ -23,11 +23,13 @@ export default function Home() {
   const [callTimer, setCallTimer] = useState(0);
   const [isCallActive, setIsCallActive] = useState(false);
   const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
+  const [isMuted, setIsMuted] = useState(false);
   const iceCandidatesBuffer = useRef<RTCIceCandidateInit[]>([]);
 
   const socketRef = useRef<Socket | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const remoteVideoElementRef = useRef<HTMLVideoElement | null>(null);
   const [remoteVideoElement, setRemoteVideoElement] = useState<HTMLVideoElement | null>(null);
 
   // Timer effect
@@ -40,6 +42,17 @@ export default function Home() {
     }
     return () => {
       if (interval) clearInterval(interval);
+    };
+  }, [isCallActive]);
+
+  // Periodic ICE candidate processing
+  useEffect(() => {
+    const interval = setInterval(() => {
+      processBufferedCandidatesPeriodically();
+    }, 2000); // Check every 2 seconds
+
+    return () => {
+      clearInterval(interval);
     };
   }, [isCallActive]);
 
@@ -89,13 +102,22 @@ export default function Home() {
         });
 
         socketRef.current.on('offer', async ({ from, to, offer }: { from: string; to: string; offer: RTCSessionDescriptionInit }) => {
+          console.log('=== OFFER RECEIVED ===');
+          console.log('Offer from:', from, 'to:', to);
+          console.log('Offer type:', offer.type);
           console.log('Incoming call from:', from);
           // Show incoming call notification instead of auto-accepting
           setIncomingCall({ from, to, offer });
         });
 
         const handleAnswer = async ({ from, to, answer }: { from: string; to: string; answer: RTCSessionDescriptionInit }) => {
-          const pc = PeerConnection.getInstance();
+          console.log('=== ANSWER RECEIVED ===');
+          console.log('Answer from:', from, 'to:', to);
+          console.log('Answer type:', answer.type);
+          
+          const pc = peerConnectionRef.current || PeerConnection.getInstance();
+          console.log('Current peer connection state:', pc.signalingState);
+          console.log('Current remote description:', pc.remoteDescription);
           
           // Check connection state before setting remote description
           // Valid states for setting remote answer: have-local-offer or stable (in some rollback scenarios)
@@ -103,27 +125,17 @@ export default function Home() {
             try {
               await pc.setRemoteDescription(answer);
               setRemoteDescriptionSet(true);
-              console.log('Remote description set successfully, state:', pc.signalingState);
+              console.log('✅ Remote description set successfully, state:', pc.signalingState);
+              
+              // Process buffered ICE candidates immediately after setting remote description
+              await processBufferedIceCandidates(pc);
             } catch (error) {
-              console.error('Failed to set remote description:', error);
+              console.error('❌ Failed to set remote description:', error);
               return;
             }
           } else {
-            console.error('Cannot set remote description: Connection not in valid state, current state:', pc.signalingState);
+            console.error('❌ Cannot set remote description: Connection not in valid state, current state:', pc.signalingState);
             return;
-          }
-
-          // Add buffered ICE candidates
-          while (iceCandidatesBuffer.current.length > 0) {
-            try {
-              const candidate = iceCandidatesBuffer.current.shift();
-              if (candidate) {
-                await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                console.log('Buffered ICE candidate added successfully');
-              }
-            } catch (error) {
-              console.error('Error adding buffered ICE candidate:', error);
-            }
           }
 
           setShowEndCallButton(true);
@@ -151,18 +163,22 @@ export default function Home() {
 
         socketRef.current.on('icecandidate', async (candidate: RTCIceCandidateInit) => {
           console.log('Received ICE candidate:', candidate);
-          const pc = PeerConnection.getInstance();
+          const pc = peerConnectionRef.current || PeerConnection.getInstance();
 
           // Check if peer connection is ready for ICE candidates
+          // ICE candidates can be added when remoteDescription is set OR when in stable state
           if (pc.remoteDescription && pc.remoteDescription.type) {
             try {
               await pc.addIceCandidate(new RTCIceCandidate(candidate));
               console.log('ICE candidate added successfully');
             } catch (error) {
               console.error('Error adding ICE candidate:', error);
+              // If adding fails, buffer it for later
+              iceCandidatesBuffer.current.push(candidate);
+              console.log('ICE candidate buffered due to error');
             }
           } else {
-            console.log('Remote description not set yet, buffering ICE candidate');
+            console.log('Remote description not set yet, buffering ICE candidate. Current state:', pc.signalingState);
             // Buffer the candidate to add later
             iceCandidatesBuffer.current.push(candidate);
           }
@@ -229,17 +245,41 @@ export default function Home() {
       iceCandidatesBuffer.current = [];
 
       if (localStreamRef.current) {
+        console.log('Local stream tracks:', localStreamRef.current.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, muted: t.muted })));
         localStreamRef.current.getTracks().forEach(track => {
           // Check if sender already exists for this track
           if (!peerConnection!.getSenders().some(sender => sender.track === track)) {
+            console.log('Adding track to peer connection:', track.kind);
             peerConnection!.addTrack(track, localStreamRef.current!);
+          } else {
+            console.log('Track already exists in peer connection:', track.kind);
           }
         });
+      } else {
+        console.log('No local stream available when creating peer connection');
       }
 
       peerConnection.ontrack = function (event) {
-        if (remoteVideoElement) {
-          remoteVideoElement.srcObject = event.streams[0];
+        console.log('=== ONTRACK EVENT ===');
+        console.log('Track kind:', event.track.kind);
+        console.log('Track enabled:', event.track.enabled);
+        console.log('Track state:', event.track.readyState);
+        console.log('Number of streams:', event.streams.length);
+        console.log('Stream IDs:', event.streams.map(s => s.id));
+        console.log('Remote video element available:', !!(remoteVideoElementRef.current || remoteVideoElement));
+        
+        const videoElement = remoteVideoElementRef.current || remoteVideoElement;
+        if (videoElement && event.streams[0]) {
+          console.log('Setting remote video stream:', event.streams[0].getTracks().length, 'tracks');
+          console.log('Stream active:', event.streams[0].active);
+          console.log('Stream tracks:', event.streams[0].getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, muted: t.muted, readyState: t.readyState })));
+          
+          videoElement.srcObject = event.streams[0];
+          videoElement.play().catch(error => {
+            console.error('Error playing remote video:', error);
+          });
+        } else {
+          console.warn('No remote video element or streams available. Video element:', !!videoElement, 'Streams:', event.streams.length);
         }
       };
 
@@ -253,8 +293,21 @@ export default function Home() {
         console.log('Connection state changed:', peerConnection?.connectionState);
         if (peerConnection?.connectionState === 'connected') {
           setConnectionState('connected');
+          console.log('WebRTC connection established successfully');
         } else if (peerConnection?.connectionState === 'disconnected' || peerConnection?.connectionState === 'failed') {
           setConnectionState('disconnected');
+          console.log('WebRTC connection lost or failed');
+        } else if (peerConnection?.connectionState === 'connecting') {
+          console.log('WebRTC connection establishing...');
+        }
+      };
+
+      peerConnection.oniceconnectionstatechange = function () {
+        console.log('ICE connection state changed:', peerConnection?.iceConnectionState);
+        if (peerConnection?.iceConnectionState === 'connected' || peerConnection?.iceConnectionState === 'completed') {
+          console.log('ICE connection established');
+        } else if (peerConnection?.iceConnectionState === 'failed' || peerConnection?.iceConnectionState === 'disconnected') {
+          console.log('ICE connection failed');
         }
       };
 
@@ -268,6 +321,7 @@ export default function Home() {
           peerConnection.close();
         }
         peerConnection = createPeerConnection();
+        peerConnectionRef.current = peerConnection; // Store reference
         return peerConnection;
       },
       reset: () => {
@@ -324,66 +378,107 @@ export default function Home() {
     iceCandidatesBuffer.current = [];
   };
 
+  const processBufferedIceCandidates = async (pc: RTCPeerConnection) => {
+    while (iceCandidatesBuffer.current.length > 0) {
+      try {
+        const candidate = iceCandidatesBuffer.current.shift();
+        if (candidate) {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          console.log('Buffered ICE candidate added successfully');
+        }
+      } catch (error) {
+        console.error('Error adding buffered ICE candidate:', error);
+        // Put it back in the buffer if it failed
+        const failedCandidate = iceCandidatesBuffer.current.pop();
+        if (failedCandidate) {
+          iceCandidatesBuffer.current.unshift(failedCandidate);
+        }
+        break; // Stop processing on first error
+      }
+    }
+  };
+
+  // Periodic check to process buffered candidates
+  const processBufferedCandidatesPeriodically = () => {
+    const pc = peerConnectionRef.current;
+    if (pc && pc.remoteDescription && pc.remoteDescription.type && iceCandidatesBuffer.current.length > 0) {
+      console.log('Periodic check: Processing buffered ICE candidates');
+      processBufferedIceCandidates(pc);
+    }
+  };
+
   const handleAcceptCall = async () => {
     if (!incomingCall) return;
+
+    console.log('=== ACCEPTING CALL ===');
+    console.log('Incoming call from:', incomingCall.from);
+    console.log('Incoming call offer type:', incomingCall.offer.type);
 
     // Start camera when accepting a call
     setStartCamera(true);
 
     // Wait a bit for camera to start
     setTimeout(async () => {
-      const pc = PeerConnection.getInstance();
+      const pc = peerConnectionRef.current || PeerConnection.getInstance();
+      console.log('Peer connection state before setting remote description:', pc.signalingState);
+      
+      // Add local stream to peer connection BEFORE setting remote description
+      if (localStreamRef.current) {
+        console.log('Adding local stream to peer connection in handleAcceptCall');
+        localStreamRef.current.getTracks().forEach(track => {
+          if (!pc.getSenders().some(sender => sender.track === track)) {
+            pc.addTrack(track, localStreamRef.current!);
+          }
+        });
+      } else {
+        console.log('❌ No local stream available in handleAcceptCall');
+      }
       
       // Check connection state before setting remote description
       if (pc.signalingState === 'stable') {
         try {
+          console.log('Setting remote description from incoming call...');
           await pc.setRemoteDescription(incomingCall.offer);
           setRemoteDescriptionSet(true);
-          console.log('Remote offer set successfully in handleAcceptCall');
+          console.log('✅ Remote offer set successfully in handleAcceptCall');
+          
+          // Process buffered ICE candidates immediately after setting remote description
+          await processBufferedIceCandidates(pc);
         } catch (error) {
-          console.error('Failed to set remote offer in handleAcceptCall:', error);
+          console.error('❌ Failed to set remote offer in handleAcceptCall:', error);
           return;
         }
       } else {
-        console.error('Cannot set remote offer: Connection not in stable state, current state:', pc.signalingState);
+        console.error('❌ Cannot set remote offer: Connection not in stable state, current state:', pc.signalingState);
         // Try to reset the connection and try again
         try {
           PeerConnection.reset();
           const newPc = PeerConnection.getInstance();
+          peerConnectionRef.current = newPc; // Update reference
+          
+          // Add local stream to new peer connection
+          if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(track => {
+              if (!newPc.getSenders().some(sender => sender.track === track)) {
+                newPc.addTrack(track, localStreamRef.current!);
+              }
+            });
+          }
+          
           await newPc.setRemoteDescription(incomingCall.offer);
           setRemoteDescriptionSet(true);
-          console.log('Remote offer set successfully after connection reset');
+          console.log('✅ Remote offer set successfully after connection reset');
+          
+          // Process buffered ICE candidates after reset
+          await processBufferedIceCandidates(newPc);
         } catch (resetError) {
-          console.error('Failed to set remote offer even after reset:', resetError);
+          console.error('❌ Failed to set remote offer even after reset:', resetError);
           return;
-        }
-      }
-
-      // Add buffered ICE candidates
-      while (iceCandidatesBuffer.current.length > 0) {
-        try {
-          const candidate = iceCandidatesBuffer.current.shift();
-          if (candidate) {
-            await pc.addIceCandidate(new RTCIceCandidate(candidate));
-            console.log('Buffered ICE candidate added successfully in handleAcceptCall');
-          }
-        } catch (error) {
-          console.error('Error adding buffered ICE candidate in handleAcceptCall:', error);
         }
       }
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-
-      // Add local stream to peer connection
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => {
-          // Check if sender already exists for this track
-          if (!pc.getSenders().some(sender => sender.track === track)) {
-            pc.addTrack(track, localStreamRef.current!);
-          }
-        });
-      }
 
       socketRef.current?.emit('answer', {
         from: incomingCall.to,
@@ -442,9 +537,40 @@ export default function Home() {
 
   const handleRemoteVideoRef = (ref: HTMLVideoElement | null) => {
     setRemoteVideoElement(ref);
+    remoteVideoElementRef.current = ref;
+    console.log('Remote video element set:', !!ref);
+    
+    // If we already have a peer connection, update its ontrack handler
+    if (peerConnectionRef.current && ref) {
+      console.log('Updating ontrack handler for existing peer connection');
+      peerConnectionRef.current.ontrack = function (event) {
+        console.log('Received remote track (updated handler):', event.track.kind, event.streams.length, 'streams');
+        if (ref && event.streams[0]) {
+          console.log('Setting remote video stream (updated handler):', event.streams[0].getTracks().length, 'tracks');
+          ref.srcObject = event.streams[0];
+          ref.play().catch(error => {
+            console.error('Error playing remote video (updated handler):', error);
+          });
+        }
+      };
+    }
+  };
+
+  const handleToggleMute = () => {
+    if (localStreamRef.current) {
+      const audioTracks = localStreamRef.current.getAudioTracks();
+      if (audioTracks.length > 0) {
+        const newMutedState = !audioTracks[0].enabled;
+        audioTracks[0].enabled = newMutedState;
+        setIsMuted(newMutedState);
+        console.log('Microphone', newMutedState ? 'muted' : 'unmuted');
+      }
+    }
   };
 
   const handleStreamReady = (stream: MediaStream) => {
+    console.log('📤 Parent component received stream');
+    console.log('Stream tracks in parent:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, muted: t.muted, readyState: t.readyState })));
     localStreamRef.current = stream;
   };
 
@@ -501,7 +627,17 @@ export default function Home() {
     
     // Wait a bit for camera to start
     setTimeout(async () => {
-      const pc = PeerConnection.getInstance();
+      const pc = peerConnectionRef.current || PeerConnection.getInstance();
+      
+      // Add local stream to peer connection BEFORE creating offer
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => {
+          if (!pc.getSenders().some(sender => sender.track === track)) {
+            pc.addTrack(track, localStreamRef.current!);
+          }
+        });
+      }
+      
       const offer = await pc.createOffer();
       console.log({ offer });
       await pc.setLocalDescription(offer);
@@ -557,6 +693,8 @@ export default function Home() {
         onUsernameChange={handleUsernameChange}
         onClearData={clearUserData}
         connectionState={connectionState}
+        onToggleMute={handleToggleMute}
+        isMuted={isMuted}
       />
     </main>
   );
