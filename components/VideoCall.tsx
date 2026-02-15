@@ -13,7 +13,7 @@ interface VideoCallProps {
   callNotification?: { message: string; type: 'start' | 'end' } | null;
   onRemoteVideoRef?: (ref: HTMLVideoElement | null) => void;
   showRemoteVideo?: boolean;
-  localStream?: MediaStream | null; // Added prop
+  localStream?: MediaStream | null;
   callTimer?: number;
   isCallActive?: boolean;
   onUsernameChange?: (username: string) => void;
@@ -29,18 +29,13 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
   const usernameInputRef = useRef<HTMLInputElement>(null);
   const editUsernameRef = useRef<HTMLInputElement>(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  // Remove localMuted state as it is handled by parent prop isMuted
-  // const [localMuted, setLocalMuted] = useState(false);
 
   const toggleMute = () => {
-    // Only notify parent to toggle mute, do not modify stream here to avoid double toggling
     onToggleMute?.();
   };
 
-  // Handle local video stream
   useEffect(() => {
     if (localVideoRef.current && localStream) {
-      console.log('📹 Setting local video stream from prop');
       localVideoRef.current.srcObject = localStream;
     } else if (localVideoRef.current) {
       localVideoRef.current.srcObject = null;
@@ -50,18 +45,14 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
   useEffect(() => {
     if (onRemoteVideoRef && remoteVideoRef.current) {
       onRemoteVideoRef(remoteVideoRef.current);
-      console.log('Remote video ref provided to parent');
     }
   }, [onRemoteVideoRef, remoteVideoRef.current]);
 
   useEffect(() => {
-    // Listen for custom event to open edit modal
     const handleOpenEditModal = () => {
       setShowEditModal(true);
     };
-
     window.addEventListener('openEditModal', handleOpenEditModal);
-
     return () => {
       window.removeEventListener('openEditModal', handleOpenEditModal);
     };
@@ -70,13 +61,10 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
   const handleCreateUser = () => {
     if (usernameInputRef.current && usernameInputRef.current.value !== "") {
       const username = usernameInputRef.current.value.trim();
-
-      // Validate username
       if (username.length < 2) {
         alert('Username must be at least 2 characters long');
         return;
       }
-
       onUsernameCreated(username);
     }
   };
@@ -91,279 +79,194 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
     }
   };
 
-  const openEditModal = () => {
-    setShowEditModal(true);
-    setTimeout(() => {
-      if (usernameInputRef.current) {
-        usernameInputRef.current.value = username;
-      }
-    }, 100);
-  };
-
   return (
-    <section className="flex-1 flex flex-col items-center justify-center p-2 md:p-0 relative">
+    <section className="flex-1 flex flex-col items-center justify-center relative bg-[#f0f2f5] overflow-hidden">
 
-      {/* Call Timer */}
+      {/* WhatsApp Green Header Background */}
+      {username === "" && !isCallActive && (
+        <div className="absolute top-0 left-0 w-full h-[220px] bg-[#00a884] z-0"></div>
+      )}
+
+      {/* Connection State Badge */}
+      {username !== "" && connectionState && (
+        <div className={`absolute top-4 right-4 z-40 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm border ${connectionState === 'connected' ? 'bg-[#d9fdd3] text-[#00a884] border-[#00a884]/20' :
+            connectionState === 'connecting' ? 'bg-yellow-50 text-yellow-600 border-yellow-200 animate-pulse' :
+              'bg-red-50 text-red-600 border-red-200'
+          }`}>
+          {connectionState}
+        </div>
+      )}
+
+      {/* Call Timer Overlay */}
       {isCallActive && (
-        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-30 px-4 py-2 bg-black bg-opacity-75 text-white font-mono text-lg rounded-lg shadow-lg">
+        <div className="absolute top-8 z-40 bg-black/60 backdrop-blur-md text-white px-5 py-2 rounded-full font-mono text-xl border border-white/20 shadow-2xl">
           {Math.floor(callTimer / 60).toString().padStart(2, '0')}:{(callTimer % 60).toString().padStart(2, '0')}
         </div>
       )}
 
-      {connectionState && (
-        <div className={`absolute top-4 right-[160px] z-30 px-3 py-2 rounded-lg text-xs font-semibold shadow-lg ${connectionState === 'connected'
-          ? 'bg-green-500 text-white'
-          : connectionState === 'connecting'
-            ? 'bg-yellow-500 text-white animate-pulse'
-            : 'bg-gray-500 text-white'
-          }`}>
-          {connectionState === 'connected' ? '🟢 Connected' :
-            connectionState === 'connecting' ? '🟡 Connecting...' : '🔴 Disconnected'}
-        </div>
-      )}
-      {/* Call Start/End Notification */}
+      {/* Notifications */}
       {callNotification && (
-        <div className={`absolute top-16 left-1/2 transform -translate-x-1/2 z-40 px-6 py-3 rounded-lg text-white font-semibold shadow-lg transition-all duration-300 ${callNotification.type === 'start' ? 'bg-green-500' : 'bg-red-500'
+        <div className={`absolute top-24 z-50 px-6 py-3 rounded-lg text-white font-medium shadow-xl transition-all duration-300 transform -translate-y-2 translate-y-0 ${callNotification.type === 'start' ? 'bg-[#00a884]' : 'bg-red-500'
           }`}>
           {callNotification.message}
         </div>
       )}
 
-      {/* Incoming Call Notification */}
+      {/* Incoming Call Dialog */}
       {incomingCall && (
-        <div className="absolute max-[640px]:h-screen bg-black/50  min-w-[320px] flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6">
-            <h2 className="text-xl font-bold mb-4 text-center">Incoming Call</h2>
-            <p className="text-lg mb-6 text-center">{incomingCall?.from} is calling you...</p>
-            <div className="flex flex-col sm:flex-row min-w-[300px] gap-4 justify-center">
-              <button
-                onClick={onAcceptCall}
-                className="bg-green-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-600 w-full sm:w-auto"
-              >
-                Accept
-              </button>
-              <button
-                onClick={onRejectCall}
-                className="bg-red-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-red-600 w-[200px] w-full sm:w-[200px]"
-              >
-                Reject
-              </button>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center transform scale-100 transition-transform">
+            <div className="w-20 h-20 bg-[#f0f2f5] rounded-full mx-auto mb-4 overflow-hidden shadow-inner">
+              <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${incomingCall.from}`} alt="caller" className="w-full h-full" />
+            </div>
+            <h2 className="text-2xl font-bold text-[#111b21] mb-1">Incoming Call</h2>
+            <p className="text-[#667781] mb-8">{incomingCall.from} is calling...</p>
+            <div className="flex gap-4">
+              <button onClick={onRejectCall} className="flex-1 bg-red-100 hover:bg-red-200 text-red-600 font-bold py-3 rounded-xl transition-colors">Decline</button>
+              <button onClick={onAcceptCall} className="flex-1 bg-[#00a884] hover:bg-[#008069] text-white font-bold py-3 rounded-xl transition-colors shadow-lg">Accept</button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Username Entry (Redesigned as WA Login) */}
       {username === "" && (
-        <div className="flex flex-col items-center justify-center min-h-[60vh] m-4 md:m-8">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md relative">
-            {/* Close Button */}
-            <button
-              onClick={() => {
-                // Clear any input and hide modal (optional: you could also redirect or show a different state)
-                if (usernameInputRef.current) {
-                  usernameInputRef.current.value = '';
-                }
-              }}
-              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-500">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-
-            <div className="text-center mb-8">
-              <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">Join Video Call</h2>
-              <p className="text-gray-600">Enter your username to start</p>
+        <div className="z-10 w-[95%] max-w-[1000px] min-h-[500px] bg-white shadow-2xl rounded-sm flex flex-col md:flex-row overflow-hidden">
+          <div className="flex-1 p-10 md:p-16 flex flex-col">
+            <h1 className="text-3xl font-light text-[#41525d] mb-10">To use WhatsApp Clone on your computer:</h1>
+            <ol className="list-decimal list-inside space-y-6 text-[#41525d] text-lg">
+              <li>Open WhatsApp on your phone</li>
+              <li>Tap <span className="font-bold">Menu</span> or <span className="font-bold">Settings</span> and select <span className="font-bold">Linked Devices</span></li>
+              <li>Tap on <span className="font-bold">Link a Device</span></li>
+              <li className="text-[#00a884] font-medium">Point your phone to this screen to capture the code (Enter username)</li>
+            </ol>
+            <div className="mt-auto pt-10 border-t border-[#f0f2f5]">
+              <a href="#" className="text-[#00a884] hover:underline font-medium">Need help to get started?</a>
             </div>
-
-            <div className="space-y-6">
-              <div className="relative">
+          </div>
+          <div className="w-full md:w-[400px] bg-white border-l border-[#f0f2f5] flex flex-col items-center justify-center p-10">
+            <div className="relative p-4 bg-white border border-[#e9edef] rounded-lg shadow-sm mb-8 w-full">
+              <div className="aspect-square bg-[#f9f9f9] rounded flex flex-col items-center justify-center p-4 border-2 border-dashed border-[#00a884]/20">
+                <div className="w-20 h-20 bg-[#00a884]/10 rounded-full flex items-center justify-center mb-4">
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#00a884" strokeWidth="1.5">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                </div>
                 <input
                   ref={usernameInputRef}
                   type="text"
-                  placeholder="Choose a username"
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none text-lg font-medium transition-colors bg-gray-50"
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      handleCreateUser();
-                    }
-                  }}
+                  placeholder="Enter your name"
+                  className="w-full text-center py-2 bg-transparent border-b-2 border-[#00a884] focus:outline-none text-xl font-medium text-[#111b21] placeholder:text-[#667781]/40"
+                  onKeyPress={(e) => e.key === 'Enter' && handleCreateUser()}
                 />
-                <div className="absolute right-3 top-3.5 text-gray-400">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                    <circle cx="8.5" cy="7" r="4" />
-                    <line x1="20" y1="8" x2="20" y2="14" />
-                    <line x1="23" y1="11" x2="17" y2="11" />
-                  </svg>
-                </div>
               </div>
-
-              <button
-                onClick={handleCreateUser}
-                className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] shadow-lg"
-              >
-                <span className="flex items-center justify-center gap-2">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-                    <polyline points="10 17 15 12 10 7" />
-                  </svg>
-                  Create Your User
-                </span>
-              </button>
             </div>
-
-            <div className="mt-6 text-center">
-              <p className="text-xs text-gray-500">
-                By joining, you agree to our terms and privacy policy
-              </p>
-            </div>
+            <button
+              onClick={handleCreateUser}
+              className="w-full bg-[#00a884] hover:bg-[#008069] text-white font-bold py-4 rounded-lg transition-all shadow-md active:scale-95"
+            >
+              Get Started
+            </button>
+            <p className="mt-4 text-xs text-[#8696a0]">Version 1.0.0 — Stable</p>
           </div>
         </div>
       )}
 
-      {username !== "" && !isCallActive && (
-        <div className="absolute top-4 right-4 z-20 flex gap-2">
-          <button
-            onClick={() => setShowEditModal(true)}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors"
-          >
-            Edit Username
-          </button>
-          <button
-            onClick={onClearData}
-            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors"
-            title="Clear all data and reset"
-          >
-            Clear Data
-          </button>
-        </div>
-      )}
-
-      {/* Edit Username Modal */}
+      {/* Edit Modal */}
       {showEditModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4 relative">
-            {/* Close Button */}
-            <button
-              onClick={() => setShowEditModal(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-
-            <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-              </div>
-              <h2 className="text-xl font-bold text-gray-800 mb-2">Edit Username</h2>
-              <p className="text-gray-600">Update your username</p>
-            </div>
-
-            <div className="space-y-4">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm">
+            <h3 className="text-xl font-bold text-[#111b21] mb-4">Update Profile</h3>
+            <div className="mb-6">
+              <label className="block text-xs font-bold text-[#00a884] uppercase mb-1">Your Name</label>
               <input
                 ref={editUsernameRef}
                 type="text"
                 defaultValue={username}
-                placeholder="Enter new username"
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none text-lg font-medium transition-colors bg-gray-50"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handleEditUser();
-                  }
-                }}
+                className="w-full py-2 bg-transparent border-b-2 border-[#00a884] focus:outline-none text-lg text-[#111b21]"
               />
-
-              <div className="flex flex-col gap-3">
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-3 px-4 rounded-xl transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleEditUser}
-                  className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold py-3 px-4 rounded-xl transition-all duration-200"
-                >
-                  Update
-                </button>
-              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setShowEditModal(false)} className="flex-1 py-2.5 text-[#667781] font-bold hover:bg-[#f0f2f5] rounded-lg transition-colors">Cancel</button>
+              <button onClick={handleEditUser} className="flex-1 py-2.5 bg-[#00a884] text-white font-bold rounded-lg shadow-md hover:bg-[#008069] transition-colors">Save</button>
             </div>
           </div>
         </div>
       )}
 
-      <div className="flex flex-col md:flex-row gap-4 md:gap-8 w-full px-2">
-        <div className={`${showRemoteVideo ? 'flex-1' : 'w-full'} min-h-[20rem] md:min-h-[40rem] md:max-h-[50rem] bg-black overflow-hidden rounded-lg`}>
-          <video
-            ref={localVideoRef}
-            autoPlay
-            muted
-            playsInline
-            className="w-full h-full"
-          />
-        </div>
-        <div className={`remote-video flex-1 w-full min-h-[20rem] md:min-h-[40rem] md:w-[50rem] md:max-h-[50rem] bg-black overflow-hidden rounded-lg ${showRemoteVideo ? '' : 'hidden'}`}>
-          <video
-            ref={remoteVideoRef}
-            autoPlay
-            playsInline
-            className="w-full h-full object-cover"
-            onLoadStart={() => console.log('Remote video loading started')}
-            onCanPlay={() => console.log('Remote video can play')}
-            onError={(e) => console.error('Remote video error:', e)}
-          />
-        </div>
-      </div>
+      {/* Video Call Interface */}
+      {username !== "" && (
+        <div className="w-full h-full flex flex-col p-4 md:p-8">
+          <div className={`relative flex-1 flex flex-col md:flex-row gap-4 h-full items-center justify-center`}>
+            {/* Remote Video (Full Screen if active) */}
+            <div className={`relative bg-[#202124] rounded-2xl overflow-hidden shadow-2xl transition-all duration-500 border-4 border-white/5 ${showRemoteVideo ? 'flex-1 w-full h-full' : 'hidden'
+              }`}>
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute bottom-4 left-4 bg-black/40 px-3 py-1 rounded-lg text-white text-sm backdrop-blur-md">
+                Target Participant
+              </div>
+            </div>
 
-      {showEndCallButton && (
-        <div className="flex gap-4 justify-center">
-          <button
-            onClick={toggleMute}
-            className={`w-[200px] h-16 md:h-20 font-bold bg-white shadow-[0_0_15px_15px_rgba(0,0,0,0.2)] rounded-lg m-4 md:m-8 cursor-pointer flex items-center justify-center gap-2 transition-colors ${isMuted ? 'text-red-500' : 'text-gray-700 hover:text-gray-900'}`}
-            title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
-          >
-            {isMuted ? (
-              <>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="1" y1="1" x2="23" y2="23"></line>
-                  <path d="M9 9v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2z" />
-                </svg>
-                <span className="text-lg">Unmute</span>
-              </>
-            ) : (
-              <>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 1a3 3 0 0 0-3 3v10.5L7.5 17.5a3 3 0 0 0 4.242 4.242L12 19.5V13a3 3 0 0 0 3-3z" />
-                  <path d="M17 11.305a3 3 0 0 0 0 4.242l-4.5 4.242V8.69a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v11.5l6.5-6.5z" />
-                </svg>
-                <span className="text-lg">Mute</span>
-              </>
-            )}
-          </button>
-          <button
-            onClick={onEndCall}
-            className="w-[200px] h-16 md:h-20 text-red-500 text-bold bg-white shadow-[0_0_15px_15px_rgba(0,0,0,0.2)] rounded-lg m-4 md:m-8 cursor-pointer"
-          >
-            End Call
-          </button>
+            {/* Local Video (Floating if remote is active) */}
+            <div className={`bg-[#202124] rounded-2xl overflow-hidden shadow-2xl border-4 border-white/10 transition-all duration-500 overflow-hidden ${showRemoteVideo
+                ? 'absolute bottom-24 right-4 md:bottom-28 md:right-8 w-40 h-56 md:w-64 md:h-48 z-20 hover:scale-105'
+                : 'flex-1 w-full h-full max-w-4xl'
+              }`}>
+              <video
+                ref={localVideoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-full h-full object-cover -scale-x-100" // Mirror local video
+              />
+              <div className="absolute bottom-4 left-4 bg-black/40 px-3 py-1 rounded-lg text-white text-sm backdrop-blur-md">
+                You
+              </div>
+            </div>
+          </div>
+
+          {/* Control Bar */}
+          {showEndCallButton && (
+            <div className="mt-8 flex items-center justify-center gap-6 pb-4">
+              <button
+                onClick={toggleMute}
+                className={`p-5 rounded-full shadow-xl transition-all border ${isMuted ? 'bg-red-500 border-red-500 text-white' : 'bg-white/90 border-transparent text-[#54656f] hover:bg-white'
+                  }`}
+              >
+                {isMuted ? (
+                  <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V22h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"></path></svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"></path><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"></path></svg>
+                )}
+              </button>
+
+              <button
+                onClick={onEndCall}
+                className="p-5 bg-red-500 hover:bg-red-600 rounded-full text-white shadow-xl transition-all shadow-red-500/30 hover:shadow-red-500/50 active:scale-95"
+              >
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.994.994 0 0 1 0-1.41C2.75 9.21 6.92 7 12 7s9.25 2.21 11.71 4.67c.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29s-.53-.1-.7-.28c-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1c-1.45-.48-3-.73-4.6-.73z"></path></svg>
+              </button>
+
+              <button className="p-5 bg-white/90 border-transparent text-[#54656f] hover:bg-white rounded-full transition-all shadow-lg">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"></path></svg>
+              </button>
+            </div>
+          )}
+
+          {/* Settings/Logout shortcut */}
+          {!isCallActive && (
+            <div className="absolute bottom-6 right-6 flex gap-3 text-xs text-[#667781]">
+              <button onClick={onClearData} className="hover:text-red-500 transition-colors uppercase font-bold tracking-widest">Reset Application</button>
+            </div>
+          )}
         </div>
       )}
-
-
     </section>
   );
 }

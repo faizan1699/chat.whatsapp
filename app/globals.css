@@ -1,7 +1,19 @@
-@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --wa-bg: #f0f2f5;
+  --wa-sidebar-header: #f0f2f5;
+  --wa-chat-header: #f0f2f5;
+  --wa-chat-bg: #efeae2;
+  --wa-bubble-me: #d9fdd3;
+  --wa-bubble-them: #ffffff;
+  --wa-green: #00a884;
+  --wa-green-dark: #008069;
+  --wa-text-primary: #111b21;
+  --wa-text-secondary: #667781;
+}
 
 * {
   margin: 0;
@@ -9,22 +21,32 @@
   box-sizing: border-box;
 }
 
-html {
-  font-size: 10px;
-}
-
-@media (max-width: 768px) {
-  html {
-    font-size: 8px;
-  }
-}
-
 body {
-  background: #eee;
-  font-size: 1.6rem;
-  font-family: "Lora", serif;
+  background: var(--wa-bg);
+  color: var(--wa-text-primary);
+  overflow: hidden;
 }
 
-ul li {
-  list-style: none;
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.chat-bg-pattern {
+  background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
+  background-color: var(--wa-chat-bg);
+  background-blend-mode: overlay;
+  opacity: 0.4;
 }

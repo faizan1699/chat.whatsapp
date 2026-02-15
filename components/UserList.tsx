@@ -16,87 +16,87 @@ export default function UserList({ users, currentUser, onStartCall, onEditUser }
   const filteredUsers = Object.entries(users).filter(([user]) =>
     user.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  return (
-    <aside className="w-full md:flex-basis-[30rem] md:border-r md:border-black h-full bg-white md:w-80 overflow-y-auto">
 
-      <div className="sticky top-0 bg-white z-10 border-b border-gray-200">
-        <div className="flex items-center justify-between p-4 md:p-4">
-          <h1 className="text-[1.4rem] md:text-[1.9rem] font-lora font-semibold">Contacts</h1>
-          <Link href="/chat" className="text-blue-500 hover:text-blue-700 font-medium text-sm flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  return (
+    <aside className="w-full md:w-[30%] lg:w-[25%] flex flex-col h-full bg-white border-r border-[#e9edef]">
+      {/* Header */}
+      <header className="flex h-[60px] items-center justify-between bg-[#f0f2f5] px-4 py-2 flex-shrink-0">
+        <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-300">
+          <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser || 'default'}`} alt="avatar" className="h-full w-full object-cover" />
+        </div>
+        <div className="flex items-center gap-4 text-[#54656f]">
+          <Link href="/chat" title="Open Messenger" className="hover:bg-black/5 p-2 rounded-full transition-colors">
+            <svg viewBox="0 0 24 24" height="24" width="24" fill="currentColor">
               <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
             </svg>
-            Chat
           </Link>
+          {onEditUser && (
+            <button onClick={onEditUser} className="hover:bg-black/5 p-2 rounded-full transition-colors" title="Edit Profile">
+              <svg viewBox="0 0 24 24" height="24" width="24" fill="currentColor">
+                <path d="M12 7a2 2 0 1 0-.001-4.001A2 2 0 0 0 12 7zm0 2a2 2 0 1 0-.001 4.001A2 2 0 0 0 12 9zm0 6a2 2 0 1 0-.001 4.001A2 2 0 0 0 12 15z"></path>
+              </svg>
+            </button>
+          )}
         </div>
+      </header>
 
-        {/* Search Input */}
-        <div className="px-4 pb-3">
+      {/* Search Bar */}
+      <div className="bg-white px-3 py-2 flex-shrink-0">
+        <div className="flex items-center gap-4 rounded-lg bg-[#f0f2f5] px-3 py-1.5 shadow-sm">
+          <span className="text-[#54656f]">
+            <svg viewBox="0 0 24 24" height="20" width="20" fill="currentColor">
+              <path d="M15.009 13.805h-.636l-.22-.219a5.184 5.184 0 0 0 1.256-3.386 5.207 5.207 0 1 0-5.207 5.208 5.183 5.183 0 0 0 3.385-1.255l.221.22v.635l4.004 3.999 1.194-1.195-3.997-4.007zm-4.808 0a3.605 3.605 0 1 1 0-7.21 3.605 3.605 0 0 1 0 7.21z"></path>
+            </svg>
+          </span>
           <input
             type="text"
-            placeholder="Search users..."
+            placeholder="Search or start new chat"
+            className="w-full bg-transparent text-sm text-[#111b21] outline-none placeholder:text-[#667781]"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full p-3 border border-gray-300 rounded-xl text-[1.3rem] md:text-[1.4rem] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
           />
         </div>
       </div>
 
-      <div className="p-2 md:p-2">
-        <ul className="caller-list space-y-2">
-          {filteredUsers.map(([user]) => (
-            <li
+      {/* Contact List */}
+      <div className="flex-1 overflow-y-auto divide-y divide-[#f0f2f5]">
+        {filteredUsers.length === 0 ? (
+          <div className="flex h-40 flex-col items-center justify-center p-8 text-center text-[#667781]">
+            <p className="text-sm italic">No contacts found</p>
+          </div>
+        ) : (
+          filteredUsers.map(([user]) => (
+            <div
               key={user}
-              className="flex justify-between items-center p-4 md:p-4 bg-gray-50 hover:bg-gray-100 rounded-xl cursor-pointer text-[1.3rem] md:text-[1.6rem] transition-all active:scale-[0.98] border border-gray-200"
+              className="flex w-full items-center gap-3 px-3 py-3 transition-colors hover:bg-[#f5f6f6] cursor-pointer group"
             >
-              <div className="flex items-center space-x-3 flex-1">
-                <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-[1.2rem] md:text-[1.4rem]">
-                  {user.charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1">
-                  <span className="font-medium">{user}</span>
+              <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-slate-200">
+                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user}`} alt={user} className="h-full w-full object-cover" />
+              </div>
+              <div className="flex flex-1 flex-col overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <span className="truncate font-medium text-[#111b21]">{user}</span>
                   {user === currentUser && (
-                    <span className="ml-2 text-xs md:text-sm text-blue-600 font-semibold bg-blue-100 px-2 py-1 rounded-full">You</span>
+                    <span className="text-[10px] text-[#00a884] font-bold uppercase tracking-wider bg-[#d9fdd3] px-1.5 py-0.5 rounded">You</span>
                   )}
                 </div>
+                <span className="truncate text-xs text-[#667781]">Online</span>
               </div>
-              {user === currentUser && onEditUser && (
-                <button
-                  onClick={onEditUser}
-                  className="border-none bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-full transition-all active:scale-95 shadow-md hover:shadow-lg"
-                  title="Edit user"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="md:w-4 md:h-4">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                  </svg>
-                </button>
-              )}
+
               {user !== currentUser && (
                 <button
                   onClick={() => onStartCall(user)}
-                  className="call-btn border-none bg-green-500 hover:bg-green-600 text-white p-3 rounded-full transition-all active:scale-95 shadow-md hover:shadow-lg"
+                  className="hidden group-hover:flex items-center justify-center h-8 w-8 bg-[#00a884] text-white rounded-full transition-transform hover:scale-110 active:scale-95 shadow-md"
+                  title="Start Call"
                 >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="md:w-5 md:h-5">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 00-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z" />
                   </svg>
                 </button>
               )}
-            </li>
-          ))}
-          {filteredUsers.length === 0 && (
-            <li className="p-8 text-center text-gray-500 text-[1.3rem] md:text-[1.6rem]">
-              <div className="flex flex-col items-center space-y-3">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-300">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                  <path d="m23 21-3.5-3.5M21 11.5a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0z" />
-                </svg>
-                <span>No users found</span>
-              </div>
-            </li>
-          )}
-        </ul>
+            </div>
+          ))
+        )}
       </div>
     </aside>
   );
