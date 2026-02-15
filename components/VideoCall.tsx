@@ -90,8 +90,8 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
       {/* Connection State Badge */}
       {username !== "" && connectionState && (
         <div className={`absolute top-4 right-4 z-40 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm border ${connectionState === 'connected' ? 'bg-[#d9fdd3] text-[#00a884] border-[#00a884]/20' :
-            connectionState === 'connecting' ? 'bg-yellow-50 text-yellow-600 border-yellow-200 animate-pulse' :
-              'bg-red-50 text-red-600 border-red-200'
+          connectionState === 'connecting' ? 'bg-yellow-50 text-yellow-600 border-yellow-200 animate-pulse' :
+            'bg-red-50 text-red-600 border-red-200'
           }`}>
           {connectionState}
         </div>
@@ -104,34 +104,9 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
         </div>
       )}
 
-      {/* Notifications */}
-      {callNotification && (
-        <div className={`absolute top-24 z-50 px-6 py-3 rounded-lg text-white font-medium shadow-xl transition-all duration-300 transform -translate-y-2 translate-y-0 ${callNotification.type === 'start' ? 'bg-[#00a884]' : 'bg-red-500'
-          }`}>
-          {callNotification.message}
-        </div>
-      )}
-
-      {/* Incoming Call Dialog */}
-      {incomingCall && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center transform scale-100 transition-transform">
-            <div className="w-20 h-20 bg-[#f0f2f5] rounded-full mx-auto mb-4 overflow-hidden shadow-inner">
-              <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${incomingCall.from}`} alt="caller" className="w-full h-full" />
-            </div>
-            <h2 className="text-2xl font-bold text-[#111b21] mb-1">Incoming Call</h2>
-            <p className="text-[#667781] mb-8">{incomingCall.from} is calling...</p>
-            <div className="flex gap-4">
-              <button onClick={onRejectCall} className="flex-1 bg-red-100 hover:bg-red-200 text-red-600 font-bold py-3 rounded-xl transition-colors">Decline</button>
-              <button onClick={onAcceptCall} className="flex-1 bg-[#00a884] hover:bg-[#008069] text-white font-bold py-3 rounded-xl transition-colors shadow-lg">Accept</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Username Entry (Redesigned as WA Login) */}
       {username === "" && (
-        <div className="z-10 w-[95%] max-w-[1000px] min-h-[500px] bg-white shadow-2xl rounded-sm flex flex-col md:flex-row overflow-hidden">
+        <div className="z-10 w-[95%] max-w-[1000px] min-h-[500px] bg-white shadow-2xl rounded-sm flex flex-col md:flex-row overflow-auto">
           <div className="flex-1 p-10 md:p-16 flex flex-col">
             <h1 className="text-3xl font-light text-[#41525d] mb-10">To use WhatsApp Clone on your computer:</h1>
             <ol className="list-decimal list-inside space-y-6 text-[#41525d] text-lg">
@@ -215,8 +190,8 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
 
             {/* Local Video (Floating if remote is active) */}
             <div className={`bg-[#202124] rounded-2xl overflow-hidden shadow-2xl border-4 border-white/10 transition-all duration-500 overflow-hidden ${showRemoteVideo
-                ? 'absolute bottom-24 right-4 md:bottom-28 md:right-8 w-40 h-56 md:w-64 md:h-48 z-20 hover:scale-105'
-                : 'flex-1 w-full h-full max-w-4xl'
+              ? 'absolute bottom-24 right-4 md:bottom-28 md:right-8 w-40 h-56 md:w-64 md:h-48 z-20 hover:scale-105'
+              : 'flex-1 w-full h-full max-w-4xl'
               }`}>
               <video
                 ref={localVideoRef}
