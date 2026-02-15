@@ -15,6 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const hashedPassword = await bcrypt.hash(password, 10);
+        const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 min
 
         const { data: user, error } = await supabaseAdmin
             .from('users')
@@ -23,6 +24,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 email: email || null,
                 phone_number: phoneNumber || null,
                 password: hashedPassword,
+                email_verified: false,
+                verification_otp: email ? otp : null,
+                verification_otp_expires: email ? otpExpires.toISOString() : null,
             })
             .select('id')
             .single();

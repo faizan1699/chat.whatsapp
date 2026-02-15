@@ -56,7 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         res.setHeader('Set-Cookie', cookie);
         return res.status(200).json({
             message: 'Logged in successfully',
-            user: { username: user.username, email: user.email, phoneNumber: user.phone_number }
+            user: { id: user.id, username: user.username, email: user.email, phoneNumber: user.phone_number }
         });
 
     } catch (error: unknown) {

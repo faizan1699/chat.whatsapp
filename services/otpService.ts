@@ -65,4 +65,37 @@ export const otpService = {
             throw new Error('Failed to send OTP email');
         }
     },
+
+    sendPasswordResetLink: async (email: string, resetToken: string): Promise<{ sent: boolean }> => {
+        const transporter = getTransporter();
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || 'http://localhost:3000';
+        const resetUrl = `${appUrl.startsWith('http') ? appUrl : `https://${appUrl}`}/auth/reset-password?token=${resetToken}`;
+
+        if (!transporter) {
+            console.warn('[OTP] Email config missing. Reset link for', email, ':', resetUrl);
+            return { sent: false };
+        }
+
+        try {
+            const fromAddr = EMAIL_FROM || EMAIL_USER || SMTP_USER;
+            await transporter.sendMail({
+                from: `"Chat App" <${fromAddr}>`,
+                to: email,
+                subject: 'Reset your password',
+                text: `Click to reset password: ${resetUrl}\nValid for 1 hour.`,
+                html: `
+                    <div style="font-family:sans-serif;max-width:400px;margin:0 auto;">
+                        <h2>Reset Password</h2>
+                        <p>Click the button below to reset your password:</p>
+                        <p><a href="${resetUrl}" style="display:inline-block;background:#00a884;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;margin:16px 0;">Reset Password</a></p>
+                        <p style="color:#666;font-size:12px;">Valid for 1 hour. If you didn't request this, ignore this email.</p>
+                    </div>
+                `,
+            });
+            return { sent: true };
+        } catch (error) {
+            console.error('[OTP] Reset email error:', error);
+            throw new Error('Failed to send reset email');
+        }
+    },
 };

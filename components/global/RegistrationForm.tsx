@@ -20,41 +20,42 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 interface RegistrationFormProps {
-    onSuccess: (user: any) => void;
+    onSuccess: (user: { username: string; userId?: string }, email?: string) => void;
+    onSwitchToLogin?: () => void;
 }
 
-export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
-    const [isLoading, setIsLoading] = useState(false);
+export default function RegistrationForm({ onSuccess, onSwitchToLogin }: RegistrationFormProps) {
     const [error, setError] = useState<string | null>(null);
-    const [isSuccess, setIsSuccess] = useState(false);
-
-    const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
+    const [successNoEmail, setSuccessNoEmail] = useState(false);
+    const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
         resolver: zodResolver(schema),
     });
 
     const onSubmit = async (data: FormData) => {
-        setIsLoading(true);
         setError(null);
         try {
             const response = await api.post('/auth/register', data);
-            setIsSuccess(true);
-            setTimeout(() => {
-                onSuccess(response.data);
-            }, 2000);
-        } catch (err: any) {
-            setError(err.response?.data?.error || 'Registration failed. Please try again.');
-        } finally {
-            setIsLoading(false);
+            const userData = {
+                username: data.username,
+                userId: response.data?.userId,
+            };
+            if (data.email) {
+                onSuccess(userData, data.email);
+            } else {
+                setSuccessNoEmail(true);
+                setTimeout(() => onSuccess(userData), 2000);
+            }
+        } catch (err: unknown) {
+            setError((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Registration failed. Please try again.');
         }
     };
 
-    if (isSuccess) {
+    if (successNoEmail) {
         return (
             <div className="flex flex-col items-center justify-center p-8 text-center animate-in zoom-in duration-300">
                 <CheckCircle size={64} className="text-[#00a884] mb-4" />
                 <h2 className="text-2xl font-bold text-[#111b21]">Success!</h2>
-                <p className="text-[#667781] mt-2">Account created. OTP sent to your email (check inbox & spam).</p>
-                <p className="text-[#00a884] mt-4 font-medium italic">Redirecting to chat...</p>
+                <p className="text-[#667781] mt-2">Account created. Redirecting to chat...</p>
             </div>
         );
     }
@@ -150,17 +151,25 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
 
                     <button
                         type="submit"
-                        disabled={isLoading}
+                        disabled={isSubmitting}
                         className="w-full bg-[#00a884] hover:bg-[#008069] text-white font-bold py-3.5 rounded-lg transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 mt-6"
                     >
-                        {isLoading ? (
+                        {isSubmitting ? (
                             <Loader2 className="animate-spin" size={20} />
                         ) : (
                             "Register & Verify"
                         )}
                     </button>
 
-                    <p className="text-center text-xs text-[#8696a0] mt-6">
+                    {onSwitchToLogin && (
+                        <p className="text-center text-sm text-[#667781] mt-4">
+                            Already have an account?{' '}
+                            <button type="button" onClick={onSwitchToLogin} className="text-[#00a884] font-medium hover:underline">
+                                Login
+                            </button>
+                        </p>
+                    )}
+                    <p className="text-center text-xs text-[#8696a0] mt-2">
                         By registering, you agree to our Terms of Service and Privacy Policy.
                     </p>
                 </form>
