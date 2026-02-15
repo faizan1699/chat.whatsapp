@@ -237,7 +237,7 @@ export default function ChatPage() {
                 });
 
                 socket.on('delete-message', ({ id }) => {
-                    setMessages(prev => prev.filter(m => m.id !== id));
+                    setMessages(prev => prev.map(m => m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m));
                 });
 
                 socket.on('pin-message', ({ id, isPinned }) => {
@@ -783,9 +783,10 @@ export default function ChatPage() {
     };
 
     const handleDeleteMessage = (id: string, type: 'me' | 'everyone') => {
-        setMessages(prev => prev.filter(m => m.id !== id));
-
-        if (type === 'everyone') {
+        if (type === 'me') {
+            setMessages(prev => prev.filter(m => m.id !== id));
+        } else {
+            setMessages(prev => prev.map(m => m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m));
             socketRef.current?.emit('delete-message', { id, to: selectedUser });
         }
     };
