@@ -1,27 +1,38 @@
 import nodemailer from 'nodemailer';
 
 /**
- * FREE Email OTP Service
- * Uses Gmail SMTP - no paid API needed.
+ * Email OTP - Nodemailer (FREE)
  *
- * Setup: https://myaccount.google.com/apppasswords
- * 1. Enable 2FA on Google account
- * 2. Create App Password for "Mail"
- * 3. Add to .env: EMAIL_USER, EMAIL_APP_PASSWORD
+ * Gmail: EMAIL_USER + EMAIL_APP_PASSWORD
+ * Custom SMTP: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM
  */
 
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_APP_PASSWORD = process.env.EMAIL_APP_PASSWORD;
+const SMTP_HOST = process.env.SMTP_HOST;
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASS = process.env.SMTP_PASS;
+const EMAIL_FROM = process.env.EMAIL_FROM || EMAIL_USER;
 
-function getTransporter() {
-    if (!EMAIL_USER || !EMAIL_APP_PASSWORD) return null;
-    return nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-            user: EMAIL_USER,
-            pass: EMAIL_APP_PASSWORD,
-        },
-    });
+function getTransporter(): nodemailer.Transporter | null {
+    // Gmail (simple)
+    if (EMAIL_USER && EMAIL_APP_PASSWORD) {
+        return nodemailer.createTransport({
+            service: 'gmail',
+            auth: { user: EMAIL_USER, pass: EMAIL_APP_PASSWORD },
+        });
+    }
+    // Custom SMTP (Outlook, Yahoo, etc.)
+    if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+        return nodemailer.createTransport({
+            host: SMTP_HOST,
+            port: SMTP_PORT,
+            secure: SMTP_PORT === 465,
+            auth: { user: SMTP_USER, pass: SMTP_PASS },
+        });
+    }
+    return null;
 }
 
 export const otpService = {
@@ -34,8 +45,9 @@ export const otpService = {
         }
 
         try {
+            const fromAddr = EMAIL_FROM || EMAIL_USER || SMTP_USER;
             await transporter.sendMail({
-                from: `"Chat App" <${EMAIL_USER}>`,
+                from: `"Chat App" <${fromAddr}>`,
                 to: email,
                 subject: 'Your verification code',
                 text: `Your verification code is: ${otp}. Valid for 10 minutes.`,

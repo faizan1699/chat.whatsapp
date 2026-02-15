@@ -60,7 +60,7 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
     }
 
     return (
-        <div className="z-10 w-full md:w-[95%] max-w-[1000px] bg-white shadow-2xl md:rounded-sm flex flex-col md:flex-row overflow-hidden min-h-[600px]">
+        <div className="z-10 w-full md:w-[95%] max-w-[1000px] bg-white shadow-2xl md:rounded-sm flex flex-col md:flex-row overflow-auto min-h-[600px]">
             <div className="flex-1 p-8 md:p-16 flex flex-col bg-[#f0f2f5]">
                 <h1 className="text-2xl md:text-3xl font-light text-[#41525d] mb-6">Create your NexChat account</h1>
                 <p className="text-[#667781] mb-8">Secure, real-time messaging with your friends and family.</p>
@@ -109,7 +109,7 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
                     </div>
 
                     <div className="space-y-1.5">
-                        <label className="text-[13px] font-medium text-[#00a884] uppercase tracking-wider">Email (Optional)</label>
+                        <label className="text-[13px] font-medium text-[#00a884] uppercase tracking-wider">Email (OTP bhejenge - zaroori)</label>
                         <div className="relative">
                             <Mail className="absolute left-3 top-2.5 text-[#667781]" size={18} />
                             <input
@@ -122,7 +122,7 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
                     </div>
 
                     <div className="space-y-1.5">
-                        <label className="text-[13px] font-medium text-[#00a884] uppercase tracking-wider">Phone Number (Required for OTP)</label>
+                        <label className="text-[13px] font-medium text-[#00a884] uppercase tracking-wider">Phone Number (Optional)</label>
                         <div className="relative">
                             <Phone className="absolute left-3 top-2.5 text-[#667781]" size={18} />
                             <input
