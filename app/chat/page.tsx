@@ -61,6 +61,7 @@ export default function ChatPage() {
     const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
     const [callNotification, setCallNotification] = useState<{ message: string; type: 'start' | 'end' } | null>(null);
     const [isAudioOnly, setIsAudioOnly] = useState(false);
+    const [callParticipant, setCallParticipant] = useState<string>('');
 
     // Refs
     const localStreamRef = useRef<MediaStream | null>(null);
@@ -146,6 +147,7 @@ export default function ChatPage() {
                     console.log('Offer received from:', from);
                     setIncomingCall({ from, to, offer, isAudioOnly: incomingIsAudioOnly });
                     setIsAudioOnly(!!incomingIsAudioOnly);
+                    setCallParticipant(from);
                     playRingtone();
                 });
 
@@ -277,6 +279,7 @@ export default function ChatPage() {
     const startCall = async (isAudio: boolean) => {
         if (!selectedUser) return;
         setIsAudioOnly(isAudio);
+        setCallParticipant(selectedUser);
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -333,7 +336,7 @@ export default function ChatPage() {
             });
 
             setIsCallActive(true);
-            setShowRemoteVideo(true);
+            setShowRemoteVideo(!incomingCall.isAudioOnly);
             setShowEndCallButton(true);
             setIncomingCall(null);
             setConnectionState('connected');
@@ -350,7 +353,7 @@ export default function ChatPage() {
     };
 
     const handleEndCallRequest = () => {
-        const otherUser = callerRef.current.find(u => u !== username) || selectedUser;
+        const otherUser = callerRef.current.find(u => u !== username) || selectedUser || callParticipant;
         if (otherUser) {
             socketRef.current?.emit('call-ended', { from: username, to: otherUser });
         }
@@ -368,6 +371,7 @@ export default function ChatPage() {
         setShowEndCallButton(false);
         setShowRemoteVideo(false);
         setCallTimer(0);
+        setCallParticipant('');
         setConnectionState('disconnected');
         stopRingtone();
     };
@@ -506,6 +510,7 @@ export default function ChatPage() {
 
             <CallOverlay
                 username={username}
+                remoteUser={callParticipant}
                 isCallActive={isCallActive}
                 onEndCall={handleEndCallRequest}
                 callNotification={callNotification}
@@ -516,6 +521,7 @@ export default function ChatPage() {
                 connectionState={connectionState}
                 isMuted={isMuted}
                 setIsMuted={setIsMuted}
+                onClearData={handleClearData}
             />
 
             {incomingCall && (

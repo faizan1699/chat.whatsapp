@@ -80,7 +80,7 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
   };
 
   return (
-    <section className="flex-1 flex flex-col items-center justify-center relative bg-[#f0f2f5] overflow-hidden">
+    <section className={`flex-1 flex flex-col items-center ${username === "" ? 'justify-start md:justify-center overflow-y-auto py-8 md:py-0' : 'justify-center overflow-hidden'} relative bg-[#f0f2f5]`}>
 
       {username === "" && !isCallActive && (
         <div className="absolute top-0 left-0 w-full h-[220px] bg-[#00a884] z-0"></div>
@@ -105,7 +105,7 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
       {/* Username Entry (Redesigned as WA Login) */}
       {username === "" && (
         <div className="z-10 w-[95%] max-w-[1000px] min-h-[500px] bg-white shadow-2xl rounded-sm flex flex-col md:flex-row overflow-auto">
-          <div className="flex-1 p-10 md:p-16 flex flex-col">
+          <div className="flex-1 p-6 md:p-16 flex flex-col">
             <h1 className="text-3xl font-light text-[#41525d] mb-10">To use WhatsApp Clone on your computer:</h1>
             <ol className="list-decimal list-inside space-y-6 text-[#41525d] text-lg">
               <li>Open WhatsApp on your phone</li>
@@ -117,7 +117,7 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
               <button className="text-[#00a884] hover:underline font-medium">Need help to get started?</button>
             </div>
           </div>
-          <div className="w-full md:w-[400px] bg-white border-l border-[#f0f2f5] flex flex-col items-center justify-center p-10">
+          <div className="w-full md:w-[400px] bg-white border-l border-[#f0f2f5] flex flex-col items-center justify-center p-6 md:p-10">
             <div className="relative p-4 bg-white border border-[#e9edef] rounded-lg shadow-sm mb-8 w-full">
               <div className="aspect-square bg-[#f9f9f9] rounded flex flex-col items-center justify-center p-4 border-2 border-dashed border-[#00a884]/20">
                 <div className="w-20 h-20 bg-[#00a884]/10 rounded-full flex items-center justify-center mb-4">
@@ -139,7 +139,7 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
               onClick={handleCreateUser}
               className="w-full bg-[#00a884] hover:bg-[#008069] text-white font-bold py-4 rounded-lg transition-all shadow-md active:scale-95"
             >
-              Get Started
+              Get Startedss
             </button>
             <p className="mt-4 text-xs text-[#8696a0]">Version 1.0.0 — Stable</p>
           </div>
