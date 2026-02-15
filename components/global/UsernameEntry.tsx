@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import UserSVG from '../assets/svg/user';
+import UserSVG from '../../assets/svg/user';
 
 interface UsernameEntryProps {
     onUsernameCreated: (username: string) => void;

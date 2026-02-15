@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
-import UsernameEntry from './UsernameEntry';
-import EditProfileModal from './EditProfileModal';
-import CallControls from './CallControls';
+import UsernameEntry from './global/UsernameEntry';
+import EditProfileModal from './global/EditProfileModal';
+import CallControls from './video/CallControls';
 
 interface VideoCallProps {
   username: string;

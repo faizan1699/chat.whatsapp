@@ -1,7 +1,7 @@
-import MicSVG from '../assets/svg/mic';
-import MicOffSVG from '../assets/svg/mic-off';
-import EndCallSVG from '../assets/svg/end-call';
-import VideoSVG from '../assets/svg/video';
+import MicSVG from '../../assets/svg/mic';
+import MicOffSVG from '../../assets/svg/mic-off';
+import EndCallSVG from '../../assets/svg/end-call';
+import VideoSVG from '../../assets/svg/video';
 
 interface CallControlsProps {
     onToggleMute: () => void;
@@ -9,7 +9,7 @@ interface CallControlsProps {
     onEndCall: () => void;
 }
 
-export default function CallControls({ onToggleMute, isMuted, onEndCall }: CallControlsProps) {
+const CallControls = ({ onToggleMute, isMuted, onEndCall }: CallControlsProps) => {
     return (
         <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex items-center justify-center gap-6 z-30">
             <button
@@ -33,3 +33,5 @@ export default function CallControls({ onToggleMute, isMuted, onEndCall }: CallC
         </div>
     );
 }
+
+export default CallControls

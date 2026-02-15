@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
-import { screenWidthChecker } from '../utils/window';
+import React, { useState, useRef, useEffect, Fragment } from 'react';
+import { screenWidthChecker } from '../../utils/window';
 
 interface ResizableSidebarProps {
     children: React.ReactNode;
@@ -50,7 +50,7 @@ export default function ResizableSidebar({
     };
 
     return (
-        <>
+        <Fragment>
             <div
                 style={{
                     width: selectedUser
@@ -66,6 +66,6 @@ export default function ResizableSidebar({
                 onMouseDown={startResizing}
                 className="hidden md:block w-[4px] h-full cursor-col-resize hover:bg-[#00a884] transition-colors bg-transparent z-30 -ml-[2px]"
             />
-        </>
+        </Fragment>
     );
 }
