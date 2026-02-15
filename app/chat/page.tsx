@@ -548,6 +548,10 @@ export default function ChatPage() {
                     localStorage.setItem('webrtc-username', u);
                     socketRef.current?.emit('join-user', u);
                 }}
+                onClearData={() => {
+                    localStorage.removeItem('webrtc-username');
+                    setUsername('');
+                }}
             />
         </div>
     );

@@ -11,7 +11,7 @@ interface ChatFooterProps {
 
 export default function ChatFooter({ inputMessage, setInputMessage, onSendMessage }: ChatFooterProps) {
     return (
-        <footer className="z-20 flex min-h-[62px] items-center gap-2 bg-[#f0f2f5] px-4 py-2">
+        <footer className="z-20 flex min-h-[62px] w-full flex-shrink-0 items-center gap-2 bg-[#f0f2f5] px-4 py-2">
             <div className="flex gap-2 text-[#54656f]">
                 <button className="hover:bg-black/5 p-2 rounded-full transition-colors">
                     <Smile size={24} />
