@@ -278,7 +278,10 @@ export default function ChatPage() {
                     iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
                 });
 
-                stream.getTracks().forEach(track => pc.addTrack(track, stream));
+                stream.getTracks().forEach(track => {
+                    console.log(`Adding local track: ${track.kind}, enabled: ${track.enabled}`);
+                    pc.addTrack(track, stream);
+                });
 
                 pc.onicecandidate = (e) => {
                     if (e.candidate) {
@@ -287,8 +290,21 @@ export default function ChatPage() {
                 };
 
                 pc.ontrack = (e) => {
-                    if (remoteVideoRef.current && e.streams[0]) {
-                        remoteVideoRef.current.srcObject = e.streams[0];
+                    console.log('Received remote stream:', e.streams[0]);
+                    console.log('Track kinds:', e.streams[0]?.getTracks().map(t => t.kind));
+
+                    if (e.streams[0]) {
+                        // Set remote video stream
+                        if (remoteVideoRef.current) {
+                            remoteVideoRef.current.srcObject = e.streams[0];
+                        }
+                        // Show remote video
+                        setShowRemoteVideo(true);
+
+                        // Log for debugging
+                        e.streams[0].getTracks().forEach(track => {
+                            console.log(`Remote track: ${track.kind}, enabled: ${track.enabled}, state: ${track.readyState}`);
+                        });
                     }
                 };
 

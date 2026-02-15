@@ -98,7 +98,7 @@ export default function VideoCall({
 
       {/* Video Call Interface */}
       {username !== "" && (
-        <div className="w-full h-full flex flex-col p-4 md:p-8">
+        <div className="w-full h-full flex flex-col p-4 md:p-8 relative">
           <div className="relative flex-1 flex flex-col md:flex-row gap-4 h-full items-center justify-center">
             {/* Remote Video */}
             <div className={`relative bg-[#202124] rounded-2xl overflow-hidden shadow-2xl transition-all duration-500 border-4 border-white/5 ${showRemoteVideo ? 'flex-1 w-full h-full' : 'hidden'}`}>
@@ -115,15 +115,28 @@ export default function VideoCall({
                 You
               </div>
             </div>
+
+            {/* Control Bar - Mobile Overlay */}
+            {showEndCallButton && (
+              <div className="md:hidden contents">
+                <CallControls
+                  onToggleMute={onToggleMute!}
+                  isMuted={isMuted}
+                  onEndCall={onEndCall}
+                />
+              </div>
+            )}
           </div>
 
-          {/* Control Bar */}
+          {/* Control Bar - Desktop Bottom */}
           {showEndCallButton && (
-            <CallControls
-              onToggleMute={onToggleMute!}
-              isMuted={isMuted}
-              onEndCall={onEndCall}
-            />
+            <div className="hidden md:block">
+              <CallControls
+                onToggleMute={onToggleMute!}
+                isMuted={isMuted}
+                onEndCall={onEndCall}
+              />
+            </div>
           )}
 
           {/* Settings/Logout shortcut */}
