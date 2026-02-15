@@ -68,12 +68,13 @@ export default function Home() {
     }
 
     // Initialize Socket.io server first
-    fetch('http://192.168.100.242:3000/api/socket')
+    fetch('/api/socket')
       .then(() => {
         console.log('Socket.io server initialized');
 
         // Connect to Socket.io server with proper configuration
-        socketRef.current = io('http://192.168.100.242:3000', {
+        // Omitting the URL argument makes it default to window.location
+        socketRef.current = io(undefined, {
           path: '/api/socket',
           addTrailingSlash: false,
           transports: ['polling'], // Use only polling to avoid WebSocket issues
@@ -370,7 +371,14 @@ export default function Home() {
         throw new Error('Media API not available. Secure context needed.');
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+        video: true
+      });
       console.log('✅ Stream obtained:', stream.id);
       localStreamRef.current = stream;
       setLocalStream(stream);
