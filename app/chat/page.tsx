@@ -110,6 +110,7 @@ export default function ChatPage() {
     useEffect(() => {
         const savedUsername = localStorage.getItem('webrtc-username');
         if (savedUsername) {
+            console
             setUsername(savedUsername);
         } else {
             setIsLoading(false);
