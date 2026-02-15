@@ -40,6 +40,7 @@ export default function ChatPage() {
     const socketRef = useRef<Socket | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+    const [editingMessage, setEditingMessage] = useState<Message | null>(null);
     const [showPinsDropdown, setShowPinsDropdown] = useState<boolean>(false);
 
     const [isWindowFocused, setIsWindowFocused] = useState<boolean>(true);
@@ -51,6 +52,7 @@ export default function ChatPage() {
     const [showEndCallButton, setShowEndCallButton] = useState<boolean>(false);
     const [showRemoteVideo, setShowRemoteVideo] = useState<boolean>(false);
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+    const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
     const [callTimer, setCallTimer] = useState(0);
     const [isMuted, setIsMuted] = useState<boolean>(false);
     const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
@@ -200,6 +202,10 @@ export default function ChatPage() {
 
                 socket.on('message-status-update', ({ messageId, status }) => {
                     setMessages(prev => prev.map(m => m.id === messageId ? { ...m, status } : m));
+                });
+
+                socket.on('message-edited', ({ id, message }) => {
+                    setMessages(prev => prev.map(m => m.id === id ? { ...m, message, isEdited: true } : m));
                 });
 
                 socket.on('offer', async ({ from, to, offer, isAudioOnly: incomingIsAudioOnly }) => {
@@ -390,10 +396,9 @@ export default function ChatPage() {
                     console.log('Track kinds:', e.streams[0]?.getTracks().map(t => t.kind));
 
                     if (e.streams[0]) {
-                        // Set remote video stream
-                        if (remoteVideoRef.current) {
-                            remoteVideoRef.current.srcObject = e.streams[0];
-                        }
+                        // Set remote video stream state
+                        setRemoteStream(e.streams[0]);
+
                         // Show remote video
                         setShowRemoteVideo(true);
 
@@ -511,6 +516,7 @@ export default function ChatPage() {
             localStreamRef.current = null;
         }
         setLocalStream(null);
+        setRemoteStream(null);
         setIsCallActive(false);
         setShowEndCallButton(false);
         setShowRemoteVideo(false);
@@ -554,6 +560,28 @@ export default function ChatPage() {
             return;
         }
 
+        if (editingMessage) {
+            // Handle Edit
+            setMessages(prev => prev.map(m =>
+                m.id === editingMessage.id ? { ...m, message: inputMessage.trim(), isEdited: true } : m
+            ));
+
+            if (socketRef.current?.connected) {
+                socketRef.current.emit('edit-message', {
+                    id: editingMessage.id,
+                    to: selectedUser,
+                    message: inputMessage.trim()
+                });
+            } else {
+                // If offline, just update locally and maybe queue queue later (not implemented for edits yet)
+                console.log('Socket not connected, edit only local');
+            }
+
+            setInputMessage('');
+            setEditingMessage(null);
+            return;
+        }
+
         const newMessage: Message = {
             id: Date.now().toString() + '-' + Math.random().toString(36).substr(2, 9),
             from: username,
@@ -575,6 +603,20 @@ export default function ChatPage() {
             setMessages(prev => prev.map(m => m.id === newMessage.id ? { ...m, status: 'failed' } : m));
             saveFailedMessage({ ...newMessage, status: 'failed' });
         }
+    };
+
+    const handleEditMessage = (msg: Message) => {
+        setEditingMessage(msg);
+        setInputMessage(msg.message);
+        setReplyingTo(null); // Clear reply if editing
+        // Focus input
+        const input = document.querySelector('input[type="text"]') as HTMLInputElement;
+        if (input) input.focus();
+    };
+
+    const handleCancelEdit = () => {
+        setEditingMessage(null);
+        setInputMessage('');
     };
 
     const handleSendVoice = async (audioBlob: Blob, duration: number) => {
@@ -626,10 +668,12 @@ export default function ChatPage() {
         }
     };
 
-    const handleDeleteMessage = (id: string) => {
-        if (!confirm('Delete this message?')) return;
+    const handleDeleteMessage = (id: string, type: 'me' | 'everyone') => {
         setMessages(prev => prev.filter(m => m.id !== id));
-        socketRef.current?.emit('delete-message', { id, to: selectedUser });
+
+        if (type === 'everyone') {
+            socketRef.current?.emit('delete-message', { id, to: selectedUser });
+        }
     };
 
     const handlePinMessage = (msg: Message) => {
@@ -776,6 +820,7 @@ export default function ChatPage() {
                                 onReply={(msg) => setReplyingTo(msg)}
                                 onDelete={handleDeleteMessage}
                                 onPin={handlePinMessage}
+                                onEdit={handleEditMessage}
                                 highlightedMessageId={highlightedMessageId}
                             />
 
@@ -785,7 +830,9 @@ export default function ChatPage() {
                                 onSendMessage={handleSendMessage}
                                 onSendVoice={handleSendVoice}
                                 replyingTo={replyingTo}
+                                editingMessage={editingMessage}
                                 onCancelReply={() => setReplyingTo(null)}
+                                onCancelEdit={handleCancelEdit}
                             />
                         </>
                     ) : (
@@ -800,6 +847,7 @@ export default function ChatPage() {
                 isCallActive={isCallActive}
                 onEndCall={handleEndCallRequest}
                 callNotification={callNotification}
+                remoteStream={remoteStream}
                 remoteVideoRef={remoteVideoRef}
                 isAudioOnly={isAudioOnly}
                 localStream={localStream}

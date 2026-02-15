@@ -18,6 +18,7 @@ interface CallOverlayProps {
     isMuted: boolean;
     setIsMuted: (muted: boolean) => void;
     onClearData: () => void;
+    remoteStream?: MediaStream | null;
 }
 
 export default function CallOverlay({
@@ -29,6 +30,7 @@ export default function CallOverlay({
     remoteVideoRef,
     isAudioOnly,
     localStream,
+    remoteStream,
     callTimer,
     connectionState,
     isMuted,
@@ -66,6 +68,7 @@ export default function CallOverlay({
                     onRemoteVideoRef={(ref) => { remoteVideoRef.current = ref; }}
                     showRemoteVideo={!isAudioOnly}
                     localStream={localStream}
+                    remoteStream={remoteStream}
                     callTimer={callTimer}
                     isCallActive={isCallActive}
                     onClearData={onClearData}
