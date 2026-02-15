@@ -15,7 +15,7 @@ export default function ResizableSidebar({
     children,
     selectedUser,
     initialWidth = 300,
-    minWidth = 100,
+    minWidth = 250,
     maxWidth = 550
 }: ResizableSidebarProps) {
     const [sidebarWidth, setSidebarWidth] = useState(initialWidth);
