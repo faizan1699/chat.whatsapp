@@ -31,19 +31,12 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
   const editUsernameRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [localMuted, setLocalMuted] = useState(false);
+  // Remove localMuted state as it is handled by parent prop isMuted
+  // const [localMuted, setLocalMuted] = useState(false);
 
   const toggleMute = () => {
-    if (streamRef.current) {
-      const audioTracks = streamRef.current.getAudioTracks();
-      if (audioTracks.length > 0) {
-        const newMutedState = !audioTracks[0].enabled;
-        audioTracks[0].enabled = newMutedState;
-        setLocalMuted(newMutedState);
-        console.log('Microphone', newMutedState ? 'muted' : 'unmuted');
-        onToggleMute?.();
-      }
-    }
+    // Only notify parent to toggle mute, do not modify stream here to avoid double toggling
+    onToggleMute?.();
   };
 
   useEffect(() => {
@@ -411,64 +404,7 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
         </div>
       )}
 
-      {/* Edit Username Modal */}
-      {showEditModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4 relative">
-            {/* Close Button */}
-            <button
-              onClick={() => setShowEditModal(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
 
-            <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-              </div>
-              <h2 className="text-xl font-bold text-gray-800 mb-2">Edit Username</h2>
-              <p className="text-gray-600">Update your username</p>
-            </div>
-
-            <div className="space-y-4">
-              <input
-                ref={editUsernameRef}
-                type="text"
-                defaultValue={username}
-                placeholder="Enter new username"
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none text-lg font-medium transition-colors bg-gray-50"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handleEditUser();
-                  }
-                }}
-              />
-
-              <div className="flex flex-col gap-3">
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-3 px-4 rounded-xl transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleEditUser}
-                  className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold py-3 px-4 rounded-xl transition-all duration-200"
-                >
-                  Update Username
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </section>
   );
 }

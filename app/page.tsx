@@ -11,19 +11,20 @@ interface PeerConnectionManager {
 }
 
 export default function Home() {
+
   const [username, setUsername] = useState('');
   const [users, setUsers] = useState<{ [key: string]: string }>({});
-  const [showEndCallButton, setShowEndCallButton] = useState(false);
+  const [showEndCallButton, setShowEndCallButton] = useState<boolean>(false);
   const [caller, setCaller] = useState<string[]>([]);
   const [incomingCall, setIncomingCall] = useState<{ from: string; to: string; offer: RTCSessionDescriptionInit } | null>(null);
   const [callNotification, setCallNotification] = useState<{ message: string; type: 'start' | 'end' } | null>(null);
-  const [showRemoteVideo, setShowRemoteVideo] = useState(false);
-  const [remoteDescriptionSet, setRemoteDescriptionSet] = useState(false);
-  const [startCamera, setStartCamera] = useState(false);
+  const [showRemoteVideo, setShowRemoteVideo] = useState<boolean>(false);
+  const [remoteDescriptionSet, setRemoteDescriptionSet] = useState<boolean>(false);
+  const [startCamera, setStartCamera] = useState<boolean>(false);
   const [callTimer, setCallTimer] = useState(0);
-  const [isCallActive, setIsCallActive] = useState(false);
+  const [isCallActive, setIsCallActive] = useState<boolean>(false);
   const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
   const iceCandidatesBuffer = useRef<RTCIceCandidateInit[]>([]);
 
   const socketRef = useRef<Socket | null>(null);
@@ -79,7 +80,7 @@ export default function Home() {
 
         socketRef.current.on('connect', () => {
           console.log('Connected to server with ID:', socketRef.current?.id);
-          
+
           // If we have a saved username, automatically rejoin
           const savedUsername = localStorage.getItem('webrtc-username');
           if (savedUsername) {
@@ -114,11 +115,11 @@ export default function Home() {
           console.log('=== ANSWER RECEIVED ===');
           console.log('Answer from:', from, 'to:', to);
           console.log('Answer type:', answer.type);
-          
+
           const pc = peerConnectionRef.current || PeerConnection.getInstance();
           console.log('Current peer connection state:', pc.signalingState);
           console.log('Current remote description:', pc.remoteDescription);
-          
+
           // Check connection state before setting remote description
           // Valid states for setting remote answer: have-local-offer or stable (in some rollback scenarios)
           if (pc.signalingState === "have-local-offer" || pc.signalingState === "stable") {
@@ -126,7 +127,7 @@ export default function Home() {
               await pc.setRemoteDescription(answer);
               setRemoteDescriptionSet(true);
               console.log('✅ Remote description set successfully, state:', pc.signalingState);
-              
+
               // Process buffered ICE candidates immediately after setting remote description
               await processBufferedIceCandidates(pc);
             } catch (error) {
@@ -189,7 +190,7 @@ export default function Home() {
         });
 
         socketRef.current.on('call-ended', () => {
-          setShowRemoteVideo(false);
+          setShowRemoteVideo<boolean>(false);
           endCall();
         });
 
@@ -267,13 +268,13 @@ export default function Home() {
         console.log('Number of streams:', event.streams.length);
         console.log('Stream IDs:', event.streams.map(s => s.id));
         console.log('Remote video element available:', !!(remoteVideoElementRef.current || remoteVideoElement));
-        
+
         const videoElement = remoteVideoElementRef.current || remoteVideoElement;
         if (videoElement && event.streams[0]) {
           console.log('Setting remote video stream:', event.streams[0].getTracks().length, 'tracks');
           console.log('Stream active:', event.streams[0].active);
           console.log('Stream tracks:', event.streams[0].getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, muted: t.muted, readyState: t.readyState })));
-          
+
           videoElement.srcObject = event.streams[0];
           videoElement.play().catch(error => {
             console.error('Error playing remote video:', error);
@@ -338,17 +339,17 @@ export default function Home() {
   const handleUsernameCreated = (newUsername: string) => {
     console.log('Creating user:', newUsername);
     setUsername(newUsername);
-    
+
     // Save to localStorage
     localStorage.setItem('webrtc-username', newUsername);
-    
+
     // Add current user to local list immediately for better UX
     setUsers(prev => {
       const updatedUsers = { ...prev, [newUsername]: newUsername };
       console.log('Local users updated:', updatedUsers);
       return updatedUsers;
     });
-    
+
     // Emit to server to sync with other devices
     if (socketRef.current) {
       socketRef.current.emit('join-user', newUsername);
@@ -368,11 +369,11 @@ export default function Home() {
 
   const endCall = () => {
     PeerConnection.reset();
-    setShowEndCallButton(false);
-    setShowRemoteVideo(false);
-    setRemoteDescriptionSet(false);
-    setStartCamera(false);
-    setIsCallActive(false);
+    setShowEndCallButton<boolean>(false);
+    setShowRemoteVideo<boolean>(false);
+    setRemoteDescriptionSet<boolean>(false);
+    setStartCamera<boolean>(false);
+    setIsCallActive<boolean>(false);
     setCallTimer(0);
     setConnectionState('disconnected');
     iceCandidatesBuffer.current = [];
@@ -421,7 +422,7 @@ export default function Home() {
     setTimeout(async () => {
       const pc = peerConnectionRef.current || PeerConnection.getInstance();
       console.log('Peer connection state before setting remote description:', pc.signalingState);
-      
+
       // Add local stream to peer connection BEFORE setting remote description
       if (localStreamRef.current) {
         console.log('Adding local stream to peer connection in handleAcceptCall');
@@ -433,7 +434,7 @@ export default function Home() {
       } else {
         console.log('❌ No local stream available in handleAcceptCall');
       }
-      
+
       // Check connection state before setting remote description
       if (pc.signalingState === 'stable') {
         try {
@@ -441,7 +442,7 @@ export default function Home() {
           await pc.setRemoteDescription(incomingCall.offer);
           setRemoteDescriptionSet(true);
           console.log('✅ Remote offer set successfully in handleAcceptCall');
-          
+
           // Process buffered ICE candidates immediately after setting remote description
           await processBufferedIceCandidates(pc);
         } catch (error) {
@@ -455,7 +456,7 @@ export default function Home() {
           PeerConnection.reset();
           const newPc = PeerConnection.getInstance();
           peerConnectionRef.current = newPc; // Update reference
-          
+
           // Add local stream to new peer connection
           if (localStreamRef.current) {
             localStreamRef.current.getTracks().forEach(track => {
@@ -464,11 +465,11 @@ export default function Home() {
               }
             });
           }
-          
+
           await newPc.setRemoteDescription(incomingCall.offer);
           setRemoteDescriptionSet(true);
           console.log('✅ Remote offer set successfully after connection reset');
-          
+
           // Process buffered ICE candidates after reset
           await processBufferedIceCandidates(newPc);
         } catch (resetError) {
@@ -539,7 +540,7 @@ export default function Home() {
     setRemoteVideoElement(ref);
     remoteVideoElementRef.current = ref;
     console.log('Remote video element set:', !!ref);
-    
+
     // If we already have a peer connection, update its ontrack handler
     if (peerConnectionRef.current && ref) {
       console.log('Updating ontrack handler for existing peer connection');
@@ -560,10 +561,10 @@ export default function Home() {
     if (localStreamRef.current) {
       const audioTracks = localStreamRef.current.getAudioTracks();
       if (audioTracks.length > 0) {
-        const newMutedState = !audioTracks[0].enabled;
-        audioTracks[0].enabled = newMutedState;
-        setIsMuted(newMutedState);
-        console.log('Microphone', newMutedState ? 'muted' : 'unmuted');
+        const isEnabled = audioTracks[0].enabled;
+        audioTracks[0].enabled = !isEnabled; // Toggle
+        setIsMuted(isEnabled); // If it WAS enabled (true), it is NOW muted (true)
+        console.log('Microphone', isEnabled ? 'muted' : 'unmuted');
       }
     }
   };
@@ -577,10 +578,10 @@ export default function Home() {
   const handleUsernameChange = (newUsername: string) => {
     // Update localStorage
     localStorage.setItem('webrtc-username', newUsername);
-    
+
     // Update state
     setUsername(newUsername);
-    
+
     // Emit to server with new username
     if (socketRef.current) {
       socketRef.current.emit('join-user', newUsername);
@@ -596,7 +597,7 @@ export default function Home() {
 
   const startCall = async (user: string) => {
     console.log({ user });
-    
+
     // Validate that current user is authenticated
     if (!username || username.trim() === '') {
       console.error('Cannot make call: User not authenticated');
@@ -607,7 +608,7 @@ export default function Home() {
       setTimeout(() => setCallNotification(null), 3000);
       return;
     }
-    
+
     // Validate that target user exists
     if (!users[user]) {
       console.error('Cannot make call: Target user not found');
@@ -618,17 +619,17 @@ export default function Home() {
       setTimeout(() => setCallNotification(null), 3000);
       return;
     }
-    
+
     // Set connection state to connecting
     setConnectionState('connecting');
-    
+
     // Start camera when making a call
     setStartCamera(true);
-    
+
     // Wait a bit for camera to start
     setTimeout(async () => {
       const pc = peerConnectionRef.current || PeerConnection.getInstance();
-      
+
       // Add local stream to peer connection BEFORE creating offer
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => {
@@ -637,7 +638,7 @@ export default function Home() {
           }
         });
       }
-      
+
       const offer = await pc.createOffer();
       console.log({ offer });
       await pc.setLocalDescription(offer);
