@@ -49,11 +49,10 @@ export default function CallOverlay({
                     isMuted={isMuted}
                     onToggleMute={() => {
                         if (localStream) {
-                            const audio = localStream.getAudioTracks()[0];
-                            if (audio) {
-                                audio.enabled = !audio.enabled;
-                                setIsMuted(!audio.enabled);
-                            }
+                            localStream.getAudioTracks().forEach(track => {
+                                track.enabled = !track.enabled;
+                                setIsMuted(!track.enabled);
+                            });
                         }
                     }}
                     onEndCall={onEndCall}
@@ -66,7 +65,7 @@ export default function CallOverlay({
                     onEndCall={onEndCall}
                     showEndCallButton={true}
                     onRemoteVideoRef={(ref) => { remoteVideoRef.current = ref; }}
-                    showRemoteVideo={!isAudioOnly}
+                    showRemoteVideo={true}
                     localStream={localStream}
                     remoteStream={remoteStream}
                     callTimer={callTimer}
@@ -75,11 +74,10 @@ export default function CallOverlay({
                     connectionState={connectionState}
                     onToggleMute={() => {
                         if (localStream) {
-                            const audio = localStream.getAudioTracks()[0];
-                            if (audio) {
-                                audio.enabled = !audio.enabled;
-                                setIsMuted(!audio.enabled);
-                            }
+                            localStream.getAudioTracks().forEach(track => {
+                                track.enabled = !track.enabled;
+                                setIsMuted(!track.enabled);
+                            });
                         }
                     }}
                     isMuted={isMuted}
