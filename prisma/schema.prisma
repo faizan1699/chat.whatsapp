@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+model User {
+  id               String         @id @default(cuid())
+  username         String         @unique
+  email            String?        @unique
+  phoneNumber      String?        @unique
+  password         String
+  avatar           String?
+  lastSeen         DateTime       @default(now())
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  
+  // Conversations where this user is a participant
+  conversations    ConversationParticipant[]
+  
+  // Messages sent by this user
+  messages         Message[]
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  name      String?  // Optional for group names, null for 1-on-1
+  isGroup   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ConversationParticipant[]
+  messages     Message[]
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  userId         String
+  conversationId String
+  user           User         @relation(fields: [userId], references: [id])
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  joinedAt       DateTime     @default(now())
+
+  @@unique([userId, conversationId])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  senderId       String
+  content        String?  @default("")
+  timestamp      DateTime @default(now())
+  status         String   @default("sent") // pending, sent, delivered, read
+  isVoiceMessage Boolean  @default(false)
+  audioUrl       String?
+  audioDuration  Float?
+  isEdited       Boolean  @default(false)
+  isDeleted      Boolean  @default(false)
+  isPinned       Boolean  @default(false)
+  replyTo        Json?    // Store partial message for reply
+  groupId        String?  // For chunked messages (UI level)
+  chunkIndex     Int?
+  totalChunks    Int?
+  
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  sender         User         @relation(fields: [senderId], references: [id])
+
+  @@index([conversationId])
+  @@index([senderId])
+}
