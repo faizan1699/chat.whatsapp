@@ -172,6 +172,18 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
           io.to(allusers[to]).emit('pin-message', { id, isPinned });
         }
       });
+
+      socket.on('mark-delivered', ({ messageId, to }) => {
+        if (allusers[to]) {
+          io.to(allusers[to]).emit('message-status-update', { messageId, status: 'delivered' });
+        }
+      });
+
+      socket.on('mark-read', ({ messageId, to }) => {
+        if (allusers[to]) {
+          io.to(allusers[to]).emit('message-status-update', { messageId, status: 'read' });
+        }
+      });
     });
   }
   res.end();

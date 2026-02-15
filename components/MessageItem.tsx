@@ -9,7 +9,7 @@ export interface Message {
     to: string;
     message: string;
     timestamp: Date;
-    status?: 'pending' | 'sent' | 'failed';
+    status?: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
     replyTo?: Message;
     isPinned?: boolean;
     audioUrl?: string;
@@ -138,9 +138,8 @@ export default function MessageItem({
                     </div>
                 )}
 
-                {/* Actions Trigger (Hidden by default, shown on hover/group-hover) */}
-                <div className={`absolute top-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity ${isMe ? 'left-[-40px]' : 'right-[-40px]'}`}>
-                    <div className="flex flex-col gap-1 bg-white shadow-md rounded-full p-1 border border-[#f0f2f5]">
+                <div className={`absolute top-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity ${isMe ? 'right-full mr-[10px]' : 'left-full ml-[10px]'}`}>
+                    <div className="flex flex-wrap gap-1 bg-white shadow-md rounded-full p-1 border border-[#f0f2f5]">
                         <button
                             onClick={() => onReply?.(message)}
                             className="p-1.5 hover:bg-black/5 rounded-full text-[#667781] transition-colors"
@@ -237,9 +236,12 @@ export default function MessageItem({
                         </span>
 
                         {isMe && (
-                            <span className={`text-[11px] font-bold ${message.status === 'sent' ? 'text-[#53bdeb]' : 'text-[#667781]'
-                                }`}>
-                                {message.status === 'pending' ? '✓' : message.status === 'sent' ? '✓✓' : '!'}
+                            <span className="text-[11px] font-bold transition-colors">
+                                {message.status === 'failed' && <span className="text-red-500">!</span>}
+                                {message.status === 'pending' && <span className="text-gray-400">🕒</span>}
+                                {message.status === 'sent' && <span className="text-gray-500">✓</span>}
+                                {message.status === 'delivered' && <span className="text-gray-500">✓✓</span>}
+                                {message.status === 'read' && <span className="text-green-500">✓✓</span>}
                             </span>
                         )}
                     </div>

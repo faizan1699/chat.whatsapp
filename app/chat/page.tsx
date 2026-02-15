@@ -106,6 +106,27 @@ export default function ChatPage() {
         };
     }, []);
 
+    // Mark messages as read when focusing or changing user
+    useEffect(() => {
+        if (selectedUser && isWindowFocused && socketRef.current) {
+            // Find messages from this user that are not read
+            const unreadMsgs = messages.filter(m => m.from === selectedUser && m.status !== 'read' && m.to === username);
+
+            if (unreadMsgs.length > 0) {
+                unreadMsgs.forEach(msg => {
+                    if (msg.id) {
+                        socketRef.current?.emit('mark-read', { messageId: msg.id, to: msg.from });
+                    }
+                });
+
+                // Optimistically update local state
+                setMessages(prev => prev.map(m =>
+                    (m.from === selectedUser && m.to === username && m.status !== 'read') ? { ...m, status: 'read' as const } : m
+                ));
+            }
+        }
+    }, [selectedUser, isWindowFocused, messages.length]); // depend on messages.length to avoid unnecessary loops loop, but check logic
+
 
     useEffect(() => {
         const savedUsername = localStorage.getItem('webrtc-username');
@@ -158,6 +179,15 @@ export default function ChatPage() {
                         if (data.id && prev.some(m => m.id === data.id)) return prev;
                         return [...prev, { ...data, timestamp: new Date(data.timestamp), status: 'sent' }];
                     });
+
+                    // Handle delivery/read status
+                    if (socketRef.current) {
+                        if (data.from === selectedUserRef.current && isWindowFocusedRef.current) {
+                            socketRef.current.emit('mark-read', { messageId: data.id, to: data.from });
+                        } else {
+                            socketRef.current.emit('mark-delivered', { messageId: data.id, to: data.from });
+                        }
+                    }
                 });
 
                 socket.on('delete-message', ({ id }) => {
@@ -166,6 +196,10 @@ export default function ChatPage() {
 
                 socket.on('pin-message', ({ id, isPinned }) => {
                     setMessages(prev => prev.map(m => m.id === id ? { ...m, isPinned } : m));
+                });
+
+                socket.on('message-status-update', ({ messageId, status }) => {
+                    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, status } : m));
                 });
 
                 socket.on('offer', async ({ from, to, offer, isAudioOnly: incomingIsAudioOnly }) => {
@@ -234,6 +268,65 @@ export default function ChatPage() {
         };
     }, [router]);
 
+    // Persistence Helpers
+    const saveFailedMessage = (msg: Message) => {
+        try {
+            const failed = JSON.parse(localStorage.getItem('failed-messages') || '[]');
+            if (!failed.some((m: Message) => m.id === msg.id)) {
+                failed.push(msg);
+                localStorage.setItem('failed-messages', JSON.stringify(failed));
+            }
+        } catch (error) {
+            console.error('Error saving failed message:', error);
+        }
+    };
+
+    const removeFailedMessage = (id: string) => {
+        try {
+            const failed = JSON.parse(localStorage.getItem('failed-messages') || '[]');
+            const newFailed = failed.filter((m: Message) => m.id !== id);
+            localStorage.setItem('failed-messages', JSON.stringify(newFailed));
+        } catch (error) {
+            console.error('Error removing failed message:', error);
+        }
+    };
+
+    // Restore failed messages on mount
+    useEffect(() => {
+        const failed = JSON.parse(localStorage.getItem('failed-messages') || '[]');
+        if (failed.length > 0) {
+            setMessages(prev => {
+                const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
+                return [...prev, ...newMessages];
+            });
+        }
+    }, []);
+
+    // Retry failed messages when connected
+    useEffect(() => {
+        if (isConnected && socketRef.current) {
+            const failed = JSON.parse(localStorage.getItem('failed-messages') || '[]');
+            if (failed.length > 0) {
+                console.log(`Retrying ${failed.length} failed messages...`);
+                // Process one by one
+                const processQueue = async () => {
+                    for (const msg of failed) {
+                        // Update status to pending in UI
+                        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'pending' } : m));
+
+                        // We use a slight delay or just emit. Socket.emit is sync in queuing but async in network.
+                        // To properly throttle or ensure order we can just emit. 
+                        sendMessageInternal(msg);
+
+                        // Small delay to prevent flooding if needed, though not strictly necessary for "one by one" in loose sense
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                };
+                processQueue();
+            }
+        }
+    }, [isConnected]);
+
     // Timer Effect
     useEffect(() => {
         let interval: NodeJS.Timeout;
@@ -264,8 +357,10 @@ export default function ChatPage() {
         socketRef.current.emit('send-message', msg, (ack: any) => {
             if (ack && ack.status === 'ok') {
                 setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'sent' } : m));
+                removeFailedMessage(msg.id!);
             } else {
                 setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'failed' } : m));
+                saveFailedMessage({ ...msg, status: 'failed' });
             }
         });
     };
@@ -476,7 +571,9 @@ export default function ChatPage() {
         if (socketRef.current?.connected) {
             sendMessageInternal(newMessage);
         } else {
-            console.log('Socket not connected, message will be sent when reconnected');
+            console.log('Socket not connected, saving failed message');
+            setMessages(prev => prev.map(m => m.id === newMessage.id ? { ...m, status: 'failed' } : m));
+            saveFailedMessage({ ...newMessage, status: 'failed' });
         }
     };
 
@@ -510,7 +607,9 @@ export default function ChatPage() {
             if (socketRef.current?.connected) {
                 sendMessageInternal(newVoiceMessage);
             } else {
-                console.log('Socket not connected, voice message will be sent when reconnected');
+                console.log('Socket not connected, saving failed voice message');
+                setMessages(prev => prev.map(m => m.id === newVoiceMessage.id ? { ...m, status: 'failed' } : m));
+                saveFailedMessage({ ...newVoiceMessage, status: 'failed' });
             }
         };
         reader.readAsDataURL(audioBlob);
