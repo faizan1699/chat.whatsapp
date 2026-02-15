@@ -93,7 +93,6 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
 
   const openEditModal = () => {
     setShowEditModal(true);
-    // Pre-fill the input with current username
     setTimeout(() => {
       if (usernameInputRef.current) {
         usernameInputRef.current.value = username;
@@ -103,6 +102,7 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
 
   return (
     <section className="flex-1 flex flex-col items-center justify-center p-2 md:p-0 relative">
+
       {/* Call Timer */}
       {isCallActive && (
         <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-30 px-4 py-2 bg-black bg-opacity-75 text-white font-mono text-lg rounded-lg shadow-lg">
@@ -110,9 +110,8 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
         </div>
       )}
 
-      {/* Connection State Indicator */}
       {connectionState && (
-        <div className={`absolute top-4 right-4 z-30 px-3 py-1 rounded-full text-xs font-semibold shadow-lg ${connectionState === 'connected'
+        <div className={`absolute top-4 right-[160px] z-30 px-3 py-2 rounded-lg text-xs font-semibold shadow-lg ${connectionState === 'connected'
           ? 'bg-green-500 text-white'
           : connectionState === 'connecting'
             ? 'bg-yellow-500 text-white animate-pulse'
@@ -122,7 +121,6 @@ export default function VideoCall({ username, onUsernameCreated, onEndCall, show
             connectionState === 'connecting' ? '🟡 Connecting...' : '🔴 Disconnected'}
         </div>
       )}
-
       {/* Call Start/End Notification */}
       {callNotification && (
         <div className={`absolute top-16 left-1/2 transform -translate-x-1/2 z-40 px-6 py-3 rounded-lg text-white font-semibold shadow-lg transition-all duration-300 ${callNotification.type === 'start' ? 'bg-green-500' : 'bg-red-500'

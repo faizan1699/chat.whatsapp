@@ -68,12 +68,13 @@ export default function Home() {
     }
 
     // Initialize Socket.io server first
-    fetch('http://192.168.100.242:3000/api/socket')
+    fetch('/api/socket')
       .then(() => {
         console.log('Socket.io server initialized');
 
         // Connect to Socket.io server with proper configuration
-        socketRef.current = io('http://192.168.100.242:3000', {
+        // Omitting the URL argument makes it default to window.location
+        socketRef.current = io(undefined, {
           path: '/api/socket',
           addTrailingSlash: false,
           transports: ['polling'], // Use only polling to avoid WebSocket issues
@@ -370,7 +371,14 @@ export default function Home() {
         throw new Error('Media API not available. Secure context needed.');
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+        video: true
+      });
       console.log('✅ Stream obtained:', stream.id);
       localStreamRef.current = stream;
       setLocalStream(stream);
@@ -550,19 +558,37 @@ export default function Home() {
   };
 
   const handleEndCall = () => {
-    socketRef.current?.emit('call-ended', caller);
+    // Determine the other user to notify
+    let otherUser: string | undefined;
+    if (caller.length === 2) {
+      otherUser = caller.find(user => user !== username);
+      if (socketRef.current) {
+        console.log('Emitting call-ended to server for:', caller);
+        socketRef.current.emit('call-ended', caller);
+      }
+    } else if (incomingCall) {
+      // If rejecting an incoming call, use reject logic, but here we cover ending active calls.
+      // This block handles if we have partial state.
+      otherUser = incomingCall.from;
+      // If we haven't answered yet, it's technically a rejection, but let's just clear.
+      socketRef.current?.emit('call-rejected', { from: incomingCall.to, to: incomingCall.from });
+    }
 
-    // Show call end notification
-    const otherUser = caller.find(user => user !== username);
-    setCallNotification({
-      message: `Call ended with ${otherUser}`,
-      type: 'end'
-    });
+    // Show call end notification locally
+    if (otherUser) {
+      setCallNotification({
+        message: `Call ended with ${otherUser}`,
+        type: 'end'
+      });
 
-    // Hide notification after 3 seconds
-    setTimeout(() => {
-      setCallNotification(null);
-    }, 3000);
+      // Hide notification after 3 seconds
+      setTimeout(() => {
+        setCallNotification(null);
+      }, 3000);
+    }
+
+    // Always clean up local state
+    endCall();
   };
 
   const handleRemoteVideoRef = (ref: HTMLVideoElement | null) => {
@@ -672,6 +698,11 @@ export default function Home() {
     const offer = await pc.createOffer();
     console.log({ offer });
     await pc.setLocalDescription(offer);
+
+    // Set caller state immediately for the initiator
+    setCaller([username, user]);
+    setShowEndCallButton(true);
+
     socketRef.current?.emit('offer', { from: username, to: user, offer: pc.localDescription });
   };
 
