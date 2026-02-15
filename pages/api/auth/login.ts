@@ -1,0 +1,64 @@
+import type { NextApiRequest, NextApiResponse } from 'next';
+import prisma from '../../../utils/prisma';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { serialize } from 'cookie';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_dont_use_in_production';
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+    if (req.method !== 'POST') {
+        return res.status(405).json({ message: 'Method not allowed' });
+    }
+
+    try {
+        const { identifier, password } = req.body; // identifier can be email, phone or username
+
+        if (!identifier || !password) {
+            return res.status(400).json({ message: 'Missing fields' });
+        }
+
+        const user = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { username: identifier },
+                    { email: identifier },
+                    { phoneNumber: identifier }
+                ]
+            }
+        });
+
+        if (!user) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        const token = jwt.sign(
+            { userId: user.id, username: user.username },
+            JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        const cookie = serialize('auth_token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 60 * 60 * 24 * 7, // 1 week
+            path: '/',
+        });
+
+        res.setHeader('Set-Cookie', cookie);
+        return res.status(200).json({
+            message: 'Logged in successfully',
+            user: { username: user.username, email: user.email, phoneNumber: user.phoneNumber }
+        });
+
+    } catch (error: any) {
+        console.error('Login error:', error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+}

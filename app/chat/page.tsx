@@ -237,7 +237,7 @@ export default function ChatPage() {
                 });
 
                 socket.on('delete-message', ({ id }) => {
-                    setMessages(prev => prev.filter(m => m.id !== id));
+                    setMessages(prev => prev.map(m => m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m));
                 });
 
                 socket.on('pin-message', ({ id, isPinned }) => {
@@ -253,9 +253,10 @@ export default function ChatPage() {
                 });
 
                 socket.on('offer', async ({ from, to, offer, isAudioOnly: incomingIsAudioOnly }) => {
-                    console.log('Offer received from:', from);
-                    setIncomingCall({ from, to, offer, isAudioOnly: incomingIsAudioOnly });
-                    setIsAudioOnly(!!incomingIsAudioOnly);
+                    console.log('Offer received from:', from, 'audioOnly:', incomingIsAudioOnly);
+                    const isAudio = incomingIsAudioOnly === true || incomingIsAudioOnly === 'true';
+                    setIncomingCall({ from, to, offer, isAudioOnly: isAudio });
+                    setIsAudioOnly(isAudio);
                     setCallParticipant(from);
                     playRingtone();
                 });
@@ -502,7 +503,7 @@ export default function ChatPage() {
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: !isAudio,
+                video: isAudio ? false : true,
                 audio: true
             });
             localStreamRef.current = stream;
@@ -533,9 +534,11 @@ export default function ChatPage() {
         if (!incomingCall) return;
         stopRingtone();
 
+        const isAudioCall = incomingCall.isAudioOnly === true;
+
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: !incomingCall.isAudioOnly,
+                video: !isAudioCall,
                 audio: true
             });
             localStreamRef.current = stream;
@@ -554,13 +557,16 @@ export default function ChatPage() {
                 answer
             });
 
+            setIsAudioOnly(isAudioCall);
             setIsCallActive(true);
-            setShowRemoteVideo(!incomingCall.isAudioOnly);
+            setShowRemoteVideo(!isAudioCall);
             setShowEndCallButton(true);
             setIncomingCall(null);
+            setCallParticipant(incomingCall.from);
             setConnectionState('connected');
         } catch (e) {
             console.error('Accept call error:', e);
+            alert('Could not accept call: ' + (e as Error).message);
         }
     };
 
@@ -783,9 +789,10 @@ export default function ChatPage() {
     };
 
     const handleDeleteMessage = (id: string, type: 'me' | 'everyone') => {
-        setMessages(prev => prev.filter(m => m.id !== id));
-
-        if (type === 'everyone') {
+        if (type === 'me') {
+            setMessages(prev => prev.filter(m => m.id !== id));
+        } else {
+            setMessages(prev => prev.map(m => m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m));
             socketRef.current?.emit('delete-message', { id, to: selectedUser });
         }
     };

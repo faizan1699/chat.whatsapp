@@ -20,6 +20,7 @@ export interface Message {
     groupId?: string;
     chunkIndex?: number;
     totalChunks?: number;
+    isDeleted?: boolean;
 }
 
 interface MessageItemProps {
@@ -163,72 +164,79 @@ export default function MessageItem({
                 )}
 
                 <div className={`absolute top-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity ${isMe ? 'right-full mr-[10px]' : 'left-full ml-[10px]'}`}>
-                    <div className="flex flex-wrap gap-1 bg-white shadow-md rounded-full p-1 border border-[#f0f2f5]">
-                        <button
-                            onClick={() => onReply?.(message)}
-                            className="p-1.5 hover:bg-black/5 rounded-full text-[#667781] transition-colors"
-                            title="Reply"
-                        >
-                            <Reply size={16} />
-                        </button>
-                        {isMe && !message.isVoiceMessage && (
+                    {!message.isDeleted && (
+                        <div className="flex flex-wrap gap-1 bg-white shadow-md rounded-full p-1 border border-[#f0f2f5]">
                             <button
-                                onClick={() => onEdit?.(message)}
+                                onClick={() => onReply?.(message)}
                                 className="p-1.5 hover:bg-black/5 rounded-full text-[#667781] transition-colors"
-                                title="Edit"
+                                title="Reply"
                             >
-                                <Pencil size={16} />
+                                <Reply size={16} />
                             </button>
-                        )}
-                        <button
-                            onClick={() => onPin?.(message)}
-                            className={`p-1.5 hover:bg-black/5 rounded-full transition-colors ${message.isPinned ? 'text-[#00a884]' : 'text-[#667781]'}`}
-                            title={message.isPinned ? 'Unpin' : 'Pin'}
-                        >
-                            <Pin size={16} className={message.isPinned ? 'fill-current' : ''} />
-                        </button>
-                        <div className="relative">
-                            <button
-                                onClick={() => setShowDeleteMenu(!showDeleteMenu)}
-                                className="p-1.5 hover:bg-red-50 rounded-full text-red-500 transition-colors"
-                                title="Delete"
-                            >
-                                <Trash2 size={16} />
-                            </button>
-                            {showDeleteMenu && (
-                                <div
-                                    ref={deleteMenuRef}
-                                    className="absolute top-full right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border border-gray-100 z-50 overflow-hidden"
+                            {isMe && !message.isVoiceMessage && (
+                                <button
+                                    onClick={() => onEdit?.(message)}
+                                    className="p-1.5 hover:bg-black/5 rounded-full text-[#667781] transition-colors"
+                                    title="Edit"
                                 >
-                                    <button
-                                        onClick={() => {
-                                            message.id && onDelete?.(message.id, 'me');
-                                            setShowDeleteMenu(false);
-                                        }}
-                                        className="w-full px-4 py-2 text-left text-[13px] text-gray-700 hover:bg-gray-50 transition-colors"
+                                    <Pencil size={16} />
+                                </button>
+                            )}
+                            <button
+                                onClick={() => onPin?.(message)}
+                                className={`p-1.5 hover:bg-black/5 rounded-full transition-colors ${message.isPinned ? 'text-[#00a884]' : 'text-[#667781]'}`}
+                                title={message.isPinned ? 'Unpin' : 'Pin'}
+                            >
+                                <Pin size={16} className={message.isPinned ? 'fill-current' : ''} />
+                            </button>
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowDeleteMenu(!showDeleteMenu)}
+                                    className="p-1.5 hover:bg-red-50 rounded-full text-red-500 transition-colors"
+                                    title="Delete"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                                {showDeleteMenu && (
+                                    <div
+                                        ref={deleteMenuRef}
+                                        className="absolute top-full right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border border-gray-100 z-50 overflow-hidden"
                                     >
-                                        Delete for me
-                                    </button>
-                                    {isMe && (
                                         <button
                                             onClick={() => {
-                                                message.id && onDelete?.(message.id, 'everyone');
+                                                message.id && onDelete?.(message.id, 'me');
                                                 setShowDeleteMenu(false);
                                             }}
-                                            className="w-full px-4 py-2 text-left text-[13px] text-red-600 hover:bg-red-50 transition-colors"
+                                            className="w-full px-4 py-2 text-left text-[13px] text-gray-700 hover:bg-gray-50 transition-colors"
                                         >
-                                            Delete for everyone
+                                            Delete for me
                                         </button>
-                                    )}
-                                </div>
-                            )}
+                                        {isMe && (
+                                            <button
+                                                onClick={() => {
+                                                    message.id && onDelete?.(message.id, 'everyone');
+                                                    setShowDeleteMenu(false);
+                                                }}
+                                                className="w-full px-4 py-2 text-left text-[13px] text-red-600 hover:bg-red-50 transition-colors"
+                                            >
+                                                Delete for everyone
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 {/* Message Content */}
                 <div className="flex flex-col pr-2">
-                    {message.isVoiceMessage ? (
+                    {message.isDeleted ? (
+                        <div className="flex items-center gap-2 py-1 text-[#667781] italic text-[13px]">
+                            <span className="opacity-60 text-[12px]">🚫</span>
+                            <span>This message was deleted</span>
+                        </div>
+                    ) : message.isVoiceMessage ? (
                         <div className="flex items-center gap-3 py-2 min-w-[200px]">
                             <audio
                                 ref={audioRef}
