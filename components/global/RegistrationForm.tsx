@@ -53,7 +53,7 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
             <div className="flex flex-col items-center justify-center p-8 text-center animate-in zoom-in duration-300">
                 <CheckCircle size={64} className="text-[#00a884] mb-4" />
                 <h2 className="text-2xl font-bold text-[#111b21]">Success!</h2>
-                <p className="text-[#667781] mt-2">Account created. An OTP has been sent via WhatsApp if you provided a phone number.</p>
+                <p className="text-[#667781] mt-2">Account created. OTP sent to your email (check inbox & spam).</p>
                 <p className="text-[#00a884] mt-4 font-medium italic">Redirecting to chat...</p>
             </div>
         );
@@ -76,7 +76,7 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
                         <div className="h-8 w-8 rounded-full bg-[#00a884]/10 flex items-center justify-center shrink-0">
                             <span className="text-[#00a884] font-bold text-sm">2</span>
                         </div>
-                        <p className="text-[#41525d]">Verify your account via WhatsApp OTP</p>
+                        <p className="text-[#41525d]">Verify your account via Email OTP</p>
                     </div>
                     <div className="flex items-start gap-4">
                         <div className="h-8 w-8 rounded-full bg-[#00a884]/10 flex items-center justify-center shrink-0">

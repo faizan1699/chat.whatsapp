@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import prisma from '../../../utils/prisma';
+import { supabaseAdmin } from '../../../utils/supabase-server';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { serialize } from 'cookie';
@@ -12,22 +12,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-        const { identifier, password } = req.body; // identifier can be email, phone or username
+        const { identifier, password } = req.body;
 
         if (!identifier || !password) {
             return res.status(400).json({ message: 'Missing fields' });
         }
 
-        const user = await prisma.user.findFirst({
-            where: {
-                OR: [
-                    { username: identifier },
-                    { email: identifier },
-                    { phoneNumber: identifier }
-                ]
-            }
-        });
+        const orFilter = ['username', 'email', 'phone_number']
+            .map((col) => `${col}.eq.${JSON.stringify(identifier)}`)
+            .join(',');
+        const { data: users, error } = await supabaseAdmin
+            .from('users')
+            .select('*')
+            .or(orFilter)
+            .limit(1);
 
+        if (error) throw error;
+
+        const user = users?.[0];
         if (!user) {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
@@ -47,17 +49,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
-            maxAge: 60 * 60 * 24 * 7, // 1 week
+            maxAge: 60 * 60 * 24 * 7,
             path: '/',
         });
 
         res.setHeader('Set-Cookie', cookie);
         return res.status(200).json({
             message: 'Logged in successfully',
-            user: { username: user.username, email: user.email, phoneNumber: user.phoneNumber }
+            user: { username: user.username, email: user.email, phoneNumber: user.phone_number }
         });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Login error:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
