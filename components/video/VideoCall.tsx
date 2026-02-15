@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
+import { motion, useDragControls } from 'framer-motion';
 import UsernameEntry from '../global/UsernameEntry';
 import EditProfileModal from '../global/EditProfileModal';
 import CallControls from './CallControls';
@@ -11,6 +12,7 @@ interface VideoCallProps {
   onRemoteVideoRef?: (ref: HTMLVideoElement | null) => void;
   showRemoteVideo?: boolean;
   localStream?: MediaStream | null;
+  remoteStream?: MediaStream | null;
   callTimer?: number;
   isCallActive?: boolean;
   onUsernameChange?: (username: string) => void;
@@ -28,6 +30,7 @@ export default function VideoCall({
   onRemoteVideoRef,
   showRemoteVideo = false,
   localStream,
+  remoteStream,
   callTimer = 0,
   isCallActive = false,
   onUsernameChange,
@@ -40,6 +43,7 @@ export default function VideoCall({
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [localVideoPosition, setLocalVideoPosition] = useState('bottom-24 right-4');
 
   useEffect(() => {
     if (localVideoRef.current && localStream) {
@@ -48,6 +52,16 @@ export default function VideoCall({
       localVideoRef.current.srcObject = null;
     }
   }, [localStream]);
+
+  // Handle Remote Stream
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    } else if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+    }
+  }, [remoteStream]);
+
 
   useEffect(() => {
     if (onRemoteVideoRef && remoteVideoRef.current) {
@@ -109,12 +123,44 @@ export default function VideoCall({
             </div>
 
             {/* Local Video */}
-            <div className={`bg-[#202124] rounded-2xl overflow-hidden shadow-2xl border-4 border-white/10 transition-all duration-500 ${showRemoteVideo ? 'absolute bottom-24 right-4 md:bottom-28 md:right-8 w-40 h-56 md:w-64 md:h-48 z-20 hover:scale-105' : 'flex-1 w-full h-full max-w-4xl'}`}>
-              <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover -scale-x-100" />
-              <div className="absolute bottom-4 left-4 bg-black/40 px-3 py-1 rounded-lg text-white text-sm backdrop-blur-md">
+            <motion.div
+              drag={showRemoteVideo}
+              dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+              dragMomentum={false}
+              dragElastic={0.2}
+              onDragEnd={(_, info) => {
+                if (!showRemoteVideo) return;
+                const { x, y } = info.point;
+                const width = window.innerWidth;
+                const height = window.innerHeight;
+
+                // Determine quadrant
+                const isLeft = x < width / 2;
+                const isTop = y < height / 2;
+
+                // Set position based on quadrant
+                // Using standard classes for positioning
+                if (isTop && isLeft) {
+                  setLocalVideoPosition('top-24 left-4');
+                } else if (isTop && !isLeft) {
+                  setLocalVideoPosition('top-24 right-4');
+                } else if (!isTop && isLeft) {
+                  setLocalVideoPosition('bottom-24 left-4');
+                } else {
+                  setLocalVideoPosition('bottom-24 right-4');
+                }
+              }}
+              layout
+              className={`bg-[#202124] rounded-2xl overflow-hidden shadow-2xl border-4 border-white/10 transition-shadow duration-300 ${showRemoteVideo
+                ? `absolute ${localVideoPosition} w-32 h-44 md:w-48 md:h-36 z-50 cursor-grab active:cursor-grabbing hover:shadow-xl hover:scale-[1.02]`
+                : 'flex-1 w-full h-full max-w-4xl transition-all duration-500'
+                }`}
+            >
+              <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover -scale-x-100 pointer-events-none" />
+              <div className="absolute bottom-2 left-2 bg-black/40 px-2 py-0.5 rounded text-white text-xs backdrop-blur-md pointer-events-none">
                 You
               </div>
-            </div>
+            </motion.div>
           </div>
 
           {/* Control Bar */}

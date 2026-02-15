@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Reply, Trash2, Pin, ChevronDown, Play, Pause } from 'lucide-react';
+import { Reply, Trash2, Pin, ChevronDown, Play, Pause, Pencil } from 'lucide-react';
 
 export interface Message {
     id?: string;
@@ -15,6 +15,11 @@ export interface Message {
     audioUrl?: string;
     audioDuration?: number;
     isVoiceMessage?: boolean;
+    isEdited?: boolean;
+    // Chunking metadata
+    groupId?: string;
+    chunkIndex?: number;
+    totalChunks?: number;
 }
 
 interface MessageItemProps {
@@ -22,8 +27,9 @@ interface MessageItemProps {
     isMe: boolean;
     onRetry?: (msg: Message) => void;
     onReply?: (msg: Message) => void;
-    onDelete?: (id: string) => void;
+    onDelete?: (id: string, type: 'me' | 'everyone') => void;
     onPin?: (msg: Message) => void;
+    onEdit?: (msg: Message) => void;
     isHighlighted?: boolean;
 }
 
@@ -34,11 +40,14 @@ export default function MessageItem({
     onReply,
     onDelete,
     onPin,
+    onEdit,
     isHighlighted
 }: MessageItemProps) {
     const [visibleWords, setVisibleWords] = useState(30);
     const [showActions, setShowActions] = useState(false);
+    const [showDeleteMenu, setShowDeleteMenu] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
+    const deleteMenuRef = useRef<HTMLDivElement>(null);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -68,6 +77,21 @@ export default function MessageItem({
         e.preventDefault();
         setVisibleWords(30);
     };
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (deleteMenuRef.current && !deleteMenuRef.current.contains(event.target as Node)) {
+                setShowDeleteMenu(false);
+            }
+        };
+
+        if (showDeleteMenu) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showDeleteMenu]);
 
     useEffect(() => {
         if (audioRef.current) {
@@ -147,6 +171,15 @@ export default function MessageItem({
                         >
                             <Reply size={16} />
                         </button>
+                        {isMe && !message.isVoiceMessage && (
+                            <button
+                                onClick={() => onEdit?.(message)}
+                                className="p-1.5 hover:bg-black/5 rounded-full text-[#667781] transition-colors"
+                                title="Edit"
+                            >
+                                <Pencil size={16} />
+                            </button>
+                        )}
                         <button
                             onClick={() => onPin?.(message)}
                             className={`p-1.5 hover:bg-black/5 rounded-full transition-colors ${message.isPinned ? 'text-[#00a884]' : 'text-[#667781]'}`}
@@ -154,13 +187,42 @@ export default function MessageItem({
                         >
                             <Pin size={16} className={message.isPinned ? 'fill-current' : ''} />
                         </button>
-                        <button
-                            onClick={() => message.id && onDelete?.(message.id)}
-                            className="p-1.5 hover:bg-red-50 rounded-full text-red-500 transition-colors"
-                            title="Delete"
-                        >
-                            <Trash2 size={16} />
-                        </button>
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowDeleteMenu(!showDeleteMenu)}
+                                className="p-1.5 hover:bg-red-50 rounded-full text-red-500 transition-colors"
+                                title="Delete"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                            {showDeleteMenu && (
+                                <div
+                                    ref={deleteMenuRef}
+                                    className="absolute top-full right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border border-gray-100 z-50 overflow-hidden"
+                                >
+                                    <button
+                                        onClick={() => {
+                                            message.id && onDelete?.(message.id, 'me');
+                                            setShowDeleteMenu(false);
+                                        }}
+                                        className="w-full px-4 py-2 text-left text-[13px] text-gray-700 hover:bg-gray-50 transition-colors"
+                                    >
+                                        Delete for me
+                                    </button>
+                                    {isMe && (
+                                        <button
+                                            onClick={() => {
+                                                message.id && onDelete?.(message.id, 'everyone');
+                                                setShowDeleteMenu(false);
+                                            }}
+                                            className="w-full px-4 py-2 text-left text-[13px] text-red-600 hover:bg-red-50 transition-colors"
+                                        >
+                                            Delete for everyone
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -234,14 +296,32 @@ export default function MessageItem({
                         <span className="text-[10px] text-[#667781] whitespace-nowrap uppercase">
                             {formatTimestamp(message.timestamp)}
                         </span>
+                        {message.isEdited && (
+                            <span className="text-[10px] text-[#667781] italic">
+                                (edited)
+                            </span>
+                        )}
 
-                        {isMe && (
-                            <span className="text-[11px] font-bold transition-colors">
-                                {message.status === 'failed' && <span className="text-red-500">!</span>}
-                                {message.status === 'pending' && <span className="text-gray-400">🕒</span>}
-                                {message.status === 'sent' && <span className="text-gray-500">✓</span>}
-                                {message.status === 'delivered' && <span className="text-gray-500">✓✓</span>}
-                                {message.status === 'read' && <span className="text-green-500">✓✓</span>}
+                        {isMe && message.status && (
+                            <span className={`flex items-center text-[11px] font-bold transition-colors
+                             ${message.status === 'read' ? 'text-green-500'
+                                    : message.status === 'failed' ? 'text-red-500'
+                                        : message.status === 'pending'
+                                            ? 'text-gray-400'
+                                            : 'text-gray-500'
+                                }`
+                            }
+                            >
+                                {message.status === 'pending' ? (
+                                    <div className="w-[11px] h-[11px] border-2 border-[#667781]/20 border-t-[#667781] rounded-full animate-spin"></div>
+                                ) : (
+                                    {
+                                        failed: '!',
+                                        sent: '✓',
+                                        delivered: '✓✓',
+                                        read: '✓✓'
+                                    }[message.status as 'failed' | 'sent' | 'delivered' | 'read']
+                                )}
                             </span>
                         )}
                     </div>

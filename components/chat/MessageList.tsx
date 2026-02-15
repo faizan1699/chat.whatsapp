@@ -8,8 +8,9 @@ interface MessageListProps {
     username: string;
     onRetry: (msg: Message) => void;
     onReply: (msg: Message) => void;
-    onDelete: (id: string) => void;
+    onDelete: (id: string, type: 'me' | 'everyone') => void;
     onPin: (msg: Message) => void;
+    onEdit: (msg: Message) => void;
     highlightedMessageId?: string | null;
 }
 
@@ -20,6 +21,7 @@ export default function MessageList({
     onReply,
     onDelete,
     onPin,
+    onEdit,
     highlightedMessageId
 }: MessageListProps) {
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -45,6 +47,7 @@ export default function MessageList({
                         onReply={onReply}
                         onDelete={onDelete}
                         onPin={onPin}
+                        onEdit={onEdit}
                         isHighlighted={highlightedMessageId === msg.id}
                     />
                 ))}
