@@ -298,13 +298,26 @@ export default function MessageItem({
                             </span>
                         )}
 
-                        {isMe && (
-                            <span className="text-[11px] font-bold transition-colors">
-                                {message.status === 'failed' && <span className="text-red-500">!</span>}
-                                {message.status === 'pending' && <span className="text-gray-400">🕒</span>}
-                                {message.status === 'sent' && <span className="text-gray-500">✓</span>}
-                                {message.status === 'delivered' && <span className="text-gray-500">✓✓</span>}
-                                {message.status === 'read' && <span className="text-green-500">✓✓</span>}
+                        {isMe && message.status && (
+                            <span className={`flex items-center text-[11px] font-bold transition-colors
+                             ${message.status === 'read' ? 'text-green-500'
+                                    : message.status === 'failed' ? 'text-red-500'
+                                        : message.status === 'pending'
+                                            ? 'text-gray-400'
+                                            : 'text-gray-500'
+                                }`
+                            }
+                            >
+                                {message.status === 'pending' ? (
+                                    <div className="w-[10px] h-[10px] border-[1.5px] border-gray-300 border-t-gray-500 rounded-full animate-spin"></div>
+                                ) : (
+                                    {
+                                        failed: '!',
+                                        sent: '✓',
+                                        delivered: '✓✓',
+                                        read: '✓✓'
+                                    }[message.status as 'failed' | 'sent' | 'delivered' | 'read']
+                                )}
                             </span>
                         )}
                     </div>

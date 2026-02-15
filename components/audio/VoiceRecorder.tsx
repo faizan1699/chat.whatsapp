@@ -199,7 +199,13 @@ export default function VoiceRecorder({ onSendVoice, onCancel }: VoiceRecorderPr
             setRecordingTime(0);
 
             timerRef.current = setInterval(() => {
-                setRecordingTime(prev => prev + 1);
+                setRecordingTime(prev => {
+                    if (prev >= 59) {
+                        stopRecording();
+                        return 60;
+                    }
+                    return prev + 1;
+                });
             }, 1000);
 
         } catch (error) {
@@ -209,10 +215,13 @@ export default function VoiceRecorder({ onSendVoice, onCancel }: VoiceRecorderPr
     };
 
     const stopRecording = () => {
-        if (mediaRecorderRef.current && isRecording) {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
             mediaRecorderRef.current.stop();
             setIsRecording(false);
-            if (timerRef.current) clearInterval(timerRef.current);
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
+            }
         }
     };
 
@@ -390,8 +399,8 @@ export default function VoiceRecorder({ onSendVoice, onCancel }: VoiceRecorderPr
                     {/* Recording Indicator & Visualizer */}
                     <div className="flex-1 flex items-center gap-3 overflow-hidden">
                         <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse flex-shrink-0" />
-                        <span className="text-red-500 font-medium text-sm tabular-nums w-12 flex-shrink-0">
-                            {formatTime(recordingTime)}
+                        <span className="text-red-500 font-medium text-sm tabular-nums flex-shrink-0">
+                            {formatTime(recordingTime)} <span className="text-[10px] opacity-70">(Max 1:00)</span>
                         </span>
 
                         <div className="flex-1 h-8 bg-gray-50 rounded overflow-hidden relative">

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Search, MoreVertical, Video, Phone, ArrowLeft } from 'lucide-react';
+import { Search, MoreVertical, Video, Phone, ArrowLeft, X } from 'lucide-react';
 
 interface ChatHeaderProps {
     selectedUser: string;
@@ -22,7 +22,10 @@ export default function ChatHeader({ selectedUser, onBack, onStartVideoCall, onS
                 </div>
                 <div className="flex flex-col">
                     <span className="text-[#111b21] font-medium">{selectedUser}</span>
-                    <span className="text-[12px] text-[#667781]">online</span>
+                    <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 rounded-full bg-[#00a884]"></div>
+                        <span className="text-[12px] text-[#667781]">online</span>
+                    </div>
                 </div>
             </div>
             <div className="flex items-center gap-4 text-[#54656f]">
@@ -32,9 +35,13 @@ export default function ChatHeader({ selectedUser, onBack, onStartVideoCall, onS
                 <button onClick={onStartAudioCall} className="hover:bg-black/5 p-2 rounded-full transition-colors" title="Audio Call">
                     <Phone size={20} />
                 </button>
-                <button className="hover:bg-black/5 p-2 rounded-full transition-colors">
-                    <Search size={20} />
+                <button className="hover:bg-black/5 p-1 rounded-full transition-colors group relative" title="Close Chat" onClick={onBack}>
+                    <X size={20} className="group-hover:text-red-500 transition-colors" />
                 </button>
+                <div className="w-[1px] h-6 bg-[#d1d7db] mx-1"></div>
+                {/* <button className="hover:bg-black/5 p-2 rounded-full transition-colors">
+                    <Search size={20} />
+                </button> */}
                 <button className="hover:bg-black/5 p-2 rounded-full transition-colors">
                     <MoreVertical size={20} />
                 </button>

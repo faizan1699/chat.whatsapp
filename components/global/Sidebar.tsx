@@ -94,6 +94,9 @@ export default function Sidebar({
 
             {/* Chat List */}
             <div className="flex-1 overflow-y-auto">
+                <div className="px-4 py-2 text-[13px] font-bold text-[#00a884] uppercase tracking-wider">
+                    Recent Chats
+                </div>
                 {filteredUsers.length === 0 ? (
                     <div className="flex h-full flex-col items-center justify-center p-8 text-center text-[#667781]">
                         <p className="text-sm">No chats found</p>
@@ -107,10 +110,16 @@ export default function Sidebar({
                             <button
                                 key={user}
                                 onClick={() => setSelectedUser(user)}
-                                className={`flex w-full items-center gap-3 border-b border-[#f0f2f5] px-3 py-3 transition-colors ${selectedUser === user ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'}`}
+                                className={`group relative flex w-full items-center gap-3 border-b border-[#f0f2f5] px-3 py-3 transition-colors ${selectedUser === user ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'}`}
                             >
-                                <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-slate-200">
-                                    <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user}`} alt={user} className="h-full w-full object-cover" />
+                                {selectedUser === user && (
+                                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#00a884]"></div>
+                                )}
+                                <div className="relative h-12 w-12 flex-shrink-0">
+                                    <div className="h-full w-full overflow-hidden rounded-full bg-slate-200">
+                                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user}`} alt={user} className="h-full w-full object-cover" />
+                                    </div>
+                                    <div className="absolute right-0 bottom-0 h-3 w-3 rounded-full border-2 border-white bg-[#25d366]"></div>
                                 </div>
                                 <div className="flex flex-1 flex-col overflow-hidden text-left">
                                     <div className="flex items-center justify-between">

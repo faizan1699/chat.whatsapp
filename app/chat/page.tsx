@@ -157,6 +157,8 @@ export default function ChatPage() {
                     if (savedUsername) {
                         socket.emit('join-user', savedUsername);
                     }
+                    // Hide loader once socket is connected
+                    setIsLoading(false);
                 });
 
                 socket.on('joined', (allUsers: User) => {
@@ -259,15 +261,13 @@ export default function ChatPage() {
 
         initSocket();
 
-        let timer: NodeJS.Timeout;
-        if (savedUsername) {
-            timer = setTimeout(() => {
-                setIsLoading(false);
-            }, 2000);
-        }
+        // Safety timeout in case socket fails to connect
+        const timer = setTimeout(() => {
+            setIsLoading(false);
+        }, 5000);
 
         return () => {
-            if (timer) clearTimeout(timer);
+            clearTimeout(timer);
             if (socketRef.current) {
                 socketRef.current.disconnect();
             }
