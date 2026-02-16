@@ -12,6 +12,7 @@ interface SidebarProps {
     searchQuery: string;
     setSearchQuery: (query: string) => void;
     messages: any[];
+    conversations: any[];
     unreadCounts?: { [key: string]: number };
     onLogout?: () => void;
     onEditProfile?: () => void;
@@ -25,6 +26,7 @@ export default function Sidebar({
     searchQuery,
     setSearchQuery,
     messages,
+    conversations,
     unreadCounts = {},
     onLogout,
     onEditProfile,
@@ -77,11 +79,33 @@ export default function Sidebar({
         }
     };
 
-    const filteredUsers = Object.keys(users)
-        .filter((u) => u !== username)
+    // Get unique conversation partners from conversations
+    const conversationPartners = useMemo(() => {
+        const partners = new Set<string>();
+        conversations.forEach(conv => {
+            conv.participants.forEach((p: any) => {
+                if (p.user.username !== username) {
+                    partners.add(p.user.username);
+                }
+            });
+        });
+        return Array.from(partners);
+    }, [conversations, username]);
+
+    const filteredUsers = conversationPartners
         .filter(u => u.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const getLastMessage = (user: string) => {
+        // First try to get last message from conversations data
+        const userConversation = conversations.find(conv => 
+            conv.participants.some((p: any) => p.user.username === user)
+        );
+        
+        if (userConversation?.messages?.length > 0) {
+            return userConversation.messages[0];
+        }
+        
+        // Fallback to messages array
         return messages.filter(m => (m.from === user && m.to === username) || (m.from === username && m.to === user)).pop();
     };
 

@@ -408,9 +408,15 @@ export default function ChatPage() {
                 setConversations(conversationsData);
                 console.log('Loaded conversations:', conversationsData);
                 
-                // If there's a selected user, reload messages after conversations are loaded
-                if (selectedUser) {
-                    setTimeout(() => loadMessages(selectedUser), 100);
+                // Auto-select most recent conversation if no user is selected
+                if (!selectedUser && conversationsData.length > 0) {
+                    const mostRecentConv = conversationsData[0];
+                    const otherParticipant = mostRecentConv.participants.find((p: any) => p.user.username !== username);
+                    
+                    if (otherParticipant) {
+                        console.log('Auto-selecting most recent conversation:', otherParticipant.user.username);
+                        setSelectedUser(otherParticipant.user.username);
+                    }
                 }
             }
         } catch (error) {
@@ -1335,6 +1341,7 @@ export default function ChatPage() {
                         searchQuery={searchQuery}
                         setSearchQuery={setSearchQuery}
                         messages={messages}
+                        conversations={conversations}
                         unreadCounts={unreadCounts}
                         onLogout={handleLogout}
                         onEditProfile={() => setShowEditProfile(true)}

@@ -5,9 +5,9 @@ import { Server as NetServer } from 'http';
 import { Socket as NetSocket } from 'net';
 
 interface SocketWithIO extends NetSocket {
-  server: NetServer & {
-    io?: ServerIO;
-  };
+    server: NetServer & {
+        io?: ServerIO;
+    };
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -66,10 +66,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             // Emit socket event for real-time update
             if (to && from && (res.socket as SocketWithIO)?.server?.io) {
                 const io = (res.socket as SocketWithIO).server.io!;
-                
+
                 // Find recipient's socket and send update
                 const allusers = (io as any)._nsps?.get('/')?.sockets || new Map();
-                
+
                 Object.values(allusers).forEach((socket: any) => {
                     if (socket.username === to) {
                         socket.emit('message-edited', {

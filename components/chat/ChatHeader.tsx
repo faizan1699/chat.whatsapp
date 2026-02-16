@@ -57,15 +57,7 @@ export default function ChatHeader({ selectedUser, onBack, onStartVideoCall, onS
                 {/* <button className="hover:bg-black/5 p-2 rounded-full transition-colors">
                     <Search size={20} />
                 </button> */}
-                {onClearChat && (
-                    <button 
-                        onClick={onClearChat} 
-                        className="hover:bg-black/5 p-2 rounded-full transition-colors text-red-500 hover:text-red-600" 
-                        title="Clear Chat"
-                    >
-                        <Trash2 size={20} />
-                    </button>
-                )}
+              
                 <div className="relative" ref={menuRef}>
                     <button 
                         onClick={() => setShowMenu(!showMenu)} 
