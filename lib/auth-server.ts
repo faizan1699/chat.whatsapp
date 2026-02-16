@@ -52,6 +52,14 @@ export async function createSession(userId: string, username: string, res: any) 
       path: '/',
     }),
   ]);
+
+  // Return tokens for frontend storage
+  return {
+    accessToken,
+    refreshToken,
+    userId,
+    username
+  };
 }
 
 // Server-side session clearing for API routes

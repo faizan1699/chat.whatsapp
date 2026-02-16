@@ -204,7 +204,6 @@ export default function ChatPage() {
                 const session = await getSession();
 
                 if (session) {
-                    console.log('✅ User authenticated:', session.username);
                     setUsername(session.username);
                     setIsConversationsLoading(true);
 

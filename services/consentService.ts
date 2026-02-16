@@ -1,4 +1,5 @@
 import { hasCookieAcceptance, getCookiePreferences } from '@/utils/cookieConsent';
+import { frontendAuth } from '@/utils/frontendAuth';
 
 export interface ConsentData {
   termsAccepted?: boolean;
@@ -7,11 +8,8 @@ export interface ConsentData {
 
 export const syncConsentToDatabase = async (consentData: ConsentData): Promise<boolean> => {
   try {
-    const response = await fetch('/api/auth/consent', {
+    const response = await frontendAuth.authenticatedFetch('/api/auth/consent', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(consentData),
     });
 

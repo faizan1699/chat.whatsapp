@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../utils/supabase-server';
 import jwt from 'jsonwebtoken';
+import { parse } from 'cookie';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_dont_use_in_production';
 
@@ -12,10 +13,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
         const { termsAccepted, cookieConsent } = req.body;
 
-        // Get token from cookies
-        const token = req.cookies['auth-token'];
+        // Get token from multiple sources
+        let token = null;
+        
+        // First try Authorization header (Bearer token)
+        const authHeader = req.headers.authorization;
+        if (authHeader?.startsWith('Bearer ')) {
+            token = authHeader.substring(7);
+        }
+        
+        // Fallback to cookies
         if (!token) {
-            return res.status(401).json({ message: 'Unauthorized' });
+            const cookies = parse(req.headers.cookie || '');
+            token = cookies['auth-token'] || cookies['session_token'];
+        }
+        
+        if (!token) {
+            console.log('❌ No token found in Authorization header or cookies');
+            return res.status(401).json({ message: 'Unauthorized - No token found' });
         }
 
         // Verify token and get user ID

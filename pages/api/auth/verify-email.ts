@@ -41,11 +41,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             .eq('id', user.id);
 
         // Auto-login after successful verification
-        await createSession(user.id, user.username, res);
+        const sessionData = await createSession(user.id, user.username, res);
 
         return res.status(200).json({ 
             message: 'Email verified successfully',
-            user: { id: user.id, username: user.username }
+            user: { id: user.id, username: user.username },
+            accessToken: sessionData.accessToken,
+            refreshToken: sessionData.refreshToken
         });
     } catch (err) {
         console.error('Verify email error:', err);

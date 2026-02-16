@@ -4,11 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { X, User, Loader2, Lock } from 'lucide-react';
+import { X, User, Loader2, Lock, Mail, Phone } from 'lucide-react';
 import api from '@/utils/api';
 
 const profileSchema = z.object({
     username: z.string().min(2, 'Username must be at least 2 characters'),
+    email: z.string().email('Invalid email address').optional().or(z.literal('')),
+    phone: z.string().optional(),
     avatar: z.union([z.string().url(), z.literal('')]).optional(),
 });
 
@@ -44,11 +46,13 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                 const d = res.data;
                 profileForm.reset({
                     username: d?.username || '',
+                    email: d?.email || '',
+                    phone: d?.phone || '',
                     avatar: d?.avatar || '',
                 });
             }).catch(() => {});
         }
-    }, [isOpen]);
+    }, [isOpen, profileForm]);
 
     const onProfileSubmit = async (data: ProfileFormData) => {
         setProfileLoading(true);
@@ -56,6 +60,8 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
         try {
             const res = await api.patch('/auth/profile', {
                 username: data.username,
+                email: data.email || undefined,
+                phone: data.phone || undefined,
                 avatar: data.avatar || undefined,
             });
             onSuccess(res.data?.username);
@@ -128,6 +134,36 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                                 </div>
                                 {profileForm.formState.errors.username && (
                                     <p className="text-xs text-red-500 mt-1">{profileForm.formState.errors.username.message}</p>
+                                )}
+                            </div>
+                            <div>
+                                <label className="text-[13px] font-medium text-[#00a884] uppercase tracking-wider">Email</label>
+                                <div className="relative mt-1">
+                                    <Mail className="absolute left-3 top-2.5 text-[#667781]" size={18} />
+                                    <input
+                                        {...profileForm.register('email')}
+                                        type="email"
+                                        placeholder="your@email.com"
+                                        className="w-full rounded-lg border border-[#e9edef] px-10 py-2.5 outline-none focus:border-[#00a884]"
+                                    />
+                                </div>
+                                {profileForm.formState.errors.email && (
+                                    <p className="text-xs text-red-500 mt-1">{profileForm.formState.errors.email.message}</p>
+                                )}
+                            </div>
+                            <div>
+                                <label className="text-[13px] font-medium text-[#00a884] uppercase tracking-wider">Phone</label>
+                                <div className="relative mt-1">
+                                    <Phone className="absolute left-3 top-2.5 text-[#667781]" size={18} />
+                                    <input
+                                        {...profileForm.register('phone')}
+                                        type="tel"
+                                        placeholder="+1234567890"
+                                        className="w-full rounded-lg border border-[#e9edef] px-10 py-2.5 outline-none focus:border-[#00a884]"
+                                    />
+                                </div>
+                                {profileForm.formState.errors.phone && (
+                                    <p className="text-xs text-red-500 mt-1">{profileForm.formState.errors.phone.message}</p>
                                 )}
                             </div>
                             <div>

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { frontendAuth } from '@/utils/frontendAuth';
 import AuthOverlay from '@/components/global/AuthOverlay';
 import Sidebar from '@/components/global/Sidebar';
-import { Message } from '@/components/chat/MessageItem';
+import { Message } from '@/types/message';
 
 export default function CleanChatPage() {
     const router = useRouter();
@@ -24,7 +24,6 @@ export default function CleanChatPage() {
             try {
                 const session = frontendAuth.getSession();
                 if (session) {
-                    console.log('✅ User authenticated:', session.user.username);
                     setUsername(session.user.username);
                     setIsLoading(false);
                     

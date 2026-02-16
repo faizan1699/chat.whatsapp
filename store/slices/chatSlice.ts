@@ -1,19 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-
-interface Message {
-    id: string;
-    from: string;
-    to: string;
-    message: string;
-    timestamp: string | Date;
-    status: 'pending' | 'sent' | 'delivered' | 'read';
-    isVoiceMessage?: boolean;
-    audioUrl?: string;
-    audioDuration?: number;
-    isDeleted?: boolean;
-    isEdited?: boolean;
-    isPinned?: boolean;
-}
+import { Message } from '@/types/message';
 
 interface Conversation {
     id: string;

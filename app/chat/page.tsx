@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import { Pin, ChevronDown, X } from 'lucide-react';
 import { frontendAuth } from '@/utils/frontendAuth';
 import IncomingCallModal from '@/components/video/IncomingCallModal';
-import MessageItem, { Message } from '@/components/chat/MessageItem';
+import MessageItem from '@/components/chat/MessageItem';
+import { Message } from '@/types/message';
 import CallNotification from '@/components/video/CallNotification';
 import Sidebar from '@/components/global/Sidebar';
 import ResizableSidebar from '@/components/global/ResizableSidebar';
@@ -16,6 +17,7 @@ import EditProfileModal from '@/components/global/EditProfileModal';
 import FullPageLoader from '@/components/global/FullPageLoader';
 import { SecureSession } from '@/utils/secureSession';
 import { useMessageApi } from '@/hooks/useMessageApi';
+import { useSocket } from '@/hooks/useSocket';
 import { storageHelpers, STORAGE_KEYS, chatStorage } from '@/utils/storage';
 import { supabaseAdmin } from '@/utils/supabase-server';
 import { uploadAudio } from '@/utils/supabase';
@@ -127,6 +129,135 @@ export default function ChatPage() {
         }
     }, [selectedUser]);
 
+    // Socket connection setup
+    const socket = useSocket();
+
+    useEffect(() => {
+        if (!socket) return;
+
+        socketRef.current = socket;
+
+        // Socket event listeners
+        socket.on('connect', () => {
+            console.log('✅ Socket connected');
+            setIsConnected(true);
+            socket.emit('join-user', username);
+        });
+
+        socket.on('disconnect', () => {
+            console.log('❌ Socket disconnected');
+            setIsConnected(false);
+        });
+
+        socket.on('joined', (onlineUsers: { [key: string]: string }) => {
+            setUsers(onlineUsers);
+        });
+
+        socket.on('receive-message', (data: Message) => {
+            console.log('📨 Received message:', data);
+            setMessages(prev => {
+                // Check if message already exists to avoid duplicates
+                const exists = prev.some(m => m.id === data.id);
+                if (!exists) {
+                    return [...prev, data];
+                }
+                return prev;
+            });
+
+            // Update unread count if message is not from current user
+            if (data.from !== username && data.to === username) {
+                setUnreadCounts(prev => ({
+                    ...prev,
+                    [data.from]: (prev[data.from] || 0) + 1
+                }));
+
+                // Show notification if window is not focused
+                if (!isWindowFocusedRef.current) {
+                    showNotification(data);
+                }
+            }
+        });
+
+        socket.on('message-status-update', ({ messageId, status }: { messageId: string; status: string }) => {
+            setMessages(prev => prev.map(m => 
+                m.id === messageId ? { ...m, status: status as any } : m
+            ));
+        });
+
+        socket.on('message-edited', ({ id, message }: { id: string; message: string }) => {
+            setMessages(prev => prev.map(m => 
+                m.id === id ? { ...m, message, isEdited: true } : m
+            ));
+        });
+
+        socket.on('delete-message', ({ id }: { id: string }) => {
+            setMessages(prev => prev.map(m => 
+                m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m
+            ));
+        });
+
+        socket.on('pin-message', ({ id, isPinned }: { id: string; isPinned: boolean }) => {
+            setMessages(prev => prev.map(m => 
+                m.id === id ? { ...m, isPinned } : m
+            ));
+        });
+
+        socket.on('clear-all-messages', ({ from, to }: { from: string; to: string }) => {
+            if (to === username) {
+                setMessages(prev => prev.filter(m => 
+                    !((m.from === from && m.to === to) || (m.from === to && m.to === from))
+                ));
+            }
+        });
+
+        // WebRTC event listeners
+        socket.on('offer', (payload) => {
+            setIncomingCall({
+                from: payload.from,
+                to: payload.to,
+                offer: payload.offer,
+                isAudioOnly: payload.isAudioOnly
+            });
+            playRingtone();
+        });
+
+        socket.on('answer', (payload) => {
+            // TODO: Implement handleAnswer
+            console.log('Received answer:', payload);
+        });
+
+        socket.on('icecandidate', (candidate) => {
+            // TODO: Implement handleIceCandidate
+            console.log('Received ICE candidate:', candidate);
+        });
+
+        socket.on('call-ended', () => {
+            handleEndCallInternal();
+        });
+
+        socket.on('call-rejected', (payload) => {
+            stopRingtone();
+            setCallNotification({ message: `${payload.from} rejected your call`, type: 'end' });
+            setTimeout(() => setCallNotification(null), 3000);
+        });
+
+        return () => {
+            socket.off('connect');
+            socket.off('disconnect');
+            socket.off('joined');
+            socket.off('receive-message');
+            socket.off('message-status-update');
+            socket.off('message-edited');
+            socket.off('delete-message');
+            socket.off('pin-message');
+            socket.off('clear-all-messages');
+            socket.off('offer');
+            socket.off('answer');
+            socket.off('icecandidate');
+            socket.off('call-ended');
+            socket.off('call-rejected');
+        };
+    }, [socket, username]);
 
     // Request Notification Permission
     useEffect(() => {

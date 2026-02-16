@@ -2,32 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Reply, Trash2, Pin, ChevronDown, Play, Pause, Pencil } from 'lucide-react';
-
-export interface Message {
-    id?: string;
-    from: string;
-    to: string;
-    message: string;
-    timestamp: Date;
-    status?: 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
-    replyTo?: Message;
-    isPinned?: boolean;
-    audioUrl?: string;
-    audioDuration?: number;
-    isVoiceMessage?: boolean;
-    isEdited?: boolean;
-    // Chunking metadata
-    groupId?: string;
-    chunkIndex?: number;
-    totalChunks?: number;
-    isDeleted?: boolean;
-    // Failed message tracking
-    retryCount?: number;
-    lastRetryTime?: Date;
-    // Additional properties for failed message handling
-    conversationId?: string | null;
-    senderId?: string | null;
-}
+import { Message } from '@/types/message';
 
 interface MessageItemProps {
     message: Message;

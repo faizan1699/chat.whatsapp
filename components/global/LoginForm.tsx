@@ -7,6 +7,7 @@ import * as z from 'zod';
 import { Mail, Lock, Loader2, Check } from 'lucide-react';
 import api from '@/utils/api';
 import { hasCookieAcceptance, getCookiePreferences } from '@/utils/cookieConsent';
+import { frontendAuth } from '@/utils/frontendAuth';
 
 const schema = z.object({
     identifier: z.string().min(1, 'Email or username is required'),
@@ -46,8 +47,27 @@ export default function LoginForm({ onSuccess, onSwitchToRegister, onForgotPassw
                 termsAccepted: data.termsAccepted,
                 cookieConsent: cookieConsent,
             });
-            const user = response.data?.user;
-            if (user?.username) {
+            
+            const responseData = response.data;
+            const user = responseData?.user;
+            
+            if (user?.username && responseData?.accessToken && responseData?.refreshToken) {
+                // Store session in localStorage for frontendAuth
+                frontendAuth.setSession(
+                    responseData.accessToken,
+                    responseData.refreshToken,
+                    {
+                        id: user.id,
+                        username: user.username,
+                        email: user.email,
+                        phoneNumber: user.phoneNumber || ''
+                    }
+                );
+                
+                console.log('✅ Session stored in localStorage');
+                onSuccess({ username: user.username, userId: user.id });
+            } else if (user?.username) {
+                // Fallback for backward compatibility
                 onSuccess({ username: user.username, userId: user.id });
             } else {
                 onSuccess({ username: data.identifier });

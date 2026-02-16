@@ -42,13 +42,9 @@ export default function AuthOverlay({ username, onUsernameCreated, onClearData }
         onUsernameCreated(user.username, user.userId);
     };
 
-    // Only show if username is empty AND we've checked for authentication
     if (username && username.trim() !== '') {
-        console.log('🔒 User authenticated, hiding auth overlay');
         return null;
     }
-
-    console.log('🔓 Showing auth overlay - no username found');
 
     if (view === 'forgot') {
         return (

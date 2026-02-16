@@ -84,11 +84,15 @@ export default function Sidebar({
     const handleSelectGlobalUser = async (user: any) => {
         // Here we initiate a conversation via API
         try {
-            const userId = localStorage.getItem('webrtc-userId');
+            const userDataStr = localStorage.getItem('user_data') || '';
+            const userData = userDataStr ? JSON.parse(userDataStr) : null;
+            const userId = userData?.id;
+            
             if (!userId) {
                 alert('Session expired. Please log in again.');
                 return;
             }
+            
             if (user.id === userId) {
                 alert('Cannot start a chat with yourself.');
                 return;
@@ -97,7 +101,6 @@ export default function Sidebar({
             const conversation = await apiService.createConversation([userId, user.id]);
             setSelectedUser(user.username);
             setShowGlobalSearch(false);
-            // In a full implementation, you'd trigger a refresh of conversations list here
         } catch (error) {
             console.error('Failed to create conversation:', error);
         }

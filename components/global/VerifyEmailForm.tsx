@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Mail, Loader2, CheckCircle } from 'lucide-react';
 import api from '@/utils/api';
+import { frontendAuth } from '@/utils/frontendAuth';
 
 const schema = z.object({
     otp: z.string().length(6, 'Enter 6-digit code'),
@@ -28,7 +29,24 @@ export default function VerifyEmailForm({ email, onVerified }: VerifyEmailFormPr
 
     const onSubmit = async (data: FormData) => {
         try {
-            await api.post('/auth/verify-email', { email, otp: data.otp });
+            const response = await api.post('/auth/verify-email', { email, otp: data.otp });
+            const responseData = response.data;
+            
+            // Store session in localStorage if tokens are available
+            if (responseData?.accessToken && responseData?.refreshToken && responseData?.user) {
+                frontendAuth.setSession(
+                    responseData.accessToken,
+                    responseData.refreshToken,
+                    {
+                        id: responseData.user.id,
+                        username: responseData.user.username,
+                        email: email,
+                        phoneNumber: ''
+                    }
+                );
+                console.log('✅ Session stored in localStorage after email verification');
+            }
+            
             onVerified();
         } catch (err: unknown) {
             const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Invalid OTP';

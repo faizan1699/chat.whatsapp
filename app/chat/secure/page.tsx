@@ -18,9 +18,7 @@ export default function SecureChatPage() {
                 
                 if (storedSession) {
                     setSession(storedSession.user);
-                    console.log('✅ User authenticated:', storedSession.user.username);
                 } else {
-                    console.log('❌ No session found, redirecting to login');
                     router.push('/login');
                 }
             } catch (error) {

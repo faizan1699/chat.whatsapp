@@ -88,7 +88,7 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
         }
       });
 
-      socket.on('send-message-api', async (data, callback) => {
+      socket.on('send-message', async (data, callback) => {
         const { to, from, message, id, timestamp, status, isVoiceMessage, audioUrl, audioDuration } = data;
 
         if (allusers[to]) {
