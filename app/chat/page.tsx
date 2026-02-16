@@ -56,6 +56,7 @@ export default function ChatPage() {
     const isWindowFocusedRef = useRef(true);
     const [autoRetryEnabled, setAutoRetryEnabled] = useState<boolean>(true);
     const [retryInterval, setRetryInterval] = useState<NodeJS.Timeout | null>(null);
+    const [isConversationsLoading, setIsConversationsLoading] = useState<boolean>(false);
 
     // Message API hook
     const {
@@ -167,14 +168,55 @@ export default function ChatPage() {
     }, [selectedUser, isWindowFocused, messages.length]);
 
 
+    // Add no-scroll class to body for chat page
+    useEffect(() => {
+        document.body.classList.add('no-scroll');
+        
+        return () => {
+            // Remove no-scroll class when component unmounts
+            document.body.classList.remove('no-scroll');
+        };
+    }, []);
+
+    // Periodic check for stuck sending messages
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const now = new Date();
+            setMessages(prev => prev.map(m => {
+                // Check if message has been stuck in sending for more than 15 seconds
+                if (m.status === 'sending' && m.timestamp) {
+                    const timeDiff = now.getTime() - new Date(m.timestamp).getTime();
+                    if (timeDiff > 15000) { // 15 seconds
+                        console.warn('Message stuck in sending state, marking as failed:', m.id);
+                        return {
+                            ...m,
+                            status: 'failed',
+                            retryCount: 1,
+                            lastRetryTime: new Date()
+                        };
+                    }
+                }
+                return m;
+            }));
+        }, 5000); // Check every 5 seconds
+
+        return () => clearInterval(interval);
+    }, []);
+
     useEffect(() => {
         // Try to get user session from secure cookies first
         const cookies = getClientCookies();
         const userData = SecureSession.getUser();
         const savedUsername = (cookies.username as string) || userData.username || '';
         
+        console.log('🔍 Auth check:', { savedUsername, cookies: cookies.username, userData: userData.username });
+        
         if (savedUsername) {
+            console.log('✅ User found, setting username:', savedUsername);
             setUsername(savedUsername);
+            // Set loading state immediately
+            setIsConversationsLoading(true);
+            
             // Load user data immediately when username is detected
             const userId = (cookies['user-id'] as string) || userData.userId;
             if (userId) {
@@ -183,22 +225,6 @@ export default function ChatPage() {
                 // 1. Load conversations API
                 loadConversations(userId).then(() => {
                     console.log('✅ Conversations API loaded on page load');
-                    
-                    // 2. Auto-select most recent conversation after conversations are loaded
-                    setTimeout(() => {
-                        if (conversations.length > 0) {
-                            const mostRecentConv = conversations[0];
-                            const otherParticipant = mostRecentConv.participants.find((p: any) => p.user.username !== savedUsername);
-                            
-                            if (otherParticipant) {
-                                console.log('🔄 Auto-selecting conversation on page load:', otherParticipant.user.username);
-                                setSelectedUser(otherParticipant.user.username);
-                                
-                                // 3. Load chat messages API
-                                loadMessages(otherParticipant.user.username);
-                            }
-                        }
-                    }, 300);
                 }).catch(error => {
                     console.error('❌ Failed to load conversations on page load:', error);
                 });
@@ -214,6 +240,7 @@ export default function ChatPage() {
                 }
             }
         } else {
+            console.log('❌ No user found, showing login');
             setIsLoading(false);
         }
 
@@ -234,22 +261,6 @@ export default function ChatPage() {
                     try {
                         await loadConversations(newUserId);
                         console.log('✅ Conversations API loaded after cookie change');
-                        
-                        // 2. Auto-select most recent conversation
-                        setTimeout(() => {
-                            if (conversations.length > 0) {
-                                const mostRecentConv = conversations[0];
-                                const otherParticipant = mostRecentConv.participants.find((p: any) => p.user.username !== newUsername);
-                                
-                                if (otherParticipant) {
-                                    console.log('🔄 Auto-selecting conversation after cookie change:', otherParticipant.user.username);
-                                    setSelectedUser(otherParticipant.user.username);
-                                    
-                                    // 3. Load chat messages API
-                                    loadMessages(otherParticipant.user.username);
-                                }
-                            }
-                        }, 300);
                     } catch (error) {
                         console.error('❌ Failed to load conversations after cookie change:', error);
                     }
@@ -462,6 +473,28 @@ export default function ChatPage() {
         };
     }, [router]);
 
+    // Periodic authentication check to prevent login form from showing
+    useEffect(() => {
+        const authCheck = setInterval(() => {
+            const cookies = getClientCookies();
+            const userData = SecureSession.getUser();
+            const currentUsername = (cookies.username as string) || userData.username || '';
+            
+            // If we have a username in cookies but not in state, restore it
+            if (currentUsername && currentUsername !== username) {
+                console.log('🔄 Restoring username from cookies:', currentUsername);
+                setUsername(currentUsername);
+            }
+            // If we don't have username in cookies but have it in state, clear it
+            else if (!currentUsername && username) {
+                console.log('🧹 Clearing username - no cookies found');
+                setUsername('');
+            }
+        }, 2000); // Check every 2 seconds
+
+        return () => clearInterval(authCheck);
+    }, [username]);
+
     // Load conversations when user is set
     useEffect(() => {
         if (username) {
@@ -473,6 +506,19 @@ export default function ChatPage() {
             }
         }
     }, [username]);
+
+    // Auto-select most recent conversation when conversations are loaded
+    useEffect(() => {
+        if (conversations.length > 0 && !selectedUser && username) {
+            const mostRecentConv = conversations[0];
+            const otherParticipant = mostRecentConv.participants.find((p: any) => p.user.username !== username);
+            
+            if (otherParticipant) {
+                console.log('🔄 Auto-selecting most recent conversation:', otherParticipant.user.username);
+                setSelectedUser(otherParticipant.user.username);
+            }
+        }
+    }, [conversations.length, selectedUser, username]);
 
     // Also try to reload conversations if messages are empty and user is selected
     useEffect(() => {
@@ -497,35 +543,21 @@ export default function ChatPage() {
 
     const loadConversations = async (userId: string) => {
         try {
+            setIsConversationsLoading(true);
             console.log('🔄 Loading conversations API...', { userId });
             const response = await fetch(`/api/conversations?userId=${userId}`);
             if (response.ok) {
                 const conversationsData = await response.json();
                 setConversations(conversationsData);
                 console.log('✅ Conversations API loaded successfully:', conversationsData.length, 'conversations');
-                
-                // Auto-select most recent conversation if no user is selected
-                if (!selectedUser && conversationsData.length > 0) {
-                    const mostRecentConv = conversationsData[0];
-                    const otherParticipant = mostRecentConv.participants.find((p: any) => p.user.username !== username);
-                    
-                    if (otherParticipant) {
-                        console.log('🔄 Auto-selecting most recent conversation:', otherParticipant.user.username);
-                        setSelectedUser(otherParticipant.user.username);
-                        
-                        // Load messages for the selected conversation
-                        setTimeout(() => {
-                            console.log('🔄 Loading messages API for auto-selected conversation...');
-                            loadMessages(otherParticipant.user.username);
-                        }, 200);
-                    }
-                }
             } else {
                 throw new Error(`Failed to load conversations: ${response.status}`);
             }
         } catch (error) {
             console.error('❌ Failed to load conversations API:', error);
             throw error;
+        } finally {
+            setIsConversationsLoading(false);
         }
     };
 
@@ -1067,6 +1099,30 @@ export default function ChatPage() {
         // Add to UI immediately with sending status
         setMessages(prev => [...prev, tempMessage]);
 
+        // Add timeout to prevent stuck in sending state
+        const timeoutId = setTimeout(() => {
+            setMessages(prev => prev.map(m => 
+                m.id === tempMessage.id ? { 
+                    ...m, 
+                    status: 'failed',
+                    retryCount: 1,
+                    lastRetryTime: new Date()
+                } : m
+            ));
+            
+            // Save to localStorage for retry
+            saveFailedMessageLocal({
+                ...tempMessage,
+                status: 'failed',
+                retryCount: 1,
+                lastRetryTime: new Date()
+            });
+            
+            // Restore input message
+            setInputMessage(tempContent);
+            console.warn('Message sending timed out, marked as failed');
+        }, 10000); // 10 second timeout
+
         try {
             // Send message using hook
             const savedMsg = await sendMessage(
@@ -1076,6 +1132,9 @@ export default function ChatPage() {
                 conversations,
                 replyingTo
             );
+
+            // Clear timeout on success
+            clearTimeout(timeoutId);
 
             // Update local state with the saved message
             setMessages(prev => prev.map(m => 
@@ -1112,6 +1171,9 @@ export default function ChatPage() {
         } catch (error) {
             console.error('Failed to send message:', error);
             
+            // Clear timeout on error
+            clearTimeout(timeoutId);
+            
             // Update message status to failed
             setMessages(prev => prev.map(m => 
                 m.id === tempMessage.id ? { 
@@ -1130,7 +1192,8 @@ export default function ChatPage() {
                 lastRetryTime: new Date()
             });
             
-            // Don't restore input message - keep it empty
+            // Restore input message so user can retry
+            setInputMessage(tempContent);
         }
     };
 
@@ -1450,6 +1513,7 @@ export default function ChatPage() {
                         unreadCounts={unreadCounts}
                         onLogout={handleLogout}
                         onEditProfile={() => setShowEditProfile(true)}
+                        isLoading={isConversationsLoading}
                     />
                 </ResizableSidebar>
 
@@ -1613,22 +1677,6 @@ export default function ChatPage() {
                                     return [...prev, ...newMessages];
                                 });
                             }
-                            
-                            // 3. Auto-select most recent conversation and load its messages
-                            setTimeout(() => {
-                                if (conversations.length > 0) {
-                                    const mostRecentConv = conversations[0];
-                                    const otherParticipant = mostRecentConv.participants.find((p: any) => p.user.username !== u);
-                                    
-                                    if (otherParticipant) {
-                                        console.log('🔄 Auto-selecting conversation and loading messages:', otherParticipant.user.username);
-                                        setSelectedUser(otherParticipant.user.username);
-                                        
-                                        // Load chat messages API
-                                        loadMessages(otherParticipant.user.username);
-                                    }
-                                }
-                            }, 500);
                         } else {
                             console.error('❌ No user ID found after login');
                         }

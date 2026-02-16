@@ -4,6 +4,29 @@ import { Plus, X, Search as SearchIcon, LogOut, User } from 'lucide-react';
 import UserSearch from '../chat/UserSearch';
 import { apiService } from '@/services/apiService';
 
+// Skeleton placeholder component
+const UserSkeleton = () => (
+    <div className="group relative flex w-full items-center gap-3 border-b border-[#f0f2f5] px-3 py-4">
+        <div className="relative h-12 w-12 flex-shrink-0">
+            <div className="h-full w-full overflow-hidden rounded-full bg-slate-200 animate-pulse">
+                <div className="h-full w-full bg-gradient-to-r from-slate-200 via-slate-300 to-slate-200 animate-shimmer"></div>
+            </div>
+        </div>
+        <div className="flex flex-1 flex-col overflow-hidden text-left">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 overflow-hidden">
+                    <div className="h-4 w-24 bg-slate-200 rounded animate-pulse"></div>
+                </div>
+                <div className="h-3 w-12 bg-slate-200 rounded animate-pulse"></div>
+            </div>
+            <div className="flex items-center justify-between mt-1">
+                <div className="h-3 w-32 bg-slate-200 rounded animate-pulse"></div>
+                <div className="h-4 w-4 bg-slate-200 rounded-full animate-pulse"></div>
+            </div>
+        </div>
+    </div>
+);
+
 interface SidebarProps {
     username: string;
     users: { [key: string]: string };
@@ -16,6 +39,7 @@ interface SidebarProps {
     unreadCounts?: { [key: string]: number };
     onLogout?: () => void;
     onEditProfile?: () => void;
+    isLoading?: boolean; // Add loading prop
 }
 
 export default function Sidebar({
@@ -30,6 +54,7 @@ export default function Sidebar({
     unreadCounts = {},
     onLogout,
     onEditProfile,
+    isLoading = false, // Default to false
 }: SidebarProps) {
     const [showGlobalSearch, setShowGlobalSearch] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
@@ -199,7 +224,17 @@ export default function Sidebar({
                 <div className="px-4 py-2 text-[13px] font-bold text-[#00a884] uppercase tracking-wider">
                     Recent Chats
                 </div>
-                {filteredUsers.length === 0 ? (
+                
+                {/* Show skeleton loaders when loading */}
+                {isLoading ? (
+                    <>
+                        <UserSkeleton />
+                        <UserSkeleton />
+                        <UserSkeleton />
+                        <UserSkeleton />
+                        <UserSkeleton />
+                    </>
+                ) : filteredUsers.length === 0 ? (
                     <div className="flex h-full flex-col items-center justify-center p-8 text-center text-[#667781]">
                         <p className="text-sm">No chats found</p>
                     </div>
