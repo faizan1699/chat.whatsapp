@@ -236,6 +236,21 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
           /**/
         }
       });
+
+      socket.on('clear-all-messages', async ({ from, to, conversationId }) => {
+        try {
+          await supabaseAdmin
+            .from('messages')
+            .delete()
+            .eq('conversation_id', conversationId);
+          
+          if (allusers[to]) {
+            io.to(allusers[to]).emit('clear-all-messages', { from, to });
+          }
+        } catch (e) {
+          console.error('Error clearing all messages:', e);
+        }
+      });
     });
   }
   res.end();
