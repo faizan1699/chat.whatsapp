@@ -151,7 +151,19 @@ export default function MessageItem({
         >
             <div className={`flex flex-col max-w-[85%] md:max-w-[65%] ${isMe ? 'items-end' : 'items-start'}`}>
                 {/* Sender info for non-me messages */}
+                {!isMe && (
+                    <div className="flex items-center gap-2 mb-1 px-2">
+                        <div className="w-8 h-8 rounded-full bg-[#e9edef] flex items-center justify-center text-[12px] font-medium text-[#3b4a54]">
+                            {message.from.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[12px] font-medium text-[#111b21]">{message.from}</span>
+                            <span className="text-[11px] text-[#667781]">{formatDateLabel(message.timestamp)}</span>
+                        </div>
+                    </div>
+                )}
 
+                {/* Message bubble */}
                 <div
                     className={`flex flex-col px-2 py-1 shadow-sm relative ${isMe
                         ? 'rounded-l-lg rounded-br-lg bg-[#d9fdd3] text-[#111b21] ml-10'
