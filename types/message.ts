@@ -7,6 +7,7 @@ export interface Message {
     status?: 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
     replyTo?: Message;
     isPinned?: boolean;
+    isHidden?: boolean;
     audioUrl?: string;
     audioDuration?: number;
     isVoiceMessage?: boolean;

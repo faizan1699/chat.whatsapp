@@ -90,6 +90,17 @@ export default function ChatPage() {
     const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
     const [showEditProfile, setShowEditProfile] = useState(false);
 
+    // Clear highlighted message after animation
+    useEffect(() => {
+        if (highlightedMessageId) {
+            const timer = setTimeout(() => {
+                setHighlightedMessageId(null);
+            }, 2500); // 2.5 seconds to match animation duration
+            
+            return () => clearTimeout(timer);
+        }
+    }, [highlightedMessageId]);
+
     // Refs
     const localStreamRef = useRef<MediaStream | null>(null);
     const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -1262,6 +1273,14 @@ export default function ChatPage() {
         socketRef.current?.emit('pin-message', { id: msg.id, isPinned, to: selectedUser });
     };
 
+    const handleHideMessage = (id: string) => {
+        setMessages(prev => prev.map(m => m.id === id ? { ...m, isHidden: true } : m));
+    };
+
+    const handleUnhideMessage = (id: string) => {
+        setMessages(prev => prev.map(m => m.id === id ? { ...m, isHidden: false } : m));
+    };
+
     const handleRetryMessage = (msg: Message) => {
         // Update status to sending
         setMessages(prev => prev.map(m =>
@@ -1509,6 +1528,8 @@ export default function ChatPage() {
                                 onDelete={handleDeleteMessage}
                                 onPin={handlePinMessage}
                                 onEdit={handleEditMessage}
+                                onHide={handleHideMessage}
+                                onUnhide={handleUnhideMessage}
                                 highlightedMessageId={highlightedMessageId}
                             />
 

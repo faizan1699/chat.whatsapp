@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Reply, Trash2, Pin, ChevronDown, Play, Pause, Pencil } from 'lucide-react';
+import { Reply, Trash2, Pin, ChevronDown, Play, Pause, Pencil, Eye, EyeOff } from 'lucide-react';
 import { Message } from '@/types/message';
 
 interface MessageItemProps {
@@ -13,7 +13,10 @@ interface MessageItemProps {
     onPin?: (msg: Message) => void;
     onEdit?: (msg: Message) => void;
     onUpdateMessage?: (msg: Message) => void;
+    onHide?: (id: string) => void;
+    onUnhide?: (id: string) => void;
     isHighlighted?: boolean;
+    highlightKey?: number;
 }
 
 export default function MessageItem({
@@ -24,7 +27,10 @@ export default function MessageItem({
     onDelete,
     onPin,
     onEdit,
-    isHighlighted
+    onHide,
+    onUnhide,
+    isHighlighted,
+    highlightKey
 }: MessageItemProps) {
     const [visibleWords, setVisibleWords] = useState(30);
     const [showActions, setShowActions] = useState(false);
@@ -150,19 +156,6 @@ export default function MessageItem({
             onMouseLeave={() => setShowActions(false)}
         >
             <div className={`flex flex-col max-w-[85%] md:max-w-[65%] ${isMe ? 'items-end' : 'items-start'}`}>
-                {/* Sender info for non-me messages */}
-                {!isMe && (
-                    <div className="flex items-center gap-2 mb-1 px-2">
-                        <div className="w-8 h-8 rounded-full bg-[#e9edef] flex items-center justify-center text-[12px] font-medium text-[#3b4a54]">
-                            {message.from.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex flex-col">
-                            <span className="text-[12px] font-medium text-[#111b21]">{message.from}</span>
-                            <span className="text-[11px] text-[#667781]">{formatDateLabel(message.timestamp)}</span>
-                        </div>
-                    </div>
-                )}
-
                 {/* Message bubble */}
                 <div
                     className={`flex flex-col px-2 py-1 shadow-sm relative ${isMe
@@ -172,7 +165,22 @@ export default function MessageItem({
                 >
                 {/* Reply Context */}
                 {message.replyTo && (
-                    <div className="mb-1 border-l-4 border-[#06cf9c] bg-black/5 p-2 rounded text-[12px] opacity-80">
+                    <div 
+                        onClick={() => {
+                            // Scroll to the original message
+                            const originalMsgElement = document.getElementById(`msg-${message.replyTo?.id}`);
+                            if (originalMsgElement) {
+                                originalMsgElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                // Add highlight effect
+                                originalMsgElement.classList.add('highlight-message-reply');
+                                setTimeout(() => {
+                                    originalMsgElement.classList.remove('highlight-message-reply');
+                                }, 2000);
+                            }
+                        }}
+                        className="mb-1 border-l-4 border-[#06cf9c] bg-black/5 p-2 rounded text-[12px] opacity-80 cursor-pointer hover:bg-black/10 transition-colors"
+                        title="Go to original message"
+                    >
                         <p className="font-bold text-[#06cf9c]">{message.replyTo.from === message.from ? 'You' : message.replyTo.from}</p>
                         <p className="truncate text-[#54656f]">{message.replyTo.message}</p>
                     </div>
@@ -212,6 +220,15 @@ export default function MessageItem({
                             >
                                 <Pin size={16} className={message.isPinned ? 'fill-current' : ''} />
                             </button>
+                            {!isMe && (
+                                <button
+                                    onClick={() => message.id && (message.isHidden ? onUnhide?.(message.id) : onHide?.(message.id))}
+                                    className={`p-1.5 hover:bg-black/5 rounded-full transition-colors ${message.isHidden ? 'text-[#00a884]' : 'text-[#667781]'}`}
+                                    title={message.isHidden ? 'Unhide message' : 'Hide message'}
+                                >
+                                    {message.isHidden ? <Eye size={16} /> : <EyeOff size={16} />}
+                                </button>
+                            )}
                             <div className="relative">
                                 <button
                                     onClick={() => setShowDeleteMenu(!showDeleteMenu)}
@@ -254,7 +271,18 @@ export default function MessageItem({
 
                 {/* Message Content */}
                 <div className="flex flex-col pr-2">
-                    {message.isDeleted ? (
+                    {message.isHidden ? (
+                        <div className="flex items-center gap-2 py-1 text-[#667781] italic text-[13px]">
+                            <EyeOff size={14} className="opacity-60" />
+                            <span>This message is hidden</span>
+                            <button
+                                onClick={() => message.id && onUnhide?.(message.id)}
+                                className="text-[#00a884] hover:underline text-[12px] ml-auto"
+                            >
+                                Show
+                            </button>
+                        </div>
+                    ) : message.isDeleted ? (
                         <div className="flex items-center gap-2 py-1 text-[#667781] italic text-[13px]">
                             <span className="opacity-60 text-[12px]">🚫</span>
                             <span>This message was deleted</span>
