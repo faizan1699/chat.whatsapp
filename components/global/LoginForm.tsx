@@ -4,12 +4,14 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Mail, Lock, Loader2 } from 'lucide-react';
+import { Mail, Lock, Loader2, Check } from 'lucide-react';
 import api from '@/utils/api';
+import { hasCookieAcceptance, getCookiePreferences } from '@/utils/cookieConsent';
 
 const schema = z.object({
     identifier: z.string().min(1, 'Email or username is required'),
     password: z.string().min(1, 'Password is required'),
+    termsAccepted: z.boolean().refine(val => val === true, 'You must accept the terms and conditions'),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -26,15 +28,23 @@ export default function LoginForm({ onSuccess, onSwitchToRegister, onForgotPassw
 
     const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
         resolver: zodResolver(schema),
+        defaultValues: {
+            termsAccepted: false,
+        },
     });
 
     const onSubmit = async (data: FormData) => {
         setIsLoading(true);
         setError(null);
         try {
+            // Get cookie consent data if available
+            const cookieConsent = hasCookieAcceptance() ? getCookiePreferences() : null;
+
             const response = await api.post('/auth/login', {
                 identifier: data.identifier,
                 password: data.password,
+                termsAccepted: data.termsAccepted,
+                cookieConsent: cookieConsent,
             });
             const user = response.data?.user;
             if (user?.username) {
@@ -93,6 +103,28 @@ export default function LoginForm({ onSuccess, onSwitchToRegister, onForgotPassw
                     >
                         Forgot password?
                     </button>
+                </div>
+
+                <div className="space-y-1.5">
+                    <div className="flex items-start gap-3">
+                        <input
+                            type="checkbox"
+                            id="termsAccepted"
+                            {...register('termsAccepted')}
+                            className="mt-1 h-4 w-4 text-[#00a884] border-[#e9edef] rounded focus:ring-[#00a884]"
+                        />
+                        <label htmlFor="termsAccepted" className="text-xs text-[#667781] leading-relaxed">
+                            I accept the{' '}
+                            <a href="/legal/user-agreement" target="_blank" rel="noopener noreferrer" className="text-[#00a884] hover:underline">
+                                Terms and Conditions
+                            </a>
+                            {' '}and{' '}
+                            <a href="/legal/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-[#00a884] hover:underline">
+                                Privacy Policy
+                            </a>
+                        </label>
+                    </div>
+                    {errors.termsAccepted && <p className="text-xs text-red-500">{errors.termsAccepted.message}</p>}
                 </div>
 
                 <button

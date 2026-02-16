@@ -219,15 +219,15 @@ export const STORAGE_KEYS = {
 
 // Helper functions for common operations
 export const storageHelpers = {
-  // User helpers
+  // User helpers - MOVED TO SECURE COOKIES
   saveUser: (username: string, userId?: string) => {
-    userStorage.setItem(STORAGE_KEYS.USERNAME, username);
-    if (userId) {
-      userStorage.setItem(STORAGE_KEYS.USER_ID, userId);
-    }
+    console.warn('saveUser: Use secure cookies instead of localStorage');
+    // This is deprecated - use setAuthCookie from cookies.ts
   },
   
   getUser: () => {
+    console.warn('getUser: Use getClientCookies instead of localStorage');
+    // This is deprecated - use getClientCookies from cookies.ts
     const username = userStorage.getItem(STORAGE_KEYS.USERNAME) || '';
     const userId = userStorage.getItem(STORAGE_KEYS.USER_ID) || '';
     return {
@@ -237,6 +237,8 @@ export const storageHelpers = {
   },
   
   clearUser: () => {
+    console.warn('clearUser: Use secure cookies instead of localStorage');
+    // This is deprecated - clear auth cookies instead
     userStorage.removeItem(STORAGE_KEYS.USERNAME);
     userStorage.removeItem(STORAGE_KEYS.USER_ID);
     userStorage.removeItem(STORAGE_KEYS.USER_PROFILE);

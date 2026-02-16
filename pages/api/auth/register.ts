@@ -6,10 +6,14 @@ import { otpService } from '../../../services/otpService';
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'POST') return res.status(405).end();
 
-    const { username, email, phoneNumber, password } = req.body;
+    const { username, email, phoneNumber, password, termsAccepted, cookieConsent } = req.body;
 
     if (!username || !password || (!email && !phoneNumber)) {
         return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    if (!termsAccepted) {
+        return res.status(400).json({ error: 'Terms and conditions must be accepted' });
     }
 
     try {
@@ -17,17 +21,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const hashedPassword = await bcrypt.hash(password, 10);
         const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 min
 
+        const userData: any = {
+            username,
+            email: email || null,
+            phone_number: phoneNumber || null,
+            password: hashedPassword,
+            email_verified: false,
+            verification_otp: email ? otp : null,
+            verification_otp_expires: email ? otpExpires.toISOString() : null,
+            termsAccepted: true,
+            termsAcceptedAt: new Date().toISOString(),
+        };
+
+        // Add cookie consent if provided
+        if (cookieConsent) {
+            userData.cookieConsent = cookieConsent;
+            userData.cookieConsentAt = new Date().toISOString();
+        }
+
         const { data: user, error } = await supabaseAdmin
             .from('users')
-            .insert({
-                username,
-                email: email || null,
-                phone_number: phoneNumber || null,
-                password: hashedPassword,
-                email_verified: false,
-                verification_otp: email ? otp : null,
-                verification_otp_expires: email ? otpExpires.toISOString() : null,
-            })
+            .insert(userData)
             .select('id')
             .single();
 

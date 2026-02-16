@@ -31,6 +31,7 @@ export default function AuthOverlay({ username, onUsernameCreated, onClearData }
 
     const handleVerified = () => {
         if (pendingUser) {
+            console.log('Email verified, triggering login callback...');
             onUsernameCreated(pendingUser.username, pendingUser.userId);
             setPendingUser(null);
             setPendingEmail('');

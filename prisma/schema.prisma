@@ -20,6 +20,12 @@ model User {
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   
+  // Legal and consent fields
+  termsAccepted    Boolean        @default(false)
+  termsAcceptedAt  DateTime?
+  cookieConsent    Json?          // Store cookie preferences as JSON
+  cookieConsentAt  DateTime?
+  
   // Conversations where this user is a participant
   conversations    ConversationParticipant[]
   

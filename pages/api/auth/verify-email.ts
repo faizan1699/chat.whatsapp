@@ -1,5 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../utils/supabase-server';
+import jwt from 'jsonwebtoken';
+import { serialize } from 'cookie';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_dont_use_in_production';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'POST') {
@@ -14,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
         const { data: user, error } = await supabaseAdmin
             .from('users')
-            .select('id, verification_otp, verification_otp_expires')
+            .select('id, username, verification_otp, verification_otp_expires')
             .eq('email', email.trim())
             .single();
 
@@ -30,6 +34,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return res.status(400).json({ error: 'OTP has expired' });
         }
 
+        // Update user verification status
         await supabaseAdmin
             .from('users')
             .update({
@@ -39,7 +44,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             })
             .eq('id', user.id);
 
-        return res.status(200).json({ message: 'Email verified successfully' });
+        // Auto-login after successful verification
+        const token = jwt.sign(
+            { userId: user.id, username: user.username },
+            JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        // Set secure cookies for automatic login
+        const cookies = [
+            serialize('auth-token', token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 60 * 60 * 24 * 7,
+                path: '/',
+            }),
+            serialize('user-id', user.id, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 60 * 60 * 24 * 7,
+                path: '/',
+            }),
+            serialize('username', user.username, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 60 * 60 * 24 * 7,
+                path: '/',
+            })
+        ];
+
+        res.setHeader('Set-Cookie', cookies);
+        return res.status(200).json({ 
+            message: 'Email verified successfully',
+            user: { id: user.id, username: user.username }
+        });
     } catch (err) {
         console.error('Verify email error:', err);
         return res.status(500).json({ error: 'Failed to verify email' });

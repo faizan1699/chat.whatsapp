@@ -22,6 +22,7 @@ import api from '@/utils/api';
 import { uploadAudio } from '@/utils/supabase';
 import { supabaseAdmin } from '@/utils/supabase-server';
 import { parseCookies, getClientCookies } from '@/utils/cookies';
+import { SecureSession } from '@/utils/secureSession';
 import { useMessageApi } from '@/hooks/useMessageApi';
 import { storageHelpers, STORAGE_KEYS, chatStorage } from '@/utils/storage';
 
@@ -167,16 +168,108 @@ export default function ChatPage() {
 
 
     useEffect(() => {
-        // Try to get user session from cookies first
+        // Try to get user session from secure cookies first
         const cookies = getClientCookies();
-        const userData = storageHelpers.getUser();
-        const savedUsername = (cookies.username as string) || (userData?.username as string) || '';
+        const userData = SecureSession.getUser();
+        const savedUsername = (cookies.username as string) || userData.username || '';
         
         if (savedUsername) {
             setUsername(savedUsername);
+            // Load user data immediately when username is detected
+            const userId = (cookies['user-id'] as string) || userData.userId;
+            if (userId) {
+                console.log('🔄 User authenticated on page load, loading APIs...', { username: savedUsername, userId });
+                
+                // 1. Load conversations API
+                loadConversations(userId).then(() => {
+                    console.log('✅ Conversations API loaded on page load');
+                    
+                    // 2. Auto-select most recent conversation after conversations are loaded
+                    setTimeout(() => {
+                        if (conversations.length > 0) {
+                            const mostRecentConv = conversations[0];
+                            const otherParticipant = mostRecentConv.participants.find((p: any) => p.user.username !== savedUsername);
+                            
+                            if (otherParticipant) {
+                                console.log('🔄 Auto-selecting conversation on page load:', otherParticipant.user.username);
+                                setSelectedUser(otherParticipant.user.username);
+                                
+                                // 3. Load chat messages API
+                                loadMessages(otherParticipant.user.username);
+                            }
+                        }
+                    }, 300);
+                }).catch(error => {
+                    console.error('❌ Failed to load conversations on page load:', error);
+                });
+                
+                // 4. Load failed messages from storage
+                const failed = storageHelpers.getFailedMessages() || [];
+                if (failed.length > 0) {
+                    console.log('🔄 Restoring failed messages on page load:', failed.length);
+                    setMessages(prev => {
+                        const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
+                        return [...prev, ...newMessages];
+                    });
+                }
+            }
         } else {
             setIsLoading(false);
         }
+
+        // Listen for cookie changes (for login/registration)
+        const checkCookieChange = async () => {
+            const newCookies = getClientCookies();
+            const newUserData = SecureSession.getUser();
+            const newUsername = (newCookies.username as string) || newUserData.username || '';
+            
+            // If cookies changed and we have a new username, reload data
+            if (newUsername && newUsername !== username) {
+                console.log('🔄 Cookie change detected, reloading APIs...', { newUsername, oldUsername: username });
+                setUsername(newUsername);
+                const newUserId = (newCookies['user-id'] as string) || newUserData.userId;
+                
+                if (newUserId) {
+                    // 1. Load conversations API
+                    try {
+                        await loadConversations(newUserId);
+                        console.log('✅ Conversations API loaded after cookie change');
+                        
+                        // 2. Auto-select most recent conversation
+                        setTimeout(() => {
+                            if (conversations.length > 0) {
+                                const mostRecentConv = conversations[0];
+                                const otherParticipant = mostRecentConv.participants.find((p: any) => p.user.username !== newUsername);
+                                
+                                if (otherParticipant) {
+                                    console.log('🔄 Auto-selecting conversation after cookie change:', otherParticipant.user.username);
+                                    setSelectedUser(otherParticipant.user.username);
+                                    
+                                    // 3. Load chat messages API
+                                    loadMessages(otherParticipant.user.username);
+                                }
+                            }
+                        }, 300);
+                    } catch (error) {
+                        console.error('❌ Failed to load conversations after cookie change:', error);
+                    }
+                    
+                    // 4. Load failed messages
+                    const failed = storageHelpers.getFailedMessages() || [];
+                    if (failed.length > 0) {
+                        console.log('🔄 Restoring failed messages after cookie change:', failed.length);
+                        setMessages(prev => {
+                            const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
+                            return [...prev, ...newMessages];
+                        });
+                    }
+                }
+            }
+        };
+
+        // Check for cookie changes every 2 seconds for the first 10 seconds
+        const cookieCheckInterval = setInterval(checkCookieChange, 2000);
+        const timeoutId = setTimeout(() => clearInterval(cookieCheckInterval), 10000);
 
         const initSocket = async () => {
             try {
@@ -361,6 +454,8 @@ export default function ChatPage() {
 
         return () => {
             clearTimeout(timer);
+            clearInterval(cookieCheckInterval);
+            clearTimeout(timeoutId);
             if (socketRef.current) {
                 socketRef.current.disconnect();
             }
@@ -371,8 +466,8 @@ export default function ChatPage() {
     useEffect(() => {
         if (username) {
             const cookies = getClientCookies();
-            const userData = storageHelpers.getUser();
-            const userId = (cookies['user-id'] as string) || (userData?.userId as string);
+            const userData = SecureSession.getUser();
+            const userId = (cookies['user-id'] as string) || userData.userId;
             if (userId) {
                 loadConversations(userId);
             }
@@ -383,8 +478,8 @@ export default function ChatPage() {
     useEffect(() => {
         if (selectedUser && username && messages.length === 0 && conversations.length === 0) {
             const cookies = getClientCookies();
-            const userData = storageHelpers.getUser();
-            const userId = (cookies['user-id'] as string) || (userData?.userId as string);
+            const userData = SecureSession.getUser();
+            const userId = (cookies['user-id'] as string) || userData.userId;
             if (userId) {
                 console.log('Messages empty and no conversations, reloading conversations...');
                 loadConversations(userId);
@@ -402,11 +497,12 @@ export default function ChatPage() {
 
     const loadConversations = async (userId: string) => {
         try {
+            console.log('🔄 Loading conversations API...', { userId });
             const response = await fetch(`/api/conversations?userId=${userId}`);
             if (response.ok) {
                 const conversationsData = await response.json();
                 setConversations(conversationsData);
-                console.log('Loaded conversations:', conversationsData);
+                console.log('✅ Conversations API loaded successfully:', conversationsData.length, 'conversations');
                 
                 // Auto-select most recent conversation if no user is selected
                 if (!selectedUser && conversationsData.length > 0) {
@@ -414,18 +510,27 @@ export default function ChatPage() {
                     const otherParticipant = mostRecentConv.participants.find((p: any) => p.user.username !== username);
                     
                     if (otherParticipant) {
-                        console.log('Auto-selecting most recent conversation:', otherParticipant.user.username);
+                        console.log('🔄 Auto-selecting most recent conversation:', otherParticipant.user.username);
                         setSelectedUser(otherParticipant.user.username);
+                        
+                        // Load messages for the selected conversation
+                        setTimeout(() => {
+                            console.log('🔄 Loading messages API for auto-selected conversation...');
+                            loadMessages(otherParticipant.user.username);
+                        }, 200);
                     }
                 }
+            } else {
+                throw new Error(`Failed to load conversations: ${response.status}`);
             }
         } catch (error) {
-            console.error('Failed to load conversations:', error);
+            console.error('❌ Failed to load conversations API:', error);
+            throw error;
         }
     };
 
     const loadMessages = async (selectedUsername: string) => {
-        console.log('Loading messages for:', selectedUsername);
+        console.log('🔄 Loading messages API for:', selectedUsername);
         console.log('Current conversations:', conversations);
         
         try {
@@ -438,9 +543,9 @@ export default function ChatPage() {
 
             // If not found, try to get/create conversation directly
             if (!currentConversation) {
-                console.log('Conversation not found, trying to create...');
+                console.log('🔄 Conversation not found, trying to create...');
                 const cookies = getClientCookies();
-                const userId = cookies['user-id'] || storageHelpers.getUser().userId;
+                const userId = cookies['user-id'] || SecureSession.getUserId();
                 
                 if (userId) {
                     // Try to find conversation by participants
@@ -465,7 +570,7 @@ export default function ChatPage() {
 
                         if (response.ok) {
                             currentConversation = await response.json();
-                            console.log('Created conversation:', currentConversation);
+                            console.log('✅ Created conversation:', currentConversation);
                             // Add to conversations state
                             setConversations(prev => [...prev, currentConversation]);
                         }
@@ -474,11 +579,11 @@ export default function ChatPage() {
             }
 
             if (currentConversation) {
-                console.log('Fetching messages for conversation:', currentConversation.id);
+                console.log('🔄 Fetching messages API for conversation:', currentConversation.id);
                 const response = await fetch(`/api/conversations/${currentConversation.id}/messages`);
                 if (response.ok) {
                     const messagesData = await response.json();
-                    console.log('Raw messages data:', messagesData);
+                    console.log('✅ Messages API loaded successfully:', messagesData.length, 'messages');
                     
                     // Format messages for frontend
                     const formattedMessages = messagesData.map((msg: any) => ({
@@ -497,18 +602,20 @@ export default function ChatPage() {
                         replyTo: msg.reply_to,
                         senderId: msg.sender_id
                     }));
-                    console.log('Formatted messages:', formattedMessages);
+                    console.log('✅ Formatted messages:', formattedMessages.length);
                     setMessages(formattedMessages);
-                    console.log('Loaded messages for', selectedUsername, ':', formattedMessages);
+                    console.log('✅ Loaded messages for', selectedUsername, ':', formattedMessages.length, 'messages');
                 } else {
-                    console.error('Failed to load messages:', response.statusText);
+                    console.error('❌ Failed to load messages API:', response.status, response.statusText);
+                    setMessages([]);
                 }
             } else {
-                console.log('No conversation found for', selectedUsername);
+                console.log('ℹ️ No conversation found for', selectedUsername);
                 setMessages([]);
             }
         } catch (error) {
-            console.error('Failed to load messages:', error);
+            console.error('❌ Failed to load messages API:', error);
+            setMessages([]);
         }
     };
 
@@ -546,7 +653,7 @@ export default function ChatPage() {
 
                         // Get current user ID and conversation
                         const cookies = getClientCookies();
-                        const userId = (cookies['user-id'] as string) || (storageHelpers.getUser().userId as string);
+                        const userId = (cookies['user-id'] as string) || SecureSession.getUserId();
                         
                         let currentConversation = conversations.find(c =>
                             c.participants.some((p: any) => p.user.username === msg.to)
@@ -1192,7 +1299,8 @@ export default function ChatPage() {
     };
 
     const handleClearData = () => {
-        storageHelpers.clearUser();
+        // Clear secure session (requires server-side)
+        SecureSession.clearSession();
         setUsername('');
         setSelectedUser(null);
         setMessages([]);
@@ -1226,7 +1334,7 @@ export default function ChatPage() {
             if (!currentConversation) {
                 // Try to get conversation ID
                 const cookies = getClientCookies();
-                const userId = (cookies['user-id'] as string) || (storageHelpers.getUser().userId as string);
+                const userId = (cookies['user-id'] as string) || SecureSession.getUserId();
                 
                 if (userId) {
                     const { data: selectedUserData } = await supabaseAdmin
@@ -1308,11 +1416,8 @@ export default function ChatPage() {
     const handleProfileUpdated = (newUsername?: string) => {
         if (newUsername) {
             setUsername(newUsername);
-            const currentUser = storageHelpers.getUser();
-            if (currentUser.userId) {
-                storageHelpers.saveUser(newUsername, currentUser.userId);
-            }
-            socketRef.current?.emit('join-user', newUsername);
+            // Note: Username update should be handled by server API that updates secure cookies
+            console.log('Profile updated - username change requires server-side cookie update');
         }
     };
 
@@ -1479,12 +1584,60 @@ export default function ChatPage() {
             <AuthOverlay
                 username={username}
                 onUsernameCreated={(u, userId) => {
+                    console.log('Login successful, setting up user session...');
                     setUsername(u);
-                    storageHelpers.saveUser(u, userId);
+                    
+                    // Wait a moment for cookies to be set, then load data
+                    setTimeout(async () => {
+                        const cookies = getClientCookies();
+                        const userData = SecureSession.getUser();
+                        const finalUserId = userId || (cookies['user-id'] as string) || userData.userId;
+                        
+                        if (finalUserId) {
+                            console.log('Loading user data after login...', { username: u, userId: finalUserId });
+                            
+                            // 1. Load conversations API
+                            try {
+                                await loadConversations(finalUserId);
+                                console.log('✅ Conversations API loaded successfully');
+                            } catch (error) {
+                                console.error('❌ Failed to load conversations:', error);
+                            }
+                            
+                            // 2. Load failed messages from storage
+                            const failed = storageHelpers.getFailedMessages() || [];
+                            if (failed.length > 0) {
+                                console.log('🔄 Restoring failed messages:', failed.length);
+                                setMessages(prev => {
+                                    const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
+                                    return [...prev, ...newMessages];
+                                });
+                            }
+                            
+                            // 3. Auto-select most recent conversation and load its messages
+                            setTimeout(() => {
+                                if (conversations.length > 0) {
+                                    const mostRecentConv = conversations[0];
+                                    const otherParticipant = mostRecentConv.participants.find((p: any) => p.user.username !== u);
+                                    
+                                    if (otherParticipant) {
+                                        console.log('🔄 Auto-selecting conversation and loading messages:', otherParticipant.user.username);
+                                        setSelectedUser(otherParticipant.user.username);
+                                        
+                                        // Load chat messages API
+                                        loadMessages(otherParticipant.user.username);
+                                    }
+                                }
+                            }, 500);
+                        } else {
+                            console.error('❌ No user ID found after login');
+                        }
+                    }, 100);
+                    
                     socketRef.current?.emit('join-user', u);
                 }}
                 onClearData={() => {
-                    storageHelpers.clearUser();
+                    SecureSession.clearSession();
                     setUsername('');
                 }}
             />

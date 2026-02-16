@@ -6,12 +6,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { User, Mail, Phone, Lock, Loader2, CheckCircle } from 'lucide-react';
 import api from '@/utils/api';
+import { hasCookieAcceptance, getCookiePreferences } from '@/utils/cookieConsent';
 
 const schema = z.object({
     username: z.string().min(2, 'Username must be at least 2 characters'),
     email: z.string().email('Invalid email address').optional().or(z.literal('')),
     phoneNumber: z.string().min(10, 'Invalid phone number').optional().or(z.literal('')),
     password: z.string().min(6, 'Password must be at least 6 characters'),
+    termsAccepted: z.boolean().refine(val => val === true, 'You must accept the terms and conditions'),
 }).refine(data => data.email || data.phoneNumber, {
     message: "Either email or phone number is required",
     path: ["email"]
@@ -29,12 +31,21 @@ export default function RegistrationForm({ onSuccess, onSwitchToLogin }: Registr
     const [successNoEmail, setSuccessNoEmail] = useState(false);
     const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
         resolver: zodResolver(schema),
+        defaultValues: {
+            termsAccepted: false,
+        },
     });
 
     const onSubmit = async (data: FormData) => {
         setError(null);
         try {
-            const response = await api.post('/auth/register', data);
+            // Get cookie consent data if available
+            const cookieConsent = hasCookieAcceptance() ? getCookiePreferences() : null;
+
+            const response = await api.post('/auth/register', {
+                ...data,
+                cookieConsent: cookieConsent,
+            });
             const userData = {
                 username: data.username,
                 userId: response.data?.userId,
@@ -148,6 +159,28 @@ export default function RegistrationForm({ onSuccess, onSwitchToLogin }: Registr
                         </div>
                         {errors.password && <p className="text-xs text-red-500">{errors.password.message}</p>}
                     </div>
+
+                <div className="space-y-1.5">
+                    <div className="flex items-start gap-3">
+                        <input
+                            type="checkbox"
+                            id="termsAccepted"
+                            {...register('termsAccepted')}
+                            className="mt-1 h-4 w-4 text-[#00a884] border-[#e9edef] rounded focus:ring-[#00a884]"
+                        />
+                        <label htmlFor="termsAccepted" className="text-xs text-[#667781] leading-relaxed">
+                            I accept the{' '}
+                            <a href="/legal/user-agreement" target="_blank" rel="noopener noreferrer" className="text-[#00a884] hover:underline">
+                                Terms and Conditions
+                            </a>
+                            {' '}and{' '}
+                            <a href="/legal/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-[#00a884] hover:underline">
+                                Privacy Policy
+                            </a>
+                        </label>
+                    </div>
+                    {errors.termsAccepted && <p className="text-xs text-red-500">{errors.termsAccepted.message}</p>}
+                </div>
 
                     <button
                         type="submit"

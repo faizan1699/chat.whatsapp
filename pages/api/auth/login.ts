@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-        const { identifier, password } = req.body;
+        const { identifier, password, termsAccepted, cookieConsent } = req.body;
 
         if (!identifier || !password) {
             return res.status(400).json({ message: 'Missing fields' });
@@ -45,6 +45,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             { expiresIn: '7d' }
         );
 
+        // Prepare user update data for consent
+        const updateData: any = {
+            updatedAt: new Date().toISOString()
+        };
+
+        // Update terms acceptance if provided
+        if (termsAccepted !== undefined) {
+            updateData.termsAccepted = termsAccepted;
+            updateData.termsAcceptedAt = termsAccepted ? new Date().toISOString() : null;
+        }
+
+        // Update cookie consent if provided
+        if (cookieConsent !== undefined) {
+            updateData.cookieConsent = cookieConsent;
+            updateData.cookieConsentAt = new Date().toISOString();
+        }
+
+        // Update user record with consent information
+        if (Object.keys(updateData).length > 1) {
+            const { error: updateError } = await supabaseAdmin
+                .from('users')
+                .update(updateData)
+                .eq('id', user.id);
+
+            if (updateError) {
+                console.error('Error updating user consent:', updateError);
+                // Don't fail login if consent update fails
+            }
+        }
+
         // Set multiple cookies for session management
         const cookies = [
             serialize('auth-token', token, {
@@ -73,7 +103,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         res.setHeader('Set-Cookie', cookies);
         return res.status(200).json({
             message: 'Logged in successfully',
-            user: { id: user.id, username: user.username, email: user.email, phoneNumber: user.phone_number }
+            user: { 
+                id: user.id, 
+                username: user.username, 
+                email: user.email, 
+                phoneNumber: user.phone_number,
+                termsAccepted: user.termsAccepted,
+                termsAcceptedAt: user.termsAcceptedAt,
+                cookieConsent: user.cookieConsent,
+                cookieConsentAt: user.cookieConsentAt
+            }
         });
 
     } catch (error: unknown) {
