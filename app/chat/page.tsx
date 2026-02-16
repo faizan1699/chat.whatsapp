@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
 import { Pin, ChevronDown, X } from 'lucide-react';
-import VideoCall from '@/components/video/VideoCall';
 import IncomingCallModal from '@/components/video/IncomingCallModal';
 import MessageItem, { Message } from '@/components/chat/MessageItem';
 import CallNotification from '@/components/video/CallNotification';
@@ -21,6 +20,8 @@ import FullPageLoader from '@/components/global/FullPageLoader';
 import { apiService } from '@/services/apiService';
 import api from '@/utils/api';
 import { uploadAudio } from '@/utils/supabase';
+import { supabaseAdmin } from '@/utils/supabase-server';
+import { parseCookies, getClientCookies } from '@/utils/cookies';
 
 interface User {
     [key: string]: string;
@@ -86,7 +87,18 @@ export default function ChatPage() {
         isWindowFocusedRef.current = isWindowFocused;
     }, [isWindowFocused]);
 
-    // Clear unread counts when user is selected
+    // Extract unique users from conversations
+    const conversationUsers = conversations.reduce((acc: { [key: string]: string }, conv) => {
+        conv.participants.forEach((p: any) => {
+            if (p.user.username !== username) {
+                acc[p.user.username] = p.user.id;
+            }
+        });
+        return acc;
+    }, {});
+
+    // Merge online users with conversation users
+    const allUsers = { ...conversationUsers, ...users };
     useEffect(() => {
         if (selectedUser) {
             setUnreadCounts(prev => ({
@@ -138,9 +150,11 @@ export default function ChatPage() {
 
 
     useEffect(() => {
-        const savedUsername = localStorage.getItem('webrtc-username');
+        // Try to get user session from cookies first
+        const cookies = getClientCookies();
+        const savedUsername = cookies.username || localStorage.getItem('webrtc-username');
+        
         if (savedUsername) {
-            console
             setUsername(savedUsername);
         } else {
             setIsLoading(false);
@@ -173,16 +187,18 @@ export default function ChatPage() {
                 });
 
                 socket.on('receive-message', (data: Message) => {
-                    if (data.from !== savedUsername) {
-                        if (!isWindowFocusedRef.current || selectedUserRef.current !== data.from) {
-                            showNotification(data);
+                    // Don't add own messages - they're already added locally
+                    if (data.from === username) return;
 
-                            if (selectedUserRef.current !== data.from) {
-                                setUnreadCounts(prev => ({
-                                    ...prev,
-                                    [data.from]: (prev[data.from] || 0) + 1
-                                }));
-                            }
+                    // Show notification for messages from other users
+                    if (!isWindowFocusedRef.current || selectedUserRef.current !== data.from) {
+                        showNotification(data);
+
+                        if (selectedUserRef.current !== data.from) {
+                            setUnreadCounts(prev => ({
+                                ...prev,
+                                [data.from]: (prev[data.from] || 0) + 1
+                            }));
                         }
                     }
 
@@ -322,6 +338,74 @@ export default function ChatPage() {
             }
         };
     }, [router]);
+
+    // Load conversations when user is set
+    useEffect(() => {
+        if (username) {
+            const cookies = getClientCookies();
+            const userId = cookies['user-id'] || localStorage.getItem('webrtc-userId');
+            if (userId) {
+                loadConversations(userId);
+            }
+        }
+    }, [username]);
+
+    // Load messages when user is selected
+    useEffect(() => {
+        if (selectedUser && username) {
+            loadMessages(selectedUser);
+        }
+    }, [selectedUser, username, conversations]);
+
+    const loadConversations = async (userId: string) => {
+        try {
+            const response = await fetch(`/api/conversations?userId=${userId}`);
+            if (response.ok) {
+                const conversationsData = await response.json();
+                setConversations(conversationsData);
+                console.log('Loaded conversations:', conversationsData);
+            }
+        } catch (error) {
+            console.error('Failed to load conversations:', error);
+        }
+    };
+
+    const loadMessages = async (selectedUsername: string) => {
+        try {
+            // Find conversation for this user
+            const currentConversation = conversations.find(c =>
+                c.participants.some((p: any) => p.user.username === selectedUsername)
+            );
+
+            if (currentConversation) {
+                const response = await fetch(`/api/conversations/${currentConversation.id}/messages`);
+                if (response.ok) {
+                    const messagesData = await response.json();
+                    // Format messages for frontend
+                    const formattedMessages = messagesData.map((msg: any) => ({
+                        id: msg.id,
+                        from: msg.sender?.username || 'Unknown',
+                        to: selectedUsername,
+                        message: msg.content,
+                        timestamp: msg.timestamp,
+                        status: msg.status,
+                        isVoiceMessage: msg.isVoiceMessage,
+                        audioUrl: msg.audioUrl,
+                        audioDuration: msg.audioDuration,
+                        isDeleted: msg.isDeleted,
+                        isEdited: msg.isEdited,
+                        isPinned: msg.isPinned,
+                        replyTo: msg.replyTo,
+                        senderId: msg.senderId
+                    }));
+                    setMessages(formattedMessages);
+                    console.log('Loaded messages for', selectedUsername, ':', formattedMessages);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load messages:', error);
+        }
+    };
 
     // Persistence Helpers
     const saveFailedMessage = (msg: Message) => {
@@ -639,54 +723,92 @@ export default function ChatPage() {
         e.preventDefault();
         if (!inputMessage.trim() || !selectedUser) return;
 
-        // In the new structure, we should find/create a conversation first
-        // For simplicity in this large file, we'll assume conversation exists or handle it
-        const currentConversation = conversations.find(c =>
-            c.participants.some((p: any) => p.user.username === selectedUser)
-        );
-
-        if (!currentConversation) {
-            console.error('No active conversation found for', selectedUser);
-            // In a real app, you'd create one here
-            return;
-        }
-
         const tempContent = inputMessage.trim();
         setInputMessage('');
         setReplyingTo(null);
 
         try {
-            // 1. Save to DB via API (User's requirement: save everything to DB)
-            const savedMsg = await apiService.sendMessage({
-                conversationId: currentConversation.id,
-                senderId: localStorage.getItem('webrtc-userId') || '',
-                content: tempContent,
-            });
+            // 1. Get or create conversation
+            let currentConversation = conversations.find(c =>
+                c.participants.some((p: any) => p.user.username === selectedUser)
+            );
 
-            // 2. Emit via socket for real-time (using original socket logic but with DB ID)
+            const cookies = getClientCookies();
+
+            if (!currentConversation) {
+                // Create conversation if it doesn't exist
+                const userId = cookies['user-id'] || localStorage.getItem('webrtc-userId');
+                const { data: selectedUserData } = await supabaseAdmin
+                    .from('users')
+                    .select('id')
+                    .eq('username', selectedUser)
+                    .maybeSingle();
+
+                if (!selectedUserData) {
+                    console.error('Selected user not found:', selectedUser);
+                    return; // Exit the function if user not found
+                }
+
+                const convResponse = await fetch('/api/conversations', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        participantIds: [userId, selectedUserData.id]
+                    }),
+                });
+
+                if (!convResponse.ok) {
+                    throw new Error('Failed to create conversation');
+                }
+
+                currentConversation = await convResponse.json();
+            }
+
+            // 2. Send via socket for real-time delivery
             if (socketRef.current?.connected) {
-                socketRef.current.emit('send-message', {
-                    ...savedMsg,
+                // Generate temporary ID for the message
+                const tempId = `temp-${Date.now()}`;
+                
+                socketRef.current.emit('send-message-api', {
+                    id: tempId,
                     from: username,
                     to: selectedUser,
-                    message: tempContent, // for legacy socket listener compatibility
-                    status: 'sent'
+                    message: tempContent,
+                    timestamp: new Date().toISOString(),
+                    status: 'sent',
+                    isVoiceMessage: false,
+                    isEdited: false,
+                    isDeleted: false,
+                    isPinned: false,
+                    replyTo: replyingTo?.id || null,
+                    groupId: null,
+                    chunkIndex: null,
+                    totalChunks: null
+                }, (response: any) => {
+                    if (response.status === 'error') {
+                        console.error('Failed to send message:', response.message);
+                        // Restore input message if failed
+                        setInputMessage(tempContent);
+                    } else {
+                        // Add message to local state on successful send
+                        setMessages(prev => [...prev, {
+                            id: response.id || tempId,
+                            from: username,
+                            to: selectedUser,
+                            message: tempContent,
+                            timestamp: new Date(response.timestamp || new Date()),
+                            status: 'sent'
+                        }]);
+                    }
                 });
             }
 
-            // 3. Update local state
-            setMessages(prev => [...prev, {
-                ...savedMsg,
-                from: username,
-                to: selectedUser,
-                message: tempContent,
-                timestamp: new Date(),
-                status: 'sent'
-            }]);
-
         } catch (error) {
             console.error('Failed to send message:', error);
-            // Even if it fails, the user wanted it stored (the API should handle that if possible)
+            // Restore input message if failed
+            setInputMessage(tempContent);
         }
     };
 
@@ -707,48 +829,79 @@ export default function ChatPage() {
     const handleSendVoice = async (audioBlob: Blob, duration: number) => {
         if (!selectedUser) return;
 
-        const userId = localStorage.getItem('webrtc-userId') || '';
-        const currentConversation = conversations.find(c =>
-            c.participants.some((p: any) => p.user.username === selectedUser)
-        );
-
-        if (!currentConversation) return;
-
+        const cookies = getClientCookies();
+        const userId = cookies['user-id'] || localStorage.getItem('webrtc-userId');
+        
         try {
-            // 1. Upload to Supabase
+            // 1. Get or create conversation
+            let currentConversation = conversations.find(c =>
+                c.participants.some((p: any) => p.user.username === selectedUser)
+            );
+
+            if (!currentConversation) {
+                // Create conversation if it doesn't exist
+                const { data: selectedUserData } = await supabaseAdmin
+                    .from('users')
+                    .select('id')
+                    .eq('username', selectedUser)
+                    .maybeSingle();
+
+                if (!selectedUserData) {
+                    console.error('Selected user not found:', selectedUser);
+                    return; // Exit the function if user not found
+                }
+
+                const convResponse = await fetch('/api/conversations', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        participantIds: [userId, selectedUserData.id]
+                    }),
+                });
+
+                if (!convResponse.ok) {
+                    throw new Error('Failed to create conversation');
+                }
+
+                currentConversation = await convResponse.json();
+            }
+
+            // 2. Upload to Supabase
             const fileName = `voice-${Date.now()}-${userId}`;
             const publicUrl = await uploadAudio(audioBlob, fileName);
 
-            // 2. Save to DB
-            const savedMsg = await apiService.sendMessage({
-                conversationId: currentConversation.id,
-                senderId: userId,
-                isVoice: true,
-                audioUrl: publicUrl,
-                audioDuration: duration
-            });
-
-            // 3. Emit via socket
-            if (socketRef.current?.connected) {
-                socketRef.current.emit('send-message', {
-                    ...savedMsg,
-                    from: username,
-                    to: selectedUser,
-                    message: '🎤 Voice message',
-                    isVoiceMessage: true,
+            // 3. Send to API which will save to DB and trigger socket
+            const response = await fetch('/api/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    conversationId: currentConversation.id,
+                    senderId: userId,
+                    isVoice: true,
                     audioUrl: publicUrl,
                     audioDuration: duration,
-                    status: 'sent'
-                });
+                    to: selectedUser,
+                    from: username
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to send voice message');
             }
 
-            // 4. Update state
+            const savedMsg = await response.json();
+
+            // 4. Update local state
             setMessages(prev => [...prev, {
                 ...savedMsg,
                 from: username,
                 to: selectedUser,
                 message: '🎤 Voice message',
-                timestamp: new Date(),
+                timestamp: new Date(savedMsg.timestamp),
                 status: 'sent',
                 isVoiceMessage: true,
                 audioUrl: publicUrl,
@@ -756,7 +909,7 @@ export default function ChatPage() {
             }]);
 
         } catch (error) {
-            console.error('Voice message failed:', error);
+            console.error('Failed to send voice message:', error);
             alert('Failed to send voice message');
         }
     };
@@ -860,7 +1013,7 @@ export default function ChatPage() {
                 <ResizableSidebar selectedUser={selectedUser}>
                     <Sidebar
                         username={username}
-                        users={users}
+                        users={allUsers}
                         selectedUser={selectedUser}
                         setSelectedUser={setSelectedUser}
                         searchQuery={searchQuery}

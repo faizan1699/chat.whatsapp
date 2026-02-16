@@ -88,11 +88,12 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
         }
       });
 
-      socket.on('send-message', async (data, callback) => {
-        const { to, from } = data;
+      socket.on('send-message-api', async (data, callback) => {
+        const { to, from, message, id, timestamp, status, isVoiceMessage, audioUrl, audioDuration } = data;
 
-        if (allusers[to] && allusers[from]) {
+        if (allusers[to]) {
           try {
+            // Save to database first
             const { data: fromUser } = await supabaseAdmin
               .from('users')
               .select('id')
@@ -116,15 +117,15 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
             }
 
             await supabaseAdmin.from('messages').insert({
-              ...(data.id && { id: data.id }),
+              id,
               conversation_id: convId,
               sender_id: fromUser.id,
-              content: data.message || '',
-              timestamp: data.timestamp ? new Date(data.timestamp).toISOString() : new Date().toISOString(),
-              status: data.status || 'sent',
-              is_voice_message: !!data.isVoiceMessage,
-              audio_url: data.audioUrl || null,
-              audio_duration: data.audioDuration ?? null,
+              content: message || '',
+              timestamp: timestamp ? new Date(timestamp).toISOString() : new Date().toISOString(),
+              status: status || 'sent',
+              is_voice_message: !!isVoiceMessage,
+              audio_url: audioUrl || null,
+              audio_duration: audioDuration ?? null,
               is_edited: !!data.isEdited,
               is_deleted: !!data.isDeleted,
               is_pinned: !!data.isPinned,
@@ -134,8 +135,9 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
               total_chunks: data.totalChunks ?? null,
             });
 
+            // Send only to recipient
             io.to(allusers[to]).emit('receive-message', data);
-            if (callback) callback({ status: 'ok' });
+            if (callback) callback({ status: 'ok', id: data.id });
           } catch (error) {
             console.error('Error saving message:', error);
             if (callback) callback({ status: 'error', message: 'Failed to save message' });

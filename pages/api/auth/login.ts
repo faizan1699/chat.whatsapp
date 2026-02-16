@@ -45,15 +45,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             { expiresIn: '7d' }
         );
 
-        const cookie = serialize('auth_token', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: 60 * 60 * 24 * 7,
-            path: '/',
-        });
+        // Set multiple cookies for session management
+        const cookies = [
+            serialize('auth-token', token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 60 * 60 * 24 * 7,
+                path: '/',
+            }),
+            serialize('user-id', user.id, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 60 * 60 * 24 * 7,
+                path: '/',
+            }),
+            serialize('username', user.username, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 60 * 60 * 24 * 7,
+                path: '/',
+            })
+        ];
 
-        res.setHeader('Set-Cookie', cookie);
+        res.setHeader('Set-Cookie', cookies);
         return res.status(200).json({
             message: 'Logged in successfully',
             user: { id: user.id, username: user.username, email: user.email, phoneNumber: user.phone_number }
