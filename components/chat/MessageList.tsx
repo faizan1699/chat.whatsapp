@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import WhatsAppMessageItem from './WhatsAppMessageItem';
+import MessageItem from './MessageItem';
+import DateSeparator from './DateSeparator';
 import { Message } from '@/types/message';
 
 interface MessageListProps {
@@ -37,38 +38,42 @@ export default function MessageList({
         scrollToBottom();
     }, [messages]);
 
+    // Group messages by date and add date separators
+    const messagesWithSeparators: React.ReactNode[] = [];
+    let lastDate: Date | null = null;
+
+    messages?.forEach((msg, idx) => {
+        const msgDate = new Date(msg.timestamp);
+        
+        // Add date separator if date changed
+        if (!lastDate || msgDate.toDateString() !== lastDate.toDateString()) {
+            messagesWithSeparators.push(
+                <DateSeparator key={`date-${msgDate.toDateString()}`} date={msgDate} />
+            );
+            lastDate = msgDate;
+        }
+
+        // Add message
+        messagesWithSeparators.push(
+            <MessageItem
+                key={msg.id || idx}
+                message={msg}
+                isMe={msg.from === username}
+                onRetry={onRetry}
+                onReply={onReply}
+                onDelete={(id: string) => onDelete?.(id, 'me')}
+                onPin={onPin}
+                onEdit={onEdit}
+                isHighlighted={highlightedMessageId === msg.id}
+            />
+        );
+    });
+
     return (
         <div className="relative flex-1 overflow-hidden">
             <div className="chat-bg-pattern absolute inset-0 z-0 opacity-10"></div>
             <div className="relative z-10 flex h-full flex-col overflow-y-auto p-4 space-y-2">
-                {messages?.map((msg, idx) => (
-                    <WhatsAppMessageItem
-                        key={msg.id || idx}
-                        message={{
-                            id: msg.id || `msg-${idx}`,
-                            content: msg.content || msg.message,
-                            from: msg.from,
-                            to: msg.to,
-                            timestamp: msg.timestamp,
-                            status: (msg.status === 'failed' || msg.status === 'sending') ? 'pending' : (msg.status || 'sent') as 'pending' | 'sent' | 'delivered' | 'read',
-                            isVoiceMessage: msg.isVoiceMessage,
-                            audioUrl: msg.audioUrl,
-                            audioDuration: msg.audioDuration,
-                            isDeleted: msg.isDeleted,
-                            isEdited: msg.isEdited,
-                            isPinned: msg.isPinned,
-                            replyTo: msg.replyTo,
-                            reactions: msg.reactions
-                        }}
-                        isOwn={msg.from === username}
-                        onReply={onReply}
-                        onEdit={onEdit}
-                        onDelete={(id: string) => onDelete?.(id, 'me')}
-                        onForward={undefined}
-                        onPin={(msg: any) => onPin?.(msg)}
-                        onReact={onReact}
-                    />
-                ))}
+                {messagesWithSeparators}
                 <div ref={messagesEndRef} />
             </div>
         </div>

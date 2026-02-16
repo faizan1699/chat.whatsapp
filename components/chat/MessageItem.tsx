@@ -40,10 +40,36 @@ export default function MessageItem({
     const hasMore = words.length > visibleWords;
 
     const formatTimestamp = (date: Date) => {
-        return new Date(date).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
+        const now = new Date();
+        const messageDate = new Date(date);
+        const isToday = messageDate.toDateString() === now.toDateString();
+        
+        if (isToday) {
+            return messageDate.toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        } else {
+            return messageDate.toLocaleDateString([], {
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+    };
+
+    const formatDateLabel = (date: Date) => {
+        const now = new Date();
+        const messageDate = new Date(date);
+        const isToday = messageDate.toDateString() === now.toDateString();
+        const isYesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toDateString() === messageDate.toDateString();
+        
+        if (isToday) return 'Today';
+        if (isYesterday) return 'Yesterday';
+        return messageDate.toLocaleDateString([], {
+            weekday: 'long',
+            month: 'short',
+            day: 'numeric'
         });
     };
 
@@ -123,12 +149,15 @@ export default function MessageItem({
             onMouseEnter={() => setShowActions(true)}
             onMouseLeave={() => setShowActions(false)}
         >
-            <div
-                className={`flex flex-col max-w-[85%] md:max-w-[65%] px-2 py-1 shadow-sm relative ${isMe
-                    ? 'rounded-l-lg rounded-br-lg bg-[#d9fdd3] text-[#111b21] ml-10'
-                    : 'rounded-r-lg rounded-bl-lg bg-white text-[#111b21] mr-10'
-                    } ${message.status === 'failed' ? 'bg-red-50 border border-red-200' : ''} ${isHighlighted ? 'highlight-message' : ''}`}
-            >
+            <div className={`flex flex-col max-w-[85%] md:max-w-[65%] ${isMe ? 'items-end' : 'items-start'}`}>
+                {/* Sender info for non-me messages */}
+
+                <div
+                    className={`flex flex-col px-2 py-1 shadow-sm relative ${isMe
+                        ? 'rounded-l-lg rounded-br-lg bg-[#d9fdd3] text-[#111b21] ml-10'
+                        : 'rounded-r-lg rounded-bl-lg bg-white text-[#111b21] mr-10'
+                        } ${message.status === 'failed' ? 'bg-red-50 border border-red-200' : ''} ${isHighlighted ? 'highlight-message' : ''}`}
+                >
                 {/* Reply Context */}
                 {message.replyTo && (
                     <div className="mb-1 border-l-4 border-[#06cf9c] bg-black/5 p-2 rounded text-[12px] opacity-80">
@@ -282,8 +311,8 @@ export default function MessageItem({
                     )}
 
                     {/* Meta data (Time + Status) */}
-                    <div className="flex items-center gap-1 ml-auto pt-1 h-4">
-                        <span className="text-[10px] text-[#667781] whitespace-nowrap uppercase">
+                    <div className="flex items-center gap-1 ml-auto pt-1 h-5">
+                        <span className="text-[11px] text-[#667781] whitespace-nowrap">
                             {formatTimestamp(message.timestamp)}
                         </span>
                         {message.isEdited && (
@@ -293,17 +322,17 @@ export default function MessageItem({
                         )}
 
                         {isMe && message.status && (
-                            <span className={`flex items-center text-[11px] font-bold transition-colors
-                             ${message.status === 'read' ? 'text-green-500'
+                            <span className={`flex items-center text-[12px] transition-colors
+                             ${message.status === 'read' ? 'text-[#53bdeb]'
                                     : message.status === 'failed' ? 'text-red-500'
                                         : message.status === 'pending'
                                             ? 'text-gray-400'
-                                            : 'text-gray-500'
+                                            : 'text-[#667781]'
                                 }`
                             }
                             >
                                 {message.status === 'pending' ? (
-                                    <div className="w-[11px] h-[11px] border-2 border-[#667781]/20 border-t-[#667781] rounded-full animate-spin"></div>
+                                    <div className="w-[12px] h-[12px] border-2 border-[#667781]/20 border-t-[#667781] rounded-full animate-spin"></div>
                                 ) : (
                                     {
                                         failed: '!',
@@ -336,6 +365,7 @@ export default function MessageItem({
                             ? 'polygon(0 0, 0 100%, 100% 0)'
                             : 'polygon(100% 0, 100% 100%, 0 0)'
                     }} />
+                </div>
             </div>
         </div >
     );
