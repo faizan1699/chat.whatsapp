@@ -1,3 +1,9 @@
+export interface ReplyTo {
+    id?: string;
+    from: string;
+    message: string;
+}
+
 export interface Message {
     id?: string;
     from: string;
@@ -5,7 +11,7 @@ export interface Message {
     message: string;
     timestamp: Date;
     status?: 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
-    replyTo?: Message;
+    replyTo?: ReplyTo;
     isPinned?: boolean;
     isHidden?: boolean;
     audioUrl?: string;

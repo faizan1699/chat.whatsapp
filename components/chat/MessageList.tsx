@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import MessageItem from './MessageItem';
 import DateSeparator from './DateSeparator';
-import { Message } from '@/types/message';
+import { Message, ReplyTo } from '@/types/message';
 
 interface MessageListProps {
     messages: Message[];

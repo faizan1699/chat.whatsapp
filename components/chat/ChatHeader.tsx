@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, MoreVertical, Video, Phone, ArrowLeft, X, Trash2 } from 'lucide-react';
+import { Search, MoreVertical, Video, Phone, ArrowLeft, X, Trash2, RefreshCw } from 'lucide-react';
 
 interface ChatHeaderProps {
     selectedUser: string;
@@ -10,9 +10,10 @@ interface ChatHeaderProps {
     onStartAudioCall: () => void;
     onClearChat?: () => void;
     onClearAllMessages?: () => void;
+    onRefreshMessages?: () => void;
 }
 
-export default function ChatHeader({ selectedUser, onBack, onStartVideoCall, onStartAudioCall, onClearChat, onClearAllMessages }: ChatHeaderProps) {
+export default function ChatHeader({ selectedUser, onBack, onStartVideoCall, onStartAudioCall, onClearChat, onClearAllMessages, onRefreshMessages }: ChatHeaderProps) {
     const [showMenu, setShowMenu] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -44,6 +45,11 @@ export default function ChatHeader({ selectedUser, onBack, onStartVideoCall, onS
                 </div>
             </div>
             <div className="flex items-center gap-2 text-[#54656f]">
+                {onRefreshMessages && (
+                    <button onClick={onRefreshMessages} className="hover:bg-black/5 p-2 rounded-full transition-colors" title="Refresh Messages">
+                        <RefreshCw size={20} />
+                    </button>
+                )}
                 <button onClick={onStartVideoCall} className="hover:bg-black/5 p-2 rounded-full transition-colors" title="Video Call">
                     <Video size={20} />
                 </button>

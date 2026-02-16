@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Smile, Paperclip, Send, Mic, X, Check } from 'lucide-react';
-import { Message } from '@/types/message';
+import { Message, ReplyTo } from '@/types/message';
 import VoiceRecorder from '../audio/VoiceRecorder';
 import dynamic from 'next/dynamic';
 import { EmojiStyle, Theme, PickerProps } from 'emoji-picker-react';

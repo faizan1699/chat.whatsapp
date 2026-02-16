@@ -33,6 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             isEdited: m.is_edited,
             isDeleted: m.is_deleted,
             isPinned: m.is_pinned,
+            isHidden: m.is_hidden,
             replyTo: m.reply_to,
             groupId: m.group_id,
             chunkIndex: m.chunk_index,

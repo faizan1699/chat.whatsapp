@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Reply, Trash2, Pin, ChevronDown, Play, Pause, Pencil, Eye, EyeOff } from 'lucide-react';
-import { Message } from '@/types/message';
+import { Message, ReplyTo } from '@/types/message';
 
 interface MessageItemProps {
     message: Message;
@@ -153,7 +153,7 @@ export default function MessageItem({
             id={`msg-${message.id}`}
             className={`group flex w-full mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}
             onMouseEnter={() => setShowActions(true)}
-            onMouseLeave={() => setShowActions(false)}
+            onMouseLeave={() => setShowActions(true)}
         >
             <div className={`flex flex-col max-w-[85%] md:max-w-[65%] ${isMe ? 'items-end' : 'items-start'}`}>
                 {/* Message bubble */}
@@ -222,7 +222,21 @@ export default function MessageItem({
                             </button>
                             {!isMe && (
                                 <button
-                                    onClick={() => message.id && (message.isHidden ? onUnhide?.(message.id) : onHide?.(message.id))}
+                                    onClick={() => {
+                                        console.log('👁️ Hide/Unhide button clicked:', {
+                                            messageId: message.id,
+                                            isHidden: message.isHidden,
+                                            from: message.from,
+                                            isMe: isMe
+                                        });
+                                        if (message.id) {
+                                            if (message.isHidden) {
+                                                onUnhide?.(message.id);
+                                            } else {
+                                                onHide?.(message.id);
+                                            }
+                                        }
+                                    }}
                                     className={`p-1.5 hover:bg-black/5 rounded-full transition-colors ${message.isHidden ? 'text-[#00a884]' : 'text-[#667781]'}`}
                                     title={message.isHidden ? 'Unhide message' : 'Hide message'}
                                 >

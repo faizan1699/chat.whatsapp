@@ -7,7 +7,7 @@ import { Pin, ChevronDown, X } from 'lucide-react';
 import { frontendAuth } from '@/utils/frontendAuth';
 import IncomingCallModal from '@/components/video/IncomingCallModal';
 import MessageItem from '@/components/chat/MessageItem';
-import { Message } from '@/types/message';
+import { Message, ReplyTo } from '@/types/message';
 import CallNotification from '@/components/video/CallNotification';
 import Sidebar from '@/components/global/Sidebar';
 import ResizableSidebar from '@/components/global/ResizableSidebar';
@@ -166,13 +166,20 @@ export default function ChatPage() {
 
         socket.on('receive-message', (data: Message) => {
             console.log('📨 Received message:', data);
+            console.log('📨 Current user:', username);
+            console.log('📨 Selected user:', selectedUser);
+            console.log('📨 Message from:', data.from, 'to:', data.to);
+            
             setMessages(prev => {
                 // Check if message already exists to avoid duplicates
                 const exists = prev.some(m => m.id === data.id);
                 if (!exists) {
+                    console.log('✅ Adding new message to list');
                     return [...prev, data];
+                } else {
+                    console.log('⚠️ Message already exists, skipping');
+                    return prev;
                 }
-                return prev;
             });
 
             // Update unread count if message is not from current user
@@ -186,6 +193,13 @@ export default function ChatPage() {
                 if (!isWindowFocusedRef.current) {
                     showNotification(data);
                 }
+            }
+
+            // If we receive a message for the current conversation, reload messages to ensure sync
+            if ((data.from === selectedUser && data.to === username) || 
+                (data.from === username && data.to === selectedUser)) {
+                console.log('🔄 Message for current conversation, reloading...');
+                setTimeout(() => loadMessages(selectedUser!), 1000);
             }
         });
 
@@ -437,7 +451,11 @@ export default function ChatPage() {
                         isDeleted: msg.is_deleted,
                         isEdited: msg.is_edited,
                         isPinned: msg.is_pinned,
-                        replyTo: msg.reply_to,
+                        replyTo: msg.reply_to ? {
+                            id: msg.reply_to.id,
+                            from: msg.reply_to.sender?.username || 'Unknown',
+                            message: msg.reply_to.content || msg.reply_to.message
+                        } : undefined,
                         senderId: msg.sender_id
                     }));
 
@@ -458,6 +476,14 @@ export default function ChatPage() {
 
                     setMessages(formattedMessages);
                     console.log('✅ Loaded messages for', selectedUsername, ':', formattedMessages.length, 'messages');
+                    console.log('📋 All loaded messages:', formattedMessages.map((m: any) => ({
+                        id: m.id,
+                        from: m.from,
+                        to: m.to,
+                        message: m.message?.substring(0, 20) + '...',
+                        status: m.status,
+                        isHidden: m.isHidden
+                    })));
 
                     if (currentConversation && unreadCounts[selectedUsername] > 0) {
                         markMessagesAsRead(currentConversation.id);
@@ -484,6 +510,17 @@ export default function ChatPage() {
     useEffect(() => {
         if (selectedUser && username) {
             loadMessages(selectedUser);
+        }
+    }, [selectedUser, username]);
+
+    // Also reload messages periodically to sync with database
+    useEffect(() => {
+        if (selectedUser && username) {
+            const interval = setInterval(() => {
+                loadMessages(selectedUser);
+            }, 10000); // Reload every 10 seconds
+
+            return () => clearInterval(interval);
         }
     }, [selectedUser, username]);
 
@@ -1019,7 +1056,12 @@ export default function ChatPage() {
             message: tempContent,
             timestamp: new Date(),
             status: 'sending',
-            retryCount: 0
+            retryCount: 0,
+            replyTo: replyingTo ? {
+                id: replyingTo.id,
+                from: replyingTo.from,
+                message: replyingTo.message
+            } : undefined,
         };
 
         // Add to UI immediately with sending status
@@ -1087,7 +1129,11 @@ export default function ChatPage() {
                     isEdited: false,
                     isDeleted: false,
                     isPinned: false,
-                    replyTo: replyingTo?.id || null,
+                    replyTo: replyingTo ? {
+    id: replyingTo.id,
+    from: replyingTo.from,
+    message: replyingTo.message
+} : undefined,
                     groupId: null,
                     chunkIndex: null,
                     totalChunks: null
@@ -1274,11 +1320,20 @@ export default function ChatPage() {
     };
 
     const handleHideMessage = (id: string) => {
+        console.log('🙈 Hiding message:', id);
         setMessages(prev => prev.map(m => m.id === id ? { ...m, isHidden: true } : m));
     };
 
     const handleUnhideMessage = (id: string) => {
+        console.log('👁️ Unhiding message:', id);
         setMessages(prev => prev.map(m => m.id === id ? { ...m, isHidden: false } : m));
+    };
+
+    const handleRefreshMessages = () => {
+        if (selectedUser) {
+            console.log('🔄 Manual refresh triggered for:', selectedUser);
+            loadMessages(selectedUser);
+        }
     };
 
     const handleRetryMessage = (msg: Message) => {
@@ -1423,12 +1478,37 @@ export default function ChatPage() {
     };
 
     const currentChatMessages = messages.filter(
-        (msg: Message) =>
-            (msg.from === username && msg.to === selectedUser) ||
-            (msg.from === selectedUser && msg.to === username)
+        (msg: Message) => {
+            const shouldInclude = (msg.from === username && msg.to === selectedUser) ||
+                                (msg.from === selectedUser && msg.to === username);
+            console.log('🔍 Message filter:', {
+                messageId: msg.id,
+                from: msg.from,
+                to: msg.to,
+                username,
+                selectedUser,
+                shouldInclude,
+                message: msg.message?.substring(0, 20) + '...'
+            });
+            return shouldInclude;
+        }
     );
 
     const pinnedMessages = currentChatMessages.filter(m => m.isPinned);
+
+    // Debug: Log current state
+    console.log('🔍 Debug Info:', {
+        totalMessages: messages.length,
+        currentChatMessages: currentChatMessages.length,
+        username,
+        selectedUser,
+        allMessages: messages.map(m => ({
+            id: m.id,
+            from: m.from,
+            to: m.to,
+            message: m.message?.substring(0, 20) + '...'
+        }))
+    });
 
     if (isLoading) {
         return <FullPageLoader />;
@@ -1466,6 +1546,7 @@ export default function ChatPage() {
                                 onStartAudioCall={() => startCall(true)}
                                 onClearChat={handleClearChat}
                                 onClearAllMessages={handleClearAllMessages}
+                                onRefreshMessages={handleRefreshMessages}
                             />
 
                             {/* Pinned Messages Banner */}
