@@ -9,7 +9,7 @@ export interface Message {
     to: string;
     message: string;
     timestamp: Date;
-    status?: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
+    status?: 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
     replyTo?: Message;
     isPinned?: boolean;
     audioUrl?: string;
@@ -21,6 +21,12 @@ export interface Message {
     chunkIndex?: number;
     totalChunks?: number;
     isDeleted?: boolean;
+    // Failed message tracking
+    retryCount?: number;
+    lastRetryTime?: Date;
+    // Additional properties for failed message handling
+    conversationId?: string | null;
+    senderId?: string | null;
 }
 
 interface MessageItemProps {
@@ -31,6 +37,7 @@ interface MessageItemProps {
     onDelete?: (id: string, type: 'me' | 'everyone') => void;
     onPin?: (msg: Message) => void;
     onEdit?: (msg: Message) => void;
+    onUpdateMessage?: (msg: Message) => void;
     isHighlighted?: boolean;
 }
 

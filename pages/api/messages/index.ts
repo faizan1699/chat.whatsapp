@@ -31,8 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             if (error) throw error;
 
-            // Return the saved message - frontend will handle socket emission
-            res.status(201).json({
+            res.status(200).json({
                 id: message.id,
                 conversationId: message.conversation_id,
                 senderId: message.sender_id,

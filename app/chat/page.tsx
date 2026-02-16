@@ -22,6 +22,8 @@ import api from '@/utils/api';
 import { uploadAudio } from '@/utils/supabase';
 import { supabaseAdmin } from '@/utils/supabase-server';
 import { parseCookies, getClientCookies } from '@/utils/cookies';
+import { useMessageApi } from '@/hooks/useMessageApi';
+import { storageHelpers, STORAGE_KEYS, chatStorage } from '@/utils/storage';
 
 interface User {
     [key: string]: string;
@@ -51,6 +53,21 @@ export default function ChatPage() {
 
     const [isWindowFocused, setIsWindowFocused] = useState<boolean>(true);
     const isWindowFocusedRef = useRef(true);
+    const [autoRetryEnabled, setAutoRetryEnabled] = useState<boolean>(true);
+    const [retryInterval, setRetryInterval] = useState<NodeJS.Timeout | null>(null);
+
+    // Message API hook
+    const {
+        sendMessage,
+        sendVoiceMessage,
+        updateMessage,
+        deleteMessage,
+        pinMessage,
+        fetchMessages,
+        retryMessage,
+        loading: messageLoading,
+        error: messageError
+    } = useMessageApi();
 
     // Call States
     const [isCallActive, setIsCallActive] = useState<boolean>(false);
@@ -152,7 +169,8 @@ export default function ChatPage() {
     useEffect(() => {
         // Try to get user session from cookies first
         const cookies = getClientCookies();
-        const savedUsername = cookies.username || localStorage.getItem('webrtc-username');
+        const userData = storageHelpers.getUser();
+        const savedUsername = (cookies.username as string) || (userData?.username as string) || '';
         
         if (savedUsername) {
             setUsername(savedUsername);
@@ -343,7 +361,8 @@ export default function ChatPage() {
     useEffect(() => {
         if (username) {
             const cookies = getClientCookies();
-            const userId = cookies['user-id'] || localStorage.getItem('webrtc-userId');
+            const userData = storageHelpers.getUser();
+            const userId = (cookies['user-id'] as string) || (userData?.userId as string);
             if (userId) {
                 loadConversations(userId);
             }
@@ -354,13 +373,14 @@ export default function ChatPage() {
     useEffect(() => {
         if (selectedUser && username && messages.length === 0) {
             const cookies = getClientCookies();
-            const userId = cookies['user-id'] || localStorage.getItem('webrtc-userId');
+            const userData = storageHelpers.getUser();
+            const userId = (cookies['user-id'] as string) || (userData?.userId as string);
             if (userId) {
                 console.log('Messages empty, reloading conversations...');
                 loadConversations(userId);
             }
         }
-    }, [selectedUser, username]);
+    }, [selectedUser, username, messages]);
 
     // Load messages when user is selected
     useEffect(() => {
@@ -398,7 +418,7 @@ export default function ChatPage() {
             if (!currentConversation) {
                 console.log('Conversation not found, trying to create...');
                 const cookies = getClientCookies();
-                const userId = cookies['user-id'] || localStorage.getItem('webrtc-userId');
+                const userId = cookies['user-id'] || storageHelpers.getUser().userId;
                 
                 if (userId) {
                     // Try to find conversation by participants
@@ -471,23 +491,101 @@ export default function ChatPage() {
     };
 
     // Persistence Helpers
-    const saveFailedMessage = (msg: Message) => {
+    const saveFailedMessageLocal = (msg: Message) => {
         try {
-            const failed = JSON.parse(localStorage.getItem('failed-messages') || '[]');
-            if (!failed.some((m: Message) => m.id === msg.id)) {
-                failed.push(msg);
-                localStorage.setItem('failed-messages', JSON.stringify(failed));
-            }
+            storageHelpers.saveFailedMessage({
+                ...msg,
+                retryCount: 1,
+                lastRetryTime: new Date(),
+                status: 'failed'
+            });
         } catch (error) {
             console.error('Error saving failed message:', error);
         }
     };
 
+    const retryFailedMessages = () => {
+        try {
+            const failed = storageHelpers.getFailedMessages() || [];
+            const now = new Date();
+            
+            failed.forEach(async (msg: Message) => {
+                // Only retry if 5 minutes have passed since last retry
+                const timeSinceLastRetry = msg.lastRetryTime ? 
+                    now.getTime() - new Date(msg.lastRetryTime).getTime() : 
+                    now.getTime() - new Date(msg.timestamp).getTime();
+                
+                if (timeSinceLastRetry > 5 * 60 * 1000) { // 5 minutes
+                    try {
+                        // Update status to sending
+                        setMessages(prev => prev.map(m => 
+                            m.id === msg.id ? { ...m, status: 'sending' } : m
+                        ));
+
+                        const response = await fetch('/api/messages', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                conversationId: msg.conversationId,
+                                senderId: msg.senderId,
+                                content: msg.message,
+                                to: msg.to,
+                                from: username
+                            }),
+                        });
+
+                        if (response.ok) {
+                            // Remove from failed messages
+                            const updatedFailed = failed.filter((m: Message) => m.id !== msg.id);
+                            chatStorage.setItem('failed-messages', updatedFailed);
+                            
+                            // Update message status to sent
+                            setMessages(prev => prev.map(m => 
+                                m.id === msg.id ? { ...m, status: 'sent' } : m
+                            ));
+                        } else {
+                            throw new Error('Failed to send message');
+                        }
+                    } catch (error) {
+                        console.error('Failed to retry message:', error);
+                        // Update retry count and last retry time
+                        msg.retryCount = (msg.retryCount || 0) + 1;
+                        msg.lastRetryTime = new Date();
+                        saveFailedMessageLocal(msg);
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Failed to retry messages:', error);
+        }
+    };
+
+    // Auto-retry failed messages
+    useEffect(() => {
+        if (autoRetryEnabled && isConnected) {
+            const interval = setInterval(() => {
+                retryFailedMessages();
+            }, 30000); // Retry every 30 seconds
+            setRetryInterval(interval);
+        } else if (retryInterval) {
+            clearInterval(retryInterval);
+            setRetryInterval(null);
+        }
+
+        return () => {
+            if (retryInterval) {
+                clearInterval(retryInterval);
+            }
+        };
+    }, [autoRetryEnabled, isConnected]);
+
     const removeFailedMessage = (id: string) => {
         try {
-            const failed = JSON.parse(localStorage.getItem('failed-messages') || '[]');
+            const failed = storageHelpers.getFailedMessages() || [];
             const newFailed = failed.filter((m: Message) => m.id !== id);
-            localStorage.setItem('failed-messages', JSON.stringify(newFailed));
+            chatStorage.setItem('failed-messages', newFailed);
         } catch (error) {
             console.error('Error removing failed message:', error);
         }
@@ -495,7 +593,7 @@ export default function ChatPage() {
 
     // Restore failed messages on mount
     useEffect(() => {
-        const failed = JSON.parse(localStorage.getItem('failed-messages') || '[]');
+        const failed = storageHelpers.getFailedMessages() || [];
         if (failed.length > 0) {
             setMessages(prev => {
                 const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
@@ -513,7 +611,7 @@ export default function ChatPage() {
             const processQueue = async () => {
                 if (isProcessing) return;
 
-                const failed = JSON.parse(localStorage.getItem('failed-messages') || '[]');
+                const failed: Message[] = storageHelpers.getFailedMessages() || [];
                 if (failed.length === 0) return;
 
                 isProcessing = true;
@@ -590,7 +688,7 @@ export default function ChatPage() {
                 removeFailedMessage(msg.id!);
             } else {
                 setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'failed' } : m));
-                saveFailedMessage({ ...msg, status: 'failed' });
+                saveFailedMessageLocal({ ...msg, status: 'failed' });
             }
         });
     };
@@ -790,77 +888,43 @@ export default function ChatPage() {
         setInputMessage('');
         setReplyingTo(null);
 
+        // Create temporary message with sending status
+        const tempMessage: Message = {
+            id: `temp-${Date.now()}`,
+            from: username,
+            to: selectedUser,
+            message: tempContent,
+            timestamp: new Date(),
+            status: 'sending',
+            retryCount: 0
+        };
+
+        // Add to UI immediately with sending status
+        setMessages(prev => [...prev, tempMessage]);
+
         try {
-            // 1. Get or create conversation
-            let currentConversation = conversations.find(c =>
-                c.participants.some((p: any) => p.user.username === selectedUser)
+            // Send message using hook
+            const savedMsg = await sendMessage(
+                tempContent,
+                selectedUser,
+                username,
+                conversations,
+                replyingTo
             );
 
-            const cookies = getClientCookies();
-
-            if (!currentConversation) {
-                // Create conversation if it doesn't exist
-                const userId = cookies['user-id'] || localStorage.getItem('webrtc-userId');
-                const { data: selectedUserData } = await supabaseAdmin
-                    .from('users')
-                    .select('id')
-                    .eq('username', selectedUser)
-                    .maybeSingle();
-
-                if (!selectedUserData) {
-                    console.error('Selected user not found:', selectedUser);
-                    return; // Exit the function if user not found
-                }
-
-                const convResponse = await fetch('/api/conversations', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        participantIds: [userId, selectedUserData.id]
-                    }),
-                });
-
-                if (!convResponse.ok) {
-                    throw new Error('Failed to create conversation');
-                }
-
-                currentConversation = await convResponse.json();
-            }
-
-            // 2. Send to API which will save to DB and trigger socket
-            const response = await fetch('/api/messages', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    conversationId: currentConversation.id,
-                    senderId: cookies['user-id'] || localStorage.getItem('webrtc-userId'),
-                    content: tempContent,
+            // Update local state with the saved message
+            setMessages(prev => prev.map(m => 
+                m.id === tempMessage.id ? {
+                    ...savedMsg,
+                    from: username,
                     to: selectedUser,
-                    from: username
-                }),
-            });
+                    message: tempContent,
+                    timestamp: new Date(savedMsg.timestamp),
+                    status: 'sent'
+                } : m
+            ));
 
-            if (!response.ok) {
-                throw new Error('Failed to send message');
-            }
-
-            const savedMsg = await response.json();
-
-            // 3. Update local state with the saved message
-            setMessages(prev => [...prev, {
-                ...savedMsg,
-                from: username,
-                to: selectedUser,
-                message: tempContent,
-                timestamp: new Date(savedMsg.timestamp),
-                status: 'sent'
-            }]);
-
-            // 4. Emit to recipient via socket
+            // Emit to recipient via socket
             if (socketRef.current?.connected) {
                 socketRef.current.emit('send-message', {
                     id: savedMsg.id,
@@ -882,18 +946,32 @@ export default function ChatPage() {
 
         } catch (error) {
             console.error('Failed to send message:', error);
-            // Restore input message if failed
+            
+            // Update message status to failed
+            setMessages(prev => prev.map(m => 
+                m.id === tempMessage.id ? { 
+                    ...m, 
+                    status: 'failed',
+                    retryCount: 1,
+                    lastRetryTime: new Date(),
+                    conversationId: null,
+                    senderId: null
+                } : m
+            ));
+            
+            // Save to localStorage for retry
+            saveFailedMessageLocal({
+                ...tempMessage,
+                status: 'failed',
+                retryCount: 1,
+                lastRetryTime: new Date(),
+                conversationId: null,
+                senderId: null
+            });
+            
+            // Restore input message
             setInputMessage(tempContent);
         }
-    };
-
-    const handleEditMessage = (msg: Message) => {
-        setEditingMessage(msg);
-        setInputMessage(msg.message);
-        setReplyingTo(null); // Clear reply if editing
-        // Focus input
-        const input = document.querySelector('input[type="text"]') as HTMLInputElement;
-        if (input) input.focus();
     };
 
     const handleUpdateMessage = async (e: React.FormEvent) => {
@@ -955,76 +1033,26 @@ export default function ChatPage() {
         setInputMessage('');
     };
 
+    const handleEditMessage = (msg: Message) => {
+        setEditingMessage(msg);
+        setInputMessage(msg.message);
+        setReplyingTo(null);
+    };
+
     const handleSendVoice = async (audioBlob: Blob, duration: number) => {
         if (!selectedUser) return;
-
-        const cookies = getClientCookies();
-        const userId = cookies['user-id'] || localStorage.getItem('webrtc-userId');
         
         try {
-            // 1. Get or create conversation
-            let currentConversation = conversations.find(c =>
-                c.participants.some((p: any) => p.user.username === selectedUser)
+            // Send voice message using hook
+            const savedMsg = await sendVoiceMessage(
+                audioBlob,
+                duration,
+                selectedUser,
+                username,
+                conversations
             );
 
-            if (!currentConversation) {
-                // Create conversation if it doesn't exist
-                const { data: selectedUserData } = await supabaseAdmin
-                    .from('users')
-                    .select('id')
-                    .eq('username', selectedUser)
-                    .maybeSingle();
-
-                if (!selectedUserData) {
-                    console.error('Selected user not found:', selectedUser);
-                    return; // Exit the function if user not found
-                }
-
-                const convResponse = await fetch('/api/conversations', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        participantIds: [userId, selectedUserData.id]
-                    }),
-                });
-
-                if (!convResponse.ok) {
-                    throw new Error('Failed to create conversation');
-                }
-
-                currentConversation = await convResponse.json();
-            }
-
-            // 2. Upload to Supabase
-            const fileName = `voice-${Date.now()}-${userId}`;
-            const publicUrl = await uploadAudio(audioBlob, fileName);
-
-            // 3. Send to API which will save to DB and trigger socket
-            const response = await fetch('/api/messages', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    conversationId: currentConversation.id,
-                    senderId: userId,
-                    isVoice: true,
-                    audioUrl: publicUrl,
-                    audioDuration: duration,
-                    to: selectedUser,
-                    from: username
-                }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to send voice message');
-            }
-
-            const savedMsg = await response.json();
-
-            // 4. Update local state
+            // Update local state
             setMessages(prev => [...prev, {
                 ...savedMsg,
                 from: username,
@@ -1033,11 +1061,11 @@ export default function ChatPage() {
                 timestamp: new Date(savedMsg.timestamp),
                 status: 'sent',
                 isVoiceMessage: true,
-                audioUrl: publicUrl,
-                audioDuration: duration
+                audioUrl: savedMsg.audioUrl,
+                audioDuration: savedMsg.audioDuration
             }]);
 
-            // 5. Emit to recipient via socket
+            // Emit to recipient via socket
             if (socketRef.current?.connected) {
                 socketRef.current.emit('send-message', {
                     id: savedMsg.id,
@@ -1047,8 +1075,8 @@ export default function ChatPage() {
                     timestamp: savedMsg.timestamp,
                     status: 'sent',
                     isVoiceMessage: true,
-                    audioUrl: publicUrl,
-                    audioDuration: duration,
+                    audioUrl: savedMsg.audioUrl,
+                    audioDuration: savedMsg.audioDuration,
                     isEdited: false,
                     isDeleted: false,
                     isPinned: false,
@@ -1103,20 +1131,22 @@ export default function ChatPage() {
         socketRef.current?.emit('pin-message', { id: msg.id, isPinned, to: selectedUser });
     };
 
-    const scrollToMessage = (id: string) => {
-        const element = document.getElementById(`msg-${id}`);
-        if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const handleRetryMessage = (msg: Message) => {
+        // Update status to sending
+        setMessages(prev => prev.map(m => 
+            m.id === msg.id ? { ...m, status: 'sending' } : m
+        ));
 
-            setHighlightedMessageId(id);
-            setTimeout(() => setHighlightedMessageId(null), 2000);
-        }
-        setShowPinsDropdown(false);
+        // Retry immediately
+        retryFailedMessages();
+    };
+
+    const toggleAutoRetry = () => {
+        setAutoRetryEnabled(!autoRetryEnabled);
     };
 
     const handleClearData = () => {
-        localStorage.removeItem('webrtc-username');
-        localStorage.removeItem('webrtc-userId');
+        storageHelpers.clearUser();
         setUsername('');
         setSelectedUser(null);
         setMessages([]);
@@ -1126,6 +1156,17 @@ export default function ChatPage() {
             socketRef.current = null;
         }
         router.push('/');
+    };
+
+    const scrollToMessage = (id: string) => {
+        const element = document.getElementById(`msg-${id}`);
+        if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            setHighlightedMessageId(id);
+            setTimeout(() => setHighlightedMessageId(null), 2000);
+        }
+        setShowPinsDropdown(false);
     };
 
     const handleLogout = async () => {
@@ -1140,7 +1181,10 @@ export default function ChatPage() {
     const handleProfileUpdated = (newUsername?: string) => {
         if (newUsername) {
             setUsername(newUsername);
-            localStorage.setItem('webrtc-username', newUsername);
+            const currentUser = storageHelpers.getUser();
+            if (currentUser.userId) {
+                storageHelpers.saveUser(newUsername, currentUser.userId);
+            }
             socketRef.current?.emit('join-user', newUsername);
         }
     };
@@ -1214,27 +1258,24 @@ export default function ChatPage() {
                                             {pinnedMessages.slice().reverse().map((msg) => (
                                                 <div
                                                     key={msg.id}
-                                                    onClick={() => scrollToMessage(msg.id!)}
-                                                    className="px-4 py-3 border-b border-[#f0f2f5] last:border-0 hover:bg-[#f8f9fa] cursor-pointer flex flex-col gap-0.5 relative group/pin"
+                                                    className="p-3 border-b border-[#f0f2f5] hover:bg-[#f8f9fa] cursor-pointer"
+                                                    onClick={() => {
+                                                        setHighlightedMessageId(msg.id || '');
+                                                        setShowPinsDropdown(false);
+                                                    }}
                                                 >
-                                                    <div className="flex-1 min-w-0 pr-8">
-                                                        <span className="text-[11px] font-bold text-[#00a884]">
-                                                            {msg.from === username ? 'You' : msg.from}
-                                                        </span>
-                                                        <p className="text-[13px] text-[#111b21] line-clamp-2">
-                                                            {msg.message}
-                                                        </p>
+                                                    <div className="flex items-start gap-2">
+                                                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#00a884]/10 text-[#00a884] mt-1">
+                                                            <Pin size={12} className="fill-current" />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-[13px] font-medium text-[#111b21]">{msg.from}</p>
+                                                            <p className="text-[14px] text-[#3b4a54] break-words">{msg.message}</p>
+                                                            <p className="text-[11px] text-[#8696a0] mt-1">
+                                                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                            </p>
+                                                        </div>
                                                     </div>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handlePinMessage(msg);
-                                                        }}
-                                                        className="absolute right-4 top-1/2 -translate-y-1/2 p-2 hover:bg-black/5 rounded-full text-[#667781] transition-colors opacity-0 group-hover/pin:opacity-100"
-                                                        title="Unpin"
-                                                    >
-                                                        <X size={16} />
-                                                    </button>
                                                 </div>
                                             ))}
                                         </div>
@@ -1309,13 +1350,11 @@ export default function ChatPage() {
                 username={username}
                 onUsernameCreated={(u, userId) => {
                     setUsername(u);
-                    localStorage.setItem('webrtc-username', u);
-                    if (userId) localStorage.setItem('webrtc-userId', userId);
+                    storageHelpers.saveUser(u, userId);
                     socketRef.current?.emit('join-user', u);
                 }}
                 onClearData={() => {
-                    localStorage.removeItem('webrtc-username');
-                    localStorage.removeItem('webrtc-userId');
+                    storageHelpers.clearUser();
                     setUsername('');
                 }}
             />
