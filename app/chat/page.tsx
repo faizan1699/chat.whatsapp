@@ -350,6 +350,18 @@ export default function ChatPage() {
         }
     }, [username]);
 
+    // Also try to reload conversations if messages are empty and user is selected
+    useEffect(() => {
+        if (selectedUser && username && messages.length === 0) {
+            const cookies = getClientCookies();
+            const userId = cookies['user-id'] || localStorage.getItem('webrtc-userId');
+            if (userId) {
+                console.log('Messages empty, reloading conversations...');
+                loadConversations(userId);
+            }
+        }
+    }, [selectedUser, username]);
+
     // Load messages when user is selected
     useEffect(() => {
         if (selectedUser && username) {
@@ -371,16 +383,61 @@ export default function ChatPage() {
     };
 
     const loadMessages = async (selectedUsername: string) => {
+        console.log('Loading messages for:', selectedUsername);
+        console.log('Current conversations:', conversations);
+        
         try {
-            // Find conversation for this user
-            const currentConversation = conversations.find(c =>
+            // First try to find conversation in loaded conversations
+            let currentConversation = conversations.find(c =>
                 c.participants.some((p: any) => p.user.username === selectedUsername)
             );
 
+            console.log('Found conversation:', currentConversation);
+
+            // If not found, try to get/create conversation directly
+            if (!currentConversation) {
+                console.log('Conversation not found, trying to create...');
+                const cookies = getClientCookies();
+                const userId = cookies['user-id'] || localStorage.getItem('webrtc-userId');
+                
+                if (userId) {
+                    // Try to find conversation by participants
+                    const { data: selectedUserData } = await supabaseAdmin
+                        .from('users')
+                        .select('id')
+                        .eq('username', selectedUsername)
+                        .maybeSingle();
+
+                    console.log('Selected user data:', selectedUserData);
+
+                    if (selectedUserData) {
+                        const response = await fetch('/api/conversations', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                participantIds: [userId, selectedUserData.id]
+                            }),
+                        });
+
+                        if (response.ok) {
+                            currentConversation = await response.json();
+                            console.log('Created conversation:', currentConversation);
+                            // Add to conversations state
+                            setConversations(prev => [...prev, currentConversation]);
+                        }
+                    }
+                }
+            }
+
             if (currentConversation) {
+                console.log('Fetching messages for conversation:', currentConversation.id);
                 const response = await fetch(`/api/conversations/${currentConversation.id}/messages`);
                 if (response.ok) {
                     const messagesData = await response.json();
+                    console.log('Raw messages data:', messagesData);
+                    
                     // Format messages for frontend
                     const formattedMessages = messagesData.map((msg: any) => ({
                         id: msg.id,
@@ -389,18 +446,24 @@ export default function ChatPage() {
                         message: msg.content,
                         timestamp: msg.timestamp,
                         status: msg.status,
-                        isVoiceMessage: msg.isVoiceMessage,
-                        audioUrl: msg.audioUrl,
-                        audioDuration: msg.audioDuration,
-                        isDeleted: msg.isDeleted,
-                        isEdited: msg.isEdited,
-                        isPinned: msg.isPinned,
-                        replyTo: msg.replyTo,
-                        senderId: msg.senderId
+                        isVoiceMessage: msg.is_voice_message,
+                        audioUrl: msg.audio_url,
+                        audioDuration: msg.audio_duration,
+                        isDeleted: msg.is_deleted,
+                        isEdited: msg.is_edited,
+                        isPinned: msg.is_pinned,
+                        replyTo: msg.reply_to,
+                        senderId: msg.sender_id
                     }));
+                    console.log('Formatted messages:', formattedMessages);
                     setMessages(formattedMessages);
                     console.log('Loaded messages for', selectedUsername, ':', formattedMessages);
+                } else {
+                    console.error('Failed to load messages:', response.statusText);
                 }
+            } else {
+                console.log('No conversation found for', selectedUsername);
+                setMessages([]);
             }
         } catch (error) {
             console.error('Failed to load messages:', error);
@@ -833,6 +896,60 @@ export default function ChatPage() {
         if (input) input.focus();
     };
 
+    const handleUpdateMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingMessage || !inputMessage.trim() || !selectedUser) return;
+
+        const tempContent = inputMessage.trim();
+        setEditingMessage(null);
+        setInputMessage('');
+
+        try {
+            // Update message in database
+            const response = await fetch('/api/messages', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    messageId: editingMessage.id,
+                    content: tempContent,
+                    from: username,
+                    to: selectedUser
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to update message');
+            }
+
+            const updatedMsg = await response.json();
+
+            // Update local state
+            setMessages(prev => prev.map(msg => 
+                msg.id === editingMessage.id 
+                    ? { ...msg, message: tempContent, isEdited: true }
+                    : msg
+            ));
+
+            // Emit to recipient via socket
+            if (socketRef.current?.connected) {
+                socketRef.current.emit('message-edited', {
+                    id: editingMessage.id,
+                    message: tempContent,
+                    from: username,
+                    to: selectedUser
+                });
+            }
+
+        } catch (error) {
+            console.error('Failed to update message:', error);
+            // Restore editing state if failed
+            setEditingMessage(editingMessage);
+            setInputMessage(tempContent);
+        }
+    };
+
     const handleCancelEdit = () => {
         setEditingMessage(null);
         setInputMessage('');
@@ -1141,6 +1258,7 @@ export default function ChatPage() {
                                 setInputMessage={setInputMessage}
                                 onSendMessage={handleSendMessage}
                                 onSendVoice={handleSendVoice}
+                                onUpdateMessage={handleUpdateMessage}
                                 replyingTo={replyingTo}
                                 editingMessage={editingMessage}
                                 onCancelReply={() => setReplyingTo(null)}

@@ -47,6 +47,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             console.error('Message API error:', error);
             res.status(500).json({ error: 'Failed to send message' });
         }
+    } else if (req.method === 'PUT') {
+        const { messageId, content, from, to } = req.body;
+
+        try {
+            const { data: message, error } = await supabaseAdmin
+                .from('messages')
+                .update({
+                    content: content,
+                    is_edited: true,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', messageId)
+                .select('*')
+                .single();
+
+            if (error) throw error;
+
+            // Emit socket event for real-time update
+            if (to && from && (res.socket as SocketWithIO)?.server?.io) {
+                const io = (res.socket as SocketWithIO).server.io!;
+                
+                // Find recipient's socket and send update
+                const allusers = (io as any)._nsps?.get('/')?.sockets || new Map();
+                
+                Object.values(allusers).forEach((socket: any) => {
+                    if (socket.username === to) {
+                        socket.emit('message-edited', {
+                            id: message.id,
+                            message: content,
+                            from: from,
+                            to: to
+                        });
+                    }
+                });
+            }
+
+            res.status(200).json({
+                id: message.id,
+                content: message.content,
+                isEdited: message.is_edited,
+                updatedAt: message.updated_at
+            });
+        } catch (error) {
+            console.error('Message update error:', error);
+            res.status(500).json({ error: 'Failed to update message' });
+        }
     } else {
         res.status(405).end();
     }
