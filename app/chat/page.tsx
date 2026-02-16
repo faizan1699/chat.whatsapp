@@ -419,7 +419,7 @@ export default function ChatPage() {
                     const formattedMessages = messagesData.map((msg: any) => ({
                         id: msg.id,
                         from: msg.sender?.username || 'Unknown',
-                        to: msg.sender?.username === username ? selectedUsername : msg.sender?.username,
+                        to: msg.sender?.username === username ? selectedUsername : username,
                         message: msg.content,
                         timestamp: msg.timestamp,
                         status: msg.status,
@@ -1483,6 +1483,8 @@ export default function ChatPage() {
                 username,
                 selectedUser,
                 shouldInclude,
+                isSentMessage: msg.from === username,
+                isReceivedMessage: msg.from === selectedUser,
                 message: msg.message?.substring(0, 20) + '...'
             });
             return shouldInclude;
@@ -1501,7 +1503,9 @@ export default function ChatPage() {
             id: m.id,
             from: m.from,
             to: m.to,
-            message: m.message?.substring(0, 20) + '...'
+            message: m.message?.substring(0, 20) + '...',
+            isSent: m.from === username,
+            isReceived: m.from === selectedUser
         }))
     });
 
