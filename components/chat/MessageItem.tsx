@@ -256,19 +256,40 @@ export default function MessageItem({
                                         ref={deleteMenuRef}
                                         className="absolute top-full right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border border-gray-100 z-50 overflow-hidden"
                                     >
-                                        <button
-                                            onClick={() => {
-                                                message.id && onDelete?.(message.id, 'me');
-                                                setShowDeleteMenu(false);
-                                            }}
-                                            className="w-full px-4 py-2 text-left text-[13px] text-gray-700 hover:bg-gray-50 transition-colors"
-                                        >
-                                            Delete for me
-                                        </button>
+                                        {message.isHidden ? (
+                                            <button
+                                                onClick={() => {
+                                                    console.log('👁️ Unhide message clicked:', message.id);
+                                                    if (message.id) {
+                                                        onUnhide?.(message.id);
+                                                    }
+                                                    setShowDeleteMenu(false);
+                                                }}
+                                                className="w-full px-4 py-2 text-left text-[13px] text-[#00a884] hover:bg-green-50 transition-colors"
+                                            >
+                                                Unhide message
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => {
+                                                    console.log('🙈 Hide message for me clicked:', message.id);
+                                                    if (message.id) {
+                                                        onDelete?.(message.id, 'me');
+                                                    }
+                                                    setShowDeleteMenu(false);
+                                                }}
+                                                className="w-full px-4 py-2 text-left text-[13px] text-gray-700 hover:bg-gray-50 transition-colors"
+                                            >
+                                                Hide for me
+                                            </button>
+                                        )}
                                         {isMe && (
                                             <button
                                                 onClick={() => {
-                                                    message.id && onDelete?.(message.id, 'everyone');
+                                                    console.log('🗑️ Delete for everyone clicked:', message.id);
+                                                    if (message.id) {
+                                                        onDelete?.(message.id, 'everyone');
+                                                    }
                                                     setShowDeleteMenu(false);
                                                 }}
                                                 className="w-full px-4 py-2 text-left text-[13px] text-red-600 hover:bg-red-50 transition-colors"

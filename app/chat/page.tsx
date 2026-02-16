@@ -1287,12 +1287,29 @@ export default function ChatPage() {
         }
     };
 
-    const handleDeleteMessage = (id: string, type: 'me' | 'everyone') => {
-        if (type === 'me') {
-            setMessages(prev => prev.filter(m => m.id !== id));
-        } else {
-            setMessages(prev => prev.map(m => m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m));
-            socketRef.current?.emit('delete-message', { id, to: selectedUser });
+    const handleDeleteMessage = async (id: string, type: 'me' | 'everyone') => {
+        try {
+            if (type === 'me') {
+                // Delete for me - hide message for current user only
+                setMessages(prev => prev.map(m => 
+                    m.id === id ? { ...m, isHidden: true } : m
+                ));
+                console.log('� Hidden message for current user:', id);
+            } else {
+                // Delete for everyone - remove from database completely
+                // Update local state immediately for better UX (show as deleted)
+                setMessages(prev => prev.map(m => 
+                    m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m
+                ));
+                
+                // Send socket event to delete from database
+                if (socketRef.current && selectedUser) {
+                    socketRef.current?.emit('delete-message', { id, to: selectedUser });
+                    console.log('🗑️ Deleting message from database for everyone:', id, 'to:', selectedUser);
+                }
+            }
+        } catch (error) {
+            console.error('❌ Failed to delete message:', error);
         }
     };
 
