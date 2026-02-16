@@ -31,45 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             if (error) throw error;
 
-            // Trigger socket emission after saving to database
-            if (to && from && (res.socket as SocketWithIO)?.server?.io) {
-                const io = (res.socket as SocketWithIO).server.io!;
-                
-                // Get user IDs from usernames
-                const { data: fromUser } = await supabaseAdmin
-                    .from('users')
-                    .select('id')
-                    .eq('username', from)
-                    .single();
-                const { data: toUser } = await supabaseAdmin
-                    .from('users')
-                    .select('id')
-                    .eq('username', to)
-                    .single();
-
-                if (fromUser && toUser) {
-                    // Get the allusers object from socket.io instance
-                    const allusers = (io as any)._nsps?.get('/')?.sockets || new Map();
-                    
-                    // Find recipient's socket and send message directly
-                    Object.values(allusers).forEach((socket: any) => {
-                        if (socket.username === to) {
-                            socket.emit('receive-message', {
-                                id: message.id,
-                                from,
-                                to,
-                                message: content,
-                                timestamp: message.timestamp,
-                                status: 'sent',
-                                isVoiceMessage: !!isVoice,
-                                audioUrl,
-                                audioDuration
-                            });
-                        }
-                    });
-                }
-            }
-
+            // Return the saved message - frontend will handle socket emission
             res.status(201).json({
                 id: message.id,
                 conversationId: message.conversation_id,

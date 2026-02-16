@@ -766,17 +766,45 @@ export default function ChatPage() {
                 currentConversation = await convResponse.json();
             }
 
-            // 2. Send via socket for real-time delivery
+            // 2. Send to API which will save to DB and trigger socket
+            const response = await fetch('/api/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    conversationId: currentConversation.id,
+                    senderId: cookies['user-id'] || localStorage.getItem('webrtc-userId'),
+                    content: tempContent,
+                    to: selectedUser,
+                    from: username
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to send message');
+            }
+
+            const savedMsg = await response.json();
+
+            // 3. Update local state with the saved message
+            setMessages(prev => [...prev, {
+                ...savedMsg,
+                from: username,
+                to: selectedUser,
+                message: tempContent,
+                timestamp: new Date(savedMsg.timestamp),
+                status: 'sent'
+            }]);
+
+            // 4. Emit to recipient via socket
             if (socketRef.current?.connected) {
-                // Generate temporary ID for the message
-                const tempId = `temp-${Date.now()}`;
-                
-                socketRef.current.emit('send-message-api', {
-                    id: tempId,
+                socketRef.current.emit('send-message', {
+                    id: savedMsg.id,
                     from: username,
                     to: selectedUser,
                     message: tempContent,
-                    timestamp: new Date().toISOString(),
+                    timestamp: savedMsg.timestamp,
                     status: 'sent',
                     isVoiceMessage: false,
                     isEdited: false,
@@ -786,22 +814,6 @@ export default function ChatPage() {
                     groupId: null,
                     chunkIndex: null,
                     totalChunks: null
-                }, (response: any) => {
-                    if (response.status === 'error') {
-                        console.error('Failed to send message:', response.message);
-                        // Restore input message if failed
-                        setInputMessage(tempContent);
-                    } else {
-                        // Add message to local state on successful send
-                        setMessages(prev => [...prev, {
-                            id: response.id || tempId,
-                            from: username,
-                            to: selectedUser,
-                            message: tempContent,
-                            timestamp: new Date(response.timestamp || new Date()),
-                            status: 'sent'
-                        }]);
-                    }
                 });
             }
 
@@ -907,6 +919,28 @@ export default function ChatPage() {
                 audioUrl: publicUrl,
                 audioDuration: duration
             }]);
+
+            // 5. Emit to recipient via socket
+            if (socketRef.current?.connected) {
+                socketRef.current.emit('send-message', {
+                    id: savedMsg.id,
+                    from: username,
+                    to: selectedUser,
+                    message: '🎤 Voice message',
+                    timestamp: savedMsg.timestamp,
+                    status: 'sent',
+                    isVoiceMessage: true,
+                    audioUrl: publicUrl,
+                    audioDuration: duration,
+                    isEdited: false,
+                    isDeleted: false,
+                    isPinned: false,
+                    replyTo: null,
+                    groupId: null,
+                    chunkIndex: null,
+                    totalChunks: null
+                });
+            }
 
         } catch (error) {
             console.error('Failed to send voice message:', error);
