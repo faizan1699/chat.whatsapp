@@ -1,10 +1,23 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../utils/supabase-server';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import { SignJWT, JWTPayload } from 'jose';
 import { serialize } from 'cookie';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_dont_use_in_production';
+const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback_secret_dont_use_in_production');
+const refreshSecret = new TextEncoder().encode(process.env.JWT_REFRESH_SECRET || 'fallback_refresh_secret_dont_use_in_production');
+
+interface SessionPayload extends JWTPayload {
+    userId: string;
+    username: string;
+    type: 'access';
+}
+
+interface RefreshTokenPayload extends JWTPayload {
+    userId: string;
+    username: string;
+    type: 'refresh';
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'POST') {
@@ -39,18 +52,70 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
-        const token = jwt.sign(
-            { userId: user.id, username: user.username },
-            JWT_SECRET,
-            { expiresIn: '7d' }
-        );
+        // Create access token (1 hour)
+        const accessPayload: SessionPayload = {
+            userId: user.id,
+            username: user.username,
+            type: 'access'
+        };
 
-        // Prepare user update data for consent
+        const accessToken = await new SignJWT(accessPayload)
+            .setProtectedHeader({ alg: 'HS256' })
+            .setIssuedAt()
+            .setExpirationTime('1h')
+            .sign(secret);
+
+        // Create refresh token (30 days)
+        const refreshPayload: RefreshTokenPayload = {
+            userId: user.id,
+            username: user.username,
+            type: 'refresh'
+        };
+
+        const refreshToken = await new SignJWT(refreshPayload)
+            .setProtectedHeader({ alg: 'HS256' })
+            .setIssuedAt()
+            .setExpirationTime('30d')
+            .sign(refreshSecret);
+
+        // Set cookies using NextResponse
+        const isProduction = process.env.NODE_ENV === 'production';
+
+        res.setHeader('Set-Cookie', [
+            serialize('access_token', accessToken, {
+                httpOnly: true,
+                secure: isProduction,
+                sameSite: 'strict',
+                maxAge: 60 * 60, // 1 hour
+                path: '/',
+            }),
+            serialize('refresh_token', refreshToken, {
+                httpOnly: true,
+                secure: isProduction,
+                sameSite: 'strict',
+                maxAge: 60 * 60 * 24 * 30, // 30 days
+                path: '/',
+            }),
+            serialize('user-id', user.id, {
+                httpOnly: true,
+                secure: isProduction,
+                sameSite: 'strict',
+                maxAge: 60 * 60 * 24 * 30,
+                path: '/',
+            }),
+            serialize('username', user.username, {
+                httpOnly: true,
+                secure: isProduction,
+                sameSite: 'strict',
+                maxAge: 60 * 60 * 24 * 30,
+                path: '/',
+            }),
+        ]);
+
         const updateData: any = {
             updatedAt: new Date().toISOString()
         };
 
-        // Update terms acceptance if provided
         if (termsAccepted !== undefined) {
             updateData.termsAccepted = termsAccepted;
             updateData.termsAcceptedAt = termsAccepted ? new Date().toISOString() : null;
@@ -62,56 +127,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             updateData.cookieConsentAt = new Date().toISOString();
         }
 
-        // Update user record with consent information
+        // Update user record with consent information (skip if columns don't exist)
         if (Object.keys(updateData).length > 1) {
-            const { error: updateError } = await supabaseAdmin
-                .from('users')
-                .update(updateData)
-                .eq('id', user.id);
-
-            if (updateError) {
-                console.error('Error updating user consent:', updateError);
-                // Don't fail login if consent update fails
+            try {
+                await supabaseAdmin
+                    .from('users')
+                    .update(updateData)
+                    .eq('id', user.id);
+            } catch (updateError) {
+                console.error('Error updating user consent (columns might not exist):', updateError);
             }
         }
 
-        // Set multiple cookies for session management
-        const cookies = [
-            serialize('auth-token', token, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
-                maxAge: 60 * 60 * 24 * 7,
-                path: '/',
-            }),
-            serialize('user-id', user.id, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
-                maxAge: 60 * 60 * 24 * 7,
-                path: '/',
-            }),
-            serialize('username', user.username, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
-                maxAge: 60 * 60 * 24 * 7,
-                path: '/',
-            })
-        ];
-
-        res.setHeader('Set-Cookie', cookies);
         return res.status(200).json({
             message: 'Logged in successfully',
-            user: { 
-                id: user.id, 
-                username: user.username, 
-                email: user.email, 
-                phoneNumber: user.phone_number,
-                termsAccepted: user.termsAccepted,
-                termsAcceptedAt: user.termsAcceptedAt,
-                cookieConsent: user.cookieConsent,
-                cookieConsentAt: user.cookieConsentAt
+            accessToken,
+            refreshToken,
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                phoneNumber: user.phone_number
             }
         });
 

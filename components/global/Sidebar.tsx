@@ -4,7 +4,6 @@ import { Plus, X, Search as SearchIcon, LogOut, User } from 'lucide-react';
 import UserSearch from '../chat/UserSearch';
 import { apiService } from '@/services/apiService';
 
-// Skeleton placeholder component
 const UserSkeleton = () => (
     <div className="group relative flex w-full items-center gap-3 border-b border-[#f0f2f5] px-3 py-4">
         <div className="relative h-12 w-12 flex-shrink-0">
