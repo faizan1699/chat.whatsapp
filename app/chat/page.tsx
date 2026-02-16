@@ -359,34 +359,12 @@ export default function ChatPage() {
         return () => clearInterval(interval);
     }, []);
 
-    // Mark messages as read when user opens conversation
-    const markMessagesAsRead = async (conversationId: string) => {
-        try {
-            const response = await fetch(`/api/conversations/${conversationId}/messages/read`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    userId: getClientCookies()['user-id'] || SecureSession.getUserId()
-                })
-            });
-
-            if (response.ok) {
-                console.log('✅ Messages marked as read');
-                // Update local message states
-                setMessages(prev => prev.map(m =>
-                    m.from === selectedUser ? { ...m, status: 'read' } : m
-                ));
-            }
-        } catch (error) {
-            console.error('❌ Failed to mark messages as read:', error);
-        }
-    };
+    // Mark messages as read function removed - using WebSocket instead
 
     const loadMessages = async (selectedUsername: string) => {
         try {
             console.log('🔄 Loading messages for:', selectedUsername);
+            console.log('🔄 Current conversations:', conversations.length);
 
             // Find conversation for this user
             let currentConversation = conversations.find(c =>
@@ -486,7 +464,19 @@ export default function ChatPage() {
                     })));
 
                     if (currentConversation && unreadCounts[selectedUsername] > 0) {
-                        markMessagesAsRead(currentConversation.id);
+                        // Use WebSocket instead of HTTP API
+                        const unreadMsgs = messages.filter(m => 
+                            m.from === selectedUsername && m.status !== 'read' && m.to === username
+                        );
+                        
+                        if (unreadMsgs.length > 0 && socketRef.current) {
+                            unreadMsgs.forEach(msg => {
+                                if (msg.id) {
+                                    socketRef.current?.emit('mark-read', { messageId: msg.id, to: msg.from });
+                                }
+                            });
+                        }
+                        
                         setUnreadCounts(prev => ({
                             ...prev,
                             [selectedUsername]: 0
@@ -529,6 +519,11 @@ export default function ChatPage() {
             try {
                 // Check session using frontend auth utility
                 const storedSession = frontendAuth.getSession();
+                console.log('🔐 Checking authentication:', {
+                    storedSession: storedSession,
+                    hasSession: !!storedSession,
+                    username: storedSession?.user?.username
+                });
                 
                 if (storedSession) {
                     console.log('✅ User authenticated:', storedSession.user.username);

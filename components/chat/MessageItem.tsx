@@ -153,7 +153,7 @@ export default function MessageItem({
             id={`msg-${message.id}`}
             className={`group flex w-full mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}
             onMouseEnter={() => setShowActions(true)}
-            onMouseLeave={() => setShowActions(true)}
+            onMouseLeave={() => setShowActions(false)}
         >
             <div className={`flex flex-col max-w-[85%] md:max-w-[65%] ${isMe ? 'items-end' : 'items-start'}`}>
                 {/* Message bubble */}
