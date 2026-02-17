@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import prisma from '../../../utils/prisma';
+import { supabaseAdmin } from '../../../utils/supabase-server';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     const { id } = req.query;
@@ -7,14 +7,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'DELETE') {
         try {
-            await prisma.message.update({
-                where: { id },
-                data: {
-                    isDeleted: true,
+            await supabaseAdmin
+                .from('messages')
+                .update({
+                    is_deleted: true,
                     content: '',
-                    audioUrl: null
-                }
-            });
+                    audio_url: null,
+                })
+                .eq('id', id);
+
             res.status(200).json({ success: true });
         } catch (error) {
             res.status(500).json({ error: 'Failed to delete message' });
@@ -22,10 +23,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } else if (req.method === 'PATCH') {
         const { status } = req.body;
         try {
-            await prisma.message.update({
-                where: { id },
-                data: { status }
-            });
+            await supabaseAdmin
+                .from('messages')
+                .update({ status })
+                .eq('id', id);
+
             res.status(200).json({ success: true });
         } catch (error) {
             res.status(500).json({ error: 'Failed to update status' });

@@ -83,7 +83,7 @@ export default function LandingPage() {
 
       {/* Features Section */}
       <section id="features" className="py-24 sm:py-32">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-screen overflow-auto">
           <div className="mb-20 text-center">
             <h2 className="text-base font-bold uppercase tracking-widest text-emerald-600">Built for Quality</h2>
             <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">Everything you need for seamless communication</p>
@@ -169,7 +169,23 @@ export default function LandingPage() {
               </div>
               <span className="text-lg font-bold text-slate-900">NexChat</span>
             </div>
-            <p className="text-sm text-slate-500">© 2024 NexChat App. All rights reserved by faizan169.</p>
+            <div className="flex flex-wrap justify-center gap-6 text-sm">
+              <Link href="/legal/privacy-policy" className="text-slate-500 hover:text-emerald-600 transition-colors">
+                Privacy Policy
+              </Link>
+              <Link href="/legal/user-agreement" className="text-slate-500 hover:text-emerald-600 transition-colors">
+                User Agreement
+              </Link>
+              <Link href="/legal/data-usage" className="text-slate-500 hover:text-emerald-600 transition-colors">
+                Data Usage
+              </Link>
+              <Link href="/faq" className="text-slate-500 hover:text-emerald-600 transition-colors">
+                FAQs
+              </Link>
+              <Link href="/pricing" className="text-slate-500 hover:text-emerald-600 transition-colors">
+                Pricing
+              </Link>
+            </div>
             <div className="flex gap-6">
               <button className="text-slate-400 hover:text-emerald-500"><Github size={20} /></button>
               <button className="text-slate-400 hover:text-emerald-500">
@@ -177,6 +193,7 @@ export default function LandingPage() {
               </button>
             </div>
           </div>
+          <p className="text-sm text-slate-500 mt-6">© 2024 NexChat App. All rights reserved by faizan169.</p>
         </div>
       </footer>
     </div>

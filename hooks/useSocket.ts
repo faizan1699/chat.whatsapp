@@ -8,7 +8,7 @@ export const useSocket = () => {
 
   useEffect(() => {
     socketRef.current = io({
-      path: '/api/socket/io',
+      path: '/api/socket',
     });
 
     return () => {

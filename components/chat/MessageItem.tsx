@@ -1,27 +1,8 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Reply, Trash2, Pin, ChevronDown, Play, Pause, Pencil } from 'lucide-react';
-
-export interface Message {
-    id?: string;
-    from: string;
-    to: string;
-    message: string;
-    timestamp: Date;
-    status?: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
-    replyTo?: Message;
-    isPinned?: boolean;
-    audioUrl?: string;
-    audioDuration?: number;
-    isVoiceMessage?: boolean;
-    isEdited?: boolean;
-    // Chunking metadata
-    groupId?: string;
-    chunkIndex?: number;
-    totalChunks?: number;
-    isDeleted?: boolean;
-}
+import { Reply, Trash2, Pin, ChevronDown, Play, Pause, Pencil, Eye, EyeOff } from 'lucide-react';
+import { Message, ReplyTo } from '@/types/message';
 
 interface MessageItemProps {
     message: Message;
@@ -31,7 +12,12 @@ interface MessageItemProps {
     onDelete?: (id: string, type: 'me' | 'everyone') => void;
     onPin?: (msg: Message) => void;
     onEdit?: (msg: Message) => void;
+    onUpdateMessage?: (msg: Message) => void;
+    onHide?: (id: string) => void;
+    onUnhide?: (id: string) => void;
     isHighlighted?: boolean;
+    highlightKey?: number;
+    failedMessagesCount?: number;
 }
 
 export default function MessageItem({
@@ -42,7 +28,11 @@ export default function MessageItem({
     onDelete,
     onPin,
     onEdit,
-    isHighlighted
+    onHide,
+    onUnhide,
+    isHighlighted,
+    highlightKey,
+    failedMessagesCount
 }: MessageItemProps) {
     const [visibleWords, setVisibleWords] = useState(30);
     const [showActions, setShowActions] = useState(false);
@@ -58,10 +48,36 @@ export default function MessageItem({
     const hasMore = words.length > visibleWords;
 
     const formatTimestamp = (date: Date) => {
-        return new Date(date).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
+        const now = new Date();
+        const messageDate = new Date(date);
+        const isToday = messageDate.toDateString() === now.toDateString();
+        
+        if (isToday) {
+            return messageDate.toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        } else {
+            return messageDate.toLocaleDateString([], {
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+    };
+
+    const formatDateLabel = (date: Date) => {
+        const now = new Date();
+        const messageDate = new Date(date);
+        const isToday = messageDate.toDateString() === now.toDateString();
+        const isYesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toDateString() === messageDate.toDateString();
+        
+        if (isToday) return 'Today';
+        if (isYesterday) return 'Yesterday';
+        return messageDate.toLocaleDateString([], {
+            weekday: 'long',
+            month: 'short',
+            day: 'numeric'
         });
     };
 
@@ -141,15 +157,32 @@ export default function MessageItem({
             onMouseEnter={() => setShowActions(true)}
             onMouseLeave={() => setShowActions(false)}
         >
-            <div
-                className={`flex flex-col max-w-[85%] md:max-w-[65%] px-2 py-1 shadow-sm relative ${isMe
-                    ? 'rounded-l-lg rounded-br-lg bg-[#d9fdd3] text-[#111b21] ml-10'
-                    : 'rounded-r-lg rounded-bl-lg bg-white text-[#111b21] mr-10'
-                    } ${message.status === 'failed' ? 'bg-red-50 border border-red-200' : ''} ${isHighlighted ? 'highlight-message' : ''}`}
-            >
+            <div className={`flex flex-col max-w-[85%] md:max-w-[65%] ${isMe ? 'items-end' : 'items-start'}`}>
+                {/* Message bubble */}
+                <div
+                    className={`flex flex-col px-2 py-1 shadow-sm relative ${isMe
+                        ? 'rounded-l-lg rounded-br-lg bg-[#d9fdd3] text-[#111b21] ml-10'
+                        : 'rounded-r-lg rounded-bl-lg bg-white text-[#111b21] mr-10'
+                        } ${message.status === 'failed' ? 'bg-red-50 border border-red-200' : ''} ${isHighlighted ? 'highlight-message' : ''}`}
+                >
                 {/* Reply Context */}
                 {message.replyTo && (
-                    <div className="mb-1 border-l-4 border-[#06cf9c] bg-black/5 p-2 rounded text-[12px] opacity-80">
+                    <div 
+                        onClick={() => {
+                            // Scroll to the original message
+                            const originalMsgElement = document.getElementById(`msg-${message.replyTo?.id}`);
+                            if (originalMsgElement) {
+                                originalMsgElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                // Add highlight effect
+                                originalMsgElement.classList.add('highlight-message-reply');
+                                setTimeout(() => {
+                                    originalMsgElement.classList.remove('highlight-message-reply');
+                                }, 2000);
+                            }
+                        }}
+                        className="mb-1 border-l-4 border-[#06cf9c] bg-black/5 p-2 rounded text-[12px] opacity-80 cursor-pointer hover:bg-black/10 transition-colors"
+                        title="Go to original message"
+                    >
                         <p className="font-bold text-[#06cf9c]">{message.replyTo.from === message.from ? 'You' : message.replyTo.from}</p>
                         <p className="truncate text-[#54656f]">{message.replyTo.message}</p>
                     </div>
@@ -189,6 +222,29 @@ export default function MessageItem({
                             >
                                 <Pin size={16} className={message.isPinned ? 'fill-current' : ''} />
                             </button>
+                            {!isMe && (
+                                <button
+                                    onClick={() => {
+                                        console.log('👁️ Hide/Unhide button clicked:', {
+                                            messageId: message.id,
+                                            isHidden: message.isHidden,
+                                            from: message.from,
+                                            isMe: isMe
+                                        });
+                                        if (message.id) {
+                                            if (message.isHidden) {
+                                                onUnhide?.(message.id);
+                                            } else {
+                                                onHide?.(message.id);
+                                            }
+                                        }
+                                    }}
+                                    className={`p-1.5 hover:bg-black/5 rounded-full transition-colors ${message.isHidden ? 'text-[#00a884]' : 'text-[#667781]'}`}
+                                    title={message.isHidden ? 'Unhide message' : 'Hide message'}
+                                >
+                                    {message.isHidden ? <Eye size={16} /> : <EyeOff size={16} />}
+                                </button>
+                            )}
                             <div className="relative">
                                 <button
                                     onClick={() => setShowDeleteMenu(!showDeleteMenu)}
@@ -202,19 +258,40 @@ export default function MessageItem({
                                         ref={deleteMenuRef}
                                         className="absolute top-full right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border border-gray-100 z-50 overflow-hidden"
                                     >
-                                        <button
-                                            onClick={() => {
-                                                message.id && onDelete?.(message.id, 'me');
-                                                setShowDeleteMenu(false);
-                                            }}
-                                            className="w-full px-4 py-2 text-left text-[13px] text-gray-700 hover:bg-gray-50 transition-colors"
-                                        >
-                                            Delete for me
-                                        </button>
+                                        {message.isHidden ? (
+                                            <button
+                                                onClick={() => {
+                                                    console.log('👁️ Unhide message clicked:', message.id);
+                                                    if (message.id) {
+                                                        onUnhide?.(message.id);
+                                                    }
+                                                    setShowDeleteMenu(false);
+                                                }}
+                                                className="w-full px-4 py-2 text-left text-[13px] text-[#00a884] hover:bg-green-50 transition-colors"
+                                            >
+                                                Unhide message
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => {
+                                                    console.log('🙈 Hide message for me clicked:', message.id);
+                                                    if (message.id) {
+                                                        onDelete?.(message.id, 'me');
+                                                    }
+                                                    setShowDeleteMenu(false);
+                                                }}
+                                                className="w-full px-4 py-2 text-left text-[13px] text-gray-700 hover:bg-gray-50 transition-colors"
+                                            >
+                                                Hide for me
+                                            </button>
+                                        )}
                                         {isMe && (
                                             <button
                                                 onClick={() => {
-                                                    message.id && onDelete?.(message.id, 'everyone');
+                                                    console.log('🗑️ Delete for everyone clicked:', message.id);
+                                                    if (message.id) {
+                                                        onDelete?.(message.id, 'everyone');
+                                                    }
                                                     setShowDeleteMenu(false);
                                                 }}
                                                 className="w-full px-4 py-2 text-left text-[13px] text-red-600 hover:bg-red-50 transition-colors"
@@ -231,7 +308,18 @@ export default function MessageItem({
 
                 {/* Message Content */}
                 <div className="flex flex-col pr-2">
-                    {message.isDeleted ? (
+                    {message.isHidden ? (
+                        <div className="flex items-center gap-2 py-1 text-[#667781] italic text-[13px]">
+                            <EyeOff size={14} className="opacity-60" />
+                            <span>This message is hidden</span>
+                            <button
+                                onClick={() => message.id && onUnhide?.(message.id)}
+                                className="text-[#00a884] hover:underline text-[12px] ml-auto"
+                            >
+                                Show
+                            </button>
+                        </div>
+                    ) : message.isDeleted ? (
                         <div className="flex items-center gap-2 py-1 text-[#667781] italic text-[13px]">
                             <span className="opacity-60 text-[12px]">🚫</span>
                             <span>This message was deleted</span>
@@ -300,8 +388,8 @@ export default function MessageItem({
                     )}
 
                     {/* Meta data (Time + Status) */}
-                    <div className="flex items-center gap-1 ml-auto pt-1 h-4">
-                        <span className="text-[10px] text-[#667781] whitespace-nowrap uppercase">
+                    <div className="flex items-center gap-1 ml-auto pt-1 h-5">
+                        <span className="text-[11px] text-[#667781] whitespace-nowrap">
                             {formatTimestamp(message.timestamp)}
                         </span>
                         {message.isEdited && (
@@ -311,17 +399,17 @@ export default function MessageItem({
                         )}
 
                         {isMe && message.status && (
-                            <span className={`flex items-center text-[11px] font-bold transition-colors
-                             ${message.status === 'read' ? 'text-green-500'
+                            <span className={`flex items-center text-[12px] transition-colors
+                             ${message.status === 'read' ? 'text-[#53bdeb]'
                                     : message.status === 'failed' ? 'text-red-500'
                                         : message.status === 'pending'
                                             ? 'text-gray-400'
-                                            : 'text-gray-500'
+                                            : 'text-[#667781]'
                                 }`
                             }
                             >
                                 {message.status === 'pending' ? (
-                                    <div className="w-[11px] h-[11px] border-2 border-[#667781]/20 border-t-[#667781] rounded-full animate-spin"></div>
+                                    <div className="w-[12px] h-[12px] border-2 border-[#667781]/20 border-t-[#667781] rounded-full animate-spin"></div>
                                 ) : (
                                     {
                                         failed: '!',
@@ -336,13 +424,18 @@ export default function MessageItem({
                 </div>
 
                 {/* Retry Button for Failed Messages */}
-                {message.status === 'failed' && isMe && (
+                {message.status === 'failed' && isMe && (failedMessagesCount || 0) === 1 && (
                     <button
                         onClick={() => onRetry?.(message)}
                         className="text-[10px] text-red-500 underline text-left mt-1 hover:text-red-600 transition-colors"
                     >
                         Failed to send. Click to retry.
                     </button>
+                )}
+                {message.status === 'failed' && isMe && (failedMessagesCount || 0) > 1 && (
+                    <div className="text-[10px] text-orange-500 text-left mt-1">
+                        Retrying failed messages automatically...
+                    </div>
                 )}
 
                 {/* Tail Decoration (Simplified) */}
@@ -354,6 +447,7 @@ export default function MessageItem({
                             ? 'polygon(0 0, 0 100%, 100% 0)'
                             : 'polygon(100% 0, 100% 100%, 0 0)'
                     }} />
+                </div>
             </div>
         </div >
     );

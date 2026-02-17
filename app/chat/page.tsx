@@ -1,24 +1,32 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
 import { Pin, ChevronDown, X } from 'lucide-react';
-import VideoCall from '@/components/video/VideoCall';
+import { frontendAuth } from '@/utils/frontendAuth';
 import IncomingCallModal from '@/components/video/IncomingCallModal';
-import MessageItem, { Message } from '@/components/chat/MessageItem';
+import MessageItem from '@/components/chat/MessageItem';
+import { Message, ReplyTo } from '@/types/message';
 import CallNotification from '@/components/video/CallNotification';
 import Sidebar from '@/components/global/Sidebar';
 import ResizableSidebar from '@/components/global/ResizableSidebar';
-import ChatHeader from '@/components/chat/ChatHeader';
+import { getClientCookies } from '@/utils/cookies';
+import AuthOverlay from '@/components/global/AuthOverlay';
+import EditProfileModal from '@/components/global/EditProfileModal';
+import FullPageLoader from '@/components/global/FullPageLoader';
+import { SecureSession } from '@/utils/secureSession';
+import { useMessageApi } from '@/hooks/useMessageApi';
+import { useSocket } from '@/hooks/useSocket';
+import { storageHelpers, STORAGE_KEYS, chatStorage } from '@/utils/storage';
+import { supabaseAdmin } from '@/utils/supabase-server';
+import { uploadAudio } from '@/utils/supabase';
+import api from '@/utils/api';
 import ChatFooter from '@/components/chat/ChatFooter';
-import MessageList from '@/components/chat/MessageList';
 import EmptyChatState from '@/components/chat/EmptyChatState';
 import CallOverlay from '@/components/video/CallOverlay';
-import AuthOverlay from '@/components/global/AuthOverlay';
-import FullPageLoader from '@/components/global/FullPageLoader';
-import { apiService } from '@/services/apiService';
-import { uploadAudio } from '@/utils/supabase';
+import MessageList from '@/components/chat/MessageList';
+import ChatHeader from '@/components/chat/ChatHeader';
 
 interface User {
     [key: string]: string;
@@ -48,6 +56,22 @@ export default function ChatPage() {
 
     const [isWindowFocused, setIsWindowFocused] = useState<boolean>(true);
     const isWindowFocusedRef = useRef(true);
+    const [autoRetryEnabled, setAutoRetryEnabled] = useState<boolean>(true);
+    const [retryInterval, setRetryInterval] = useState<NodeJS.Timeout | null>(null);
+    const [isConversationsLoading, setIsConversationsLoading] = useState<boolean>(false);
+
+    // Message API hook
+    const {
+        sendMessage,
+        sendVoiceMessage,
+        updateMessage,
+        deleteMessage,
+        pinMessage,
+        fetchMessages,
+        retryMessage,
+        loading: messageLoading,
+        error: messageError
+    } = useMessageApi();
 
     // Call States
     const [isCallActive, setIsCallActive] = useState<boolean>(false);
@@ -64,6 +88,18 @@ export default function ChatPage() {
     const [callParticipant, setCallParticipant] = useState<string>('');
     const [unreadCounts, setUnreadCounts] = useState<{ [key: string]: number }>({});
     const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+    const [showEditProfile, setShowEditProfile] = useState(false);
+
+    // Clear highlighted message after animation
+    useEffect(() => {
+        if (highlightedMessageId) {
+            const timer = setTimeout(() => {
+                setHighlightedMessageId(null);
+            }, 2500); // 2.5 seconds to match animation duration
+
+            return () => clearTimeout(timer);
+        }
+    }, [highlightedMessageId]);
 
     // Refs
     const localStreamRef = useRef<MediaStream | null>(null);
@@ -83,7 +119,18 @@ export default function ChatPage() {
         isWindowFocusedRef.current = isWindowFocused;
     }, [isWindowFocused]);
 
-    // Clear unread counts when user is selected
+    // Extract unique users from conversations
+    const conversationUsers = conversations.reduce((acc: { [key: string]: string }, conv) => {
+        conv.participants.forEach((p: any) => {
+            if (p.user.username !== username) {
+                acc[p.user.username] = p.user.id;
+            }
+        });
+        return acc;
+    }, {});
+
+    // Merge online users with conversation users
+    const allUsers = { ...conversationUsers, ...users };
     useEffect(() => {
         if (selectedUser) {
             setUnreadCounts(prev => ({
@@ -93,6 +140,149 @@ export default function ChatPage() {
         }
     }, [selectedUser]);
 
+    // Socket connection setup
+    const socket = useSocket();
+
+    useEffect(() => {
+        if (!socket) return;
+
+        socketRef.current = socket;
+
+        // Socket event listeners
+        socket.on('connect', () => {
+            console.log('✅ Socket connected');
+            setIsConnected(true);
+            socket.emit('join-user', username);
+        });
+
+        socket.on('disconnect', () => {
+            console.log('❌ Socket disconnected');
+            setIsConnected(false);
+        });
+
+        socket.on('joined', (onlineUsers: { [key: string]: string }) => {
+            setUsers(onlineUsers);
+        });
+
+        socket.on('receive-message', (data: Message) => {
+            console.log('📨 Received message:', data);
+            console.log('📨 Current user:', username);
+            console.log('📨 Selected user:', selectedUser);
+            console.log('📨 Message from:', data.from, 'to:', data.to);
+
+            setMessages(prev => {
+                // Check if message already exists to avoid duplicates
+                const exists = prev.some(m => m.id === data.id);
+                if (!exists) {
+                    console.log('✅ Adding new message to list');
+                    return [...prev, data];
+                } else {
+                    console.log('⚠️ Message already exists, skipping');
+                    return prev;
+                }
+            });
+
+            // Update unread count if message is not from current user
+            if (data.from !== username && data.to === username) {
+                setUnreadCounts(prev => ({
+                    ...prev,
+                    [data.from]: (prev[data.from] || 0) + 1
+                }));
+
+                // Show notification if window is not focused
+                if (!isWindowFocusedRef.current) {
+                    showNotification(data);
+                }
+            }
+
+            // If we receive a message for the current conversation, reload messages to ensure sync
+            if ((data.from === selectedUser && data.to === username) ||
+                (data.from === username && data.to === selectedUser)) {
+                console.log('🔄 Message for current conversation, reloading...');
+                setTimeout(() => loadMessages(selectedUser!), 1000);
+            }
+        });
+
+        socket.on('message-status-update', ({ messageId, status }: { messageId: string; status: string }) => {
+            setMessages(prev => prev.map(m =>
+                m.id === messageId ? { ...m, status: status as any } : m
+            ));
+        });
+
+        socket.on('message-edited', ({ id, message }: { id: string; message: string }) => {
+            setMessages(prev => prev.map(m =>
+                m.id === id ? { ...m, message, isEdited: true } : m
+            ));
+        });
+
+        socket.on('delete-message', ({ id }: { id: string }) => {
+            setMessages(prev => prev.map(m =>
+                m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m
+            ));
+        });
+
+        socket.on('pin-message', ({ id, isPinned }: { id: string; isPinned: boolean }) => {
+            setMessages(prev => prev.map(m =>
+                m.id === id ? { ...m, isPinned } : m
+            ));
+        });
+
+        socket.on('clear-all-messages', ({ from, to }: { from: string; to: string }) => {
+            if (to === username) {
+                setMessages(prev => prev.filter(m =>
+                    !((m.from === from && m.to === to) || (m.from === to && m.to === from))
+                ));
+            }
+        });
+
+        // WebRTC event listeners
+        socket.on('offer', (payload) => {
+            setIncomingCall({
+                from: payload.from,
+                to: payload.to,
+                offer: payload.offer,
+                isAudioOnly: payload.isAudioOnly
+            });
+            playRingtone();
+        });
+
+        socket.on('answer', (payload) => {
+            // TODO: Implement handleAnswer
+            console.log('Received answer:', payload);
+        });
+
+        socket.on('icecandidate', (candidate) => {
+            // TODO: Implement handleIceCandidate
+            console.log('Received ICE candidate:', candidate);
+        });
+
+        socket.on('call-ended', () => {
+            handleEndCallInternal();
+        });
+
+        socket.on('call-rejected', (payload) => {
+            stopRingtone();
+            setCallNotification({ message: `${payload.from} rejected your call`, type: 'end' });
+            setTimeout(() => setCallNotification(null), 3000);
+        });
+
+        return () => {
+            socket.off('connect');
+            socket.off('disconnect');
+            socket.off('joined');
+            socket.off('receive-message');
+            socket.off('message-status-update');
+            socket.off('message-edited');
+            socket.off('delete-message');
+            socket.off('pin-message');
+            socket.off('clear-all-messages');
+            socket.off('offer');
+            socket.off('answer');
+            socket.off('icecandidate');
+            socket.off('call-ended');
+            socket.off('call-rejected');
+        };
+    }, [socket, username]);
 
     // Request Notification Permission
     useEffect(() => {
@@ -134,210 +324,425 @@ export default function ChatPage() {
     }, [selectedUser, isWindowFocused, messages.length]);
 
 
+    // Add no-scroll class to body for chat page
     useEffect(() => {
-        const savedUsername = localStorage.getItem('webrtc-username');
-        if (savedUsername) {
-            console
-            setUsername(savedUsername);
-        } else {
-            setIsLoading(false);
-        }
-
-        const initSocket = async () => {
-            try {
-                await fetch('/api/socket');
-
-                const socket = io(undefined, {
-                    path: '/api/socket',
-                    addTrailingSlash: false,
-                    transports: ['polling', 'websocket'],
-                    reconnectionAttempts: 5,
-                    timeout: 10000,
-                });
-                socketRef.current = socket;
-                socket.on('connect', () => {
-                    console.log('Socket connected:', socket.id);
-                    setIsConnected(true);
-                    if (savedUsername) {
-                        socket.emit('join-user', savedUsername);
-                    }
-                    // Hide loader once socket is connected
-                    setIsLoading(false);
-                });
-
-                socket.on('joined', (allUsers: User) => {
-                    setUsers(allUsers);
-                });
-
-                socket.on('receive-message', (data: Message) => {
-                    if (data.from !== savedUsername) {
-                        if (!isWindowFocusedRef.current || selectedUserRef.current !== data.from) {
-                            showNotification(data);
-
-                            if (selectedUserRef.current !== data.from) {
-                                setUnreadCounts(prev => ({
-                                    ...prev,
-                                    [data.from]: (prev[data.from] || 0) + 1
-                                }));
-                            }
-                        }
-                    }
-
-                    // Handle Reassembly Logic before state update
-                    let messageToStore: Message | null = data;
-
-                    if (data.groupId && data.totalChunks) {
-                        const gid = data.groupId;
-                        if (!chunkBufferRef.current[gid]) {
-                            chunkBufferRef.current[gid] = [];
-                        }
-
-                        // Avoid duplicate chunks
-                        const isDuplicate = chunkBufferRef.current[gid].some(c => c.chunkIndex === data.chunkIndex);
-                        if (!isDuplicate) {
-                            chunkBufferRef.current[gid].push(data);
-                        }
-
-                        // Check if complete
-                        if (chunkBufferRef.current[gid].length === data.totalChunks) {
-                            const sortedChunks = [...chunkBufferRef.current[gid]].sort((a, b) => (a.chunkIndex || 0) - (b.chunkIndex || 0));
-                            const fullMessage = sortedChunks.map(m => m.message).join('');
-
-                            messageToStore = {
-                                ...sortedChunks[0],
-                                id: gid,
-                                message: fullMessage,
-                                timestamp: new Date(sortedChunks[0].timestamp),
-                                status: 'sent' as const
-                            };
-                            delete chunkBufferRef.current[gid];
-                        } else {
-                            // Still waiting for chunks
-                            messageToStore = null;
-                        }
-                    } else {
-                        // Regular message without chunking metadata
-                        messageToStore = { ...data, id: data.groupId || data.id, timestamp: new Date(data.timestamp), status: 'sent' as const };
-                    }
-
-                    if (messageToStore) {
-                        setMessages((prev) => {
-                            if (messageToStore?.id && prev.some(m => m.id === messageToStore?.id)) return prev;
-                            return [...prev, messageToStore!];
-                        });
-                    }
-
-                    // Handle delivery/read status correctly for chunks
-                    if (socketRef.current) {
-                        // Use groupId if it's a chunk, otherwise id
-                        const ackId = (data.groupId && data.totalChunks && data.totalChunks > 1) ? data.groupId : data.id;
-                        if (data.from === selectedUserRef.current && isWindowFocusedRef.current) {
-                            socketRef.current.emit('mark-read', { messageId: ackId, to: data.from });
-                        } else {
-                            socketRef.current.emit('mark-delivered', { messageId: ackId, to: data.from });
-                        }
-                    }
-                });
-
-                socket.on('delete-message', ({ id }) => {
-                    setMessages(prev => prev.map(m => m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m));
-                });
-
-                socket.on('pin-message', ({ id, isPinned }) => {
-                    setMessages(prev => prev.map(m => m.id === id ? { ...m, isPinned } : m));
-                });
-
-                socket.on('message-status-update', ({ messageId, status }) => {
-                    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, status } : m));
-                });
-
-                socket.on('message-edited', ({ id, message }) => {
-                    setMessages(prev => prev.map(m => m.id === id ? { ...m, message, isEdited: true } : m));
-                });
-
-                socket.on('offer', async ({ from, to, offer, isAudioOnly: incomingIsAudioOnly }) => {
-                    console.log('Offer received from:', from, 'audioOnly:', incomingIsAudioOnly);
-                    const isAudio = incomingIsAudioOnly === true || incomingIsAudioOnly === 'true';
-                    setIncomingCall({ from, to, offer, isAudioOnly: isAudio });
-                    setIsAudioOnly(isAudio);
-                    setCallParticipant(from);
-                    playRingtone();
-                });
-
-                socket.on('answer', async ({ from, to, answer }) => {
-                    console.log('Answer received');
-                    if (peerConnectionRef.current) {
-                        await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
-                        processBufferedIceCandidates(peerConnectionRef.current);
-                        setConnectionState('connected');
-                        setIsCallActive(true);
-                    }
-                });
-
-                socket.on('icecandidate', async (candidate) => {
-                    if (peerConnectionRef.current?.remoteDescription) {
-                        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-                    } else {
-                        iceCandidatesBuffer.current.push(candidate);
-                    }
-                });
-
-                socket.on('call-ended', () => {
-                    handleEndCallInternal();
-                });
-
-                socket.on('call-rejected', () => {
-                    setCallNotification({ message: 'Call Rejected', type: 'end' });
-                    handleEndCallInternal();
-                });
-
-                socket.on('disconnect', (reason) => {
-                    setIsConnected(false);
-                });
-
-                socket.on('connect_error', (error) => {
-                    console.error('Socket connection error:', error);
-                    setIsConnected(false);
-                });
-
-            } catch (err) {
-                console.error('Failed to initialize socket:', err);
-            }
-        };
-
-        initSocket();
-
-        // Safety timeout in case socket fails to connect
-        const timer = setTimeout(() => {
-            setIsLoading(false);
-        }, 5000);
+        document.body.classList.add('no-scroll');
 
         return () => {
-            clearTimeout(timer);
-            if (socketRef.current) {
-                socketRef.current.disconnect();
+            // Remove no-scroll class when component unmounts
+            document.body.classList.remove('no-scroll');
+        };
+    }, []);
+
+    // Periodic check for stuck sending messages
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const now = new Date();
+            setMessages(prev => prev.map(m => {
+                // Check if message has been stuck in sending for more than 15 seconds
+                if (m.status === 'sending' && m.timestamp) {
+                    const timeDiff = now.getTime() - new Date(m.timestamp).getTime();
+                    if (timeDiff > 15000) { // 15 seconds
+                        console.warn('Message stuck in sending state, marking as failed:', m.id);
+                        return {
+                            ...m,
+                            status: 'failed',
+                            retryCount: 1,
+                            lastRetryTime: new Date()
+                        };
+                    }
+                }
+                return m;
+            }));
+        }, 5000); // Check every 5 seconds
+
+        return () => clearInterval(interval);
+    }, []);
+
+    // Mark messages as read function removed - using WebSocket instead
+
+    const loadMessages = async (selectedUsername: string) => {
+        try {
+            console.log('🔄 Loading messages for:', selectedUsername);
+            console.log('🔄 Current conversations:', conversations.length);
+
+            // Find conversation for this user
+            let currentConversation = conversations.find(c =>
+                c.participants.some((p: any) => p.user.username === selectedUsername)
+            );
+
+            console.log('Found conversation:', currentConversation);
+
+            // If not found, try to get/create conversation directly
+            if (!currentConversation) {
+                console.log('🔄 Conversation not found, trying to create...');
+                const cookies = getClientCookies();
+                const userId = cookies['user-id'] || SecureSession.getUserId();
+
+                if (userId) {
+                    // Try to find conversation by participants
+                    const { data: selectedUserData } = await supabaseAdmin
+                        .from('users')
+                        .select('id')
+                        .eq('username', selectedUsername)
+                        .maybeSingle();
+
+                    console.log('Selected user data:', selectedUserData);
+
+                    if (selectedUserData) {
+                        const response = await fetch('/api/conversations', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                participantIds: [userId, selectedUserData.id]
+                            }),
+                        });
+
+                        if (response.ok) {
+                            currentConversation = await response.json();
+                            setConversations(prev => [...prev, currentConversation]);
+                        }
+                    }
+                }
+            }
+
+            if (currentConversation) {
+                console.log('🔄 Fetching messages API for conversation:', currentConversation.id);
+                const response = await fetch(`/api/conversations/${currentConversation.id}/messages`);
+                if (response.ok) {
+                    const messagesData = await response.json();
+                    console.log('✅ Messages API loaded successfully:', messagesData.length, 'messages');
+
+                    // Format messages for frontend and calculate unread counts
+                    const formattedMessages = messagesData.map((msg: any) => ({
+                        id: msg.id,
+                        from: msg.sender?.username || 'Unknown',
+                        to: msg.sender?.username === username ? selectedUsername : username,
+                        message: msg.content,
+                        timestamp: msg.timestamp,
+                        status: msg.status,
+                        isVoiceMessage: msg.is_voice_message,
+                        audioUrl: msg.audio_url,
+                        audioDuration: msg.audio_duration,
+                        isDeleted: msg.is_deleted,
+                        isEdited: msg.is_edited,
+                        isPinned: msg.is_pinned,
+                        replyTo: msg.reply_to ? {
+                            id: msg.reply_to.id,
+                            from: msg.reply_to.sender?.username || 'Unknown',
+                            message: msg.reply_to.content || msg.reply_to.message
+                        } : undefined,
+                        senderId: msg.sender_id
+                    }));
+
+                    // Calculate unread messages for this conversation
+                    const unreadCount = formattedMessages.filter((msg: any) =>
+                        msg.from === selectedUsername &&
+                        msg.status !== 'read' &&
+                        msg.status !== 'delivered'
+                    ).length;
+
+                    // Update unread counts
+                    setUnreadCounts(prev => ({
+                        ...prev,
+                        [selectedUsername]: unreadCount
+                    }));
+
+                    console.log('📊 Unread count for', selectedUsername, ':', unreadCount);
+
+                    setMessages(formattedMessages);
+                    console.log('✅ Loaded messages for', selectedUsername, ':', formattedMessages.length, 'messages');
+                    console.log('📋 All loaded messages:', formattedMessages.map((m: any) => ({
+                        id: m.id,
+                        from: m.from,
+                        to: m.to,
+                        message: m.message?.substring(0, 20) + '...',
+                        status: m.status,
+                        isHidden: m.isHidden
+                    })));
+
+                    if (currentConversation && unreadCounts[selectedUsername] > 0) {
+                        // Use WebSocket instead of HTTP API
+                        const unreadMsgs = messages.filter(m =>
+                            m.from === selectedUsername && m.status !== 'read' && m.to === username
+                        );
+
+                        if (unreadMsgs.length > 0 && socketRef.current) {
+                            unreadMsgs.forEach(msg => {
+                                if (msg.id) {
+                                    socketRef.current?.emit('mark-read', { messageId: msg.id, to: msg.from });
+                                }
+                            });
+                        }
+
+                        setUnreadCounts(prev => ({
+                            ...prev,
+                            [selectedUsername]: 0
+                        }));
+                    }
+                } else {
+                    console.error('❌ Failed to load messages API:', response.status, response.statusText);
+                    setMessages([]);
+                }
+            } else {
+                console.log('ℹ️ No conversation found for', selectedUsername);
+                setMessages([]);
+            }
+        } catch (error) {
+            console.error('❌ Failed to load messages API:', error);
+            setMessages([]);
+        }
+    };
+
+    // Load messages when selected user changes
+    useEffect(() => {
+        if (selectedUser && username) {
+            loadMessages(selectedUser);
+        }
+    }, [selectedUser, username]);
+
+    // Also reload messages periodically to sync with database
+    useEffect(() => {
+        if (selectedUser && username) {
+            const interval = setInterval(() => {
+                loadMessages(selectedUser);
+            }, 10000); // Reload every 10 seconds
+
+            return () => clearInterval(interval);
+        }
+    }, [selectedUser, username]);
+
+    useEffect(() => {
+        const checkAuth = async () => {
+            try {
+                // Check session using frontend auth utility
+                const storedSession = frontendAuth.getSession();
+                console.log('🔐 Checking authentication:', {
+                    storedSession: storedSession,
+                    hasSession: !!storedSession,
+                    username: storedSession?.user?.username
+                });
+
+                if (storedSession) {
+                    console.log('✅ User authenticated:', storedSession.user.username);
+                    setUsername(storedSession.user.username);
+                    setIsLoading(false); // Set loading to false when data is available
+                    setIsConversationsLoading(true);
+
+                    // Load user data
+                    loadConversations(storedSession.user.id).then(() => {
+                        console.log('✅ Conversations loaded');
+                        setIsConversationsLoading(false);
+                    }).catch((error: any) => {
+                        console.error('❌ Failed to load conversations:', error);
+                        setIsConversationsLoading(false);
+                    });
+
+                    // Load failed messages
+                    const failed = storageHelpers.getFailedMessages() || [];
+                    if (failed.length > 0) {
+                        console.log('🔄 Restoring failed messages:', failed.length);
+                        setMessages(prev => {
+                            const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
+                            return [...prev, ...newMessages];
+                        });
+                    }
+                } else {
+                    console.log('❌ No session found, showing login');
+                    setIsLoading(false);
+                    setIsConversationsLoading(false);
+                }
+            } catch (error) {
+                console.error('Error checking authentication:', error);
+                setIsLoading(false);
+                setIsConversationsLoading(false);
             }
         };
-    }, [router]);
+
+        checkAuth();
+    }, []);
+
+    // Listen for session changes using localStorage events
+    useEffect(() => {
+        const checkSessionChange = () => {
+            try {
+                const storedSession = frontendAuth.getSession();
+                const currentUsername = storedSession?.user?.username || '';
+
+                if (currentUsername !== username) {
+                    if (currentUsername && storedSession) {
+                        console.log('🔄 Session changed, updating username:', currentUsername);
+                        setUsername(currentUsername);
+                        if (storedSession.user.id) {
+                            loadConversations(storedSession.user.id);
+                        }
+                    } else {
+                        // Session was cleared, redirect to login
+                        console.log('❌ Session cleared, redirecting to login');
+                        router.push('/login');
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking session:', error);
+            }
+        };
+
+        // Listen for storage events (for cross-tab changes)
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === 'user_data' || e.key === 'session_token') {
+                checkSessionChange();
+            }
+        };
+
+        // Check immediately
+        checkSessionChange();
+
+        // Set up storage event listener
+        window.addEventListener('storage', handleStorageChange);
+
+        // Also check periodically (less frequently) as fallback
+        const interval = setInterval(checkSessionChange, 30000); // 30 seconds instead of 5
+
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+            clearInterval(interval);
+        };
+    }, [username, router]);
 
     // Persistence Helpers
-    const saveFailedMessage = (msg: Message) => {
+    const saveFailedMessageLocal = (msg: Message) => {
         try {
-            const failed = JSON.parse(localStorage.getItem('failed-messages') || '[]');
-            if (!failed.some((m: Message) => m.id === msg.id)) {
-                failed.push(msg);
-                localStorage.setItem('failed-messages', JSON.stringify(failed));
-            }
+            storageHelpers.saveFailedMessage({
+                ...msg,
+                retryCount: 1,
+                lastRetryTime: new Date(),
+                status: 'failed'
+            });
         } catch (error) {
             console.error('Error saving failed message:', error);
         }
     };
 
+    const retryFailedMessages = () => {
+        try {
+            const failed = storageHelpers.getFailedMessages() || [];
+            const now = new Date();
+
+            failed.forEach(async (msg: Message) => {
+                // Only retry if 5 minutes have passed since last retry
+                const timeSinceLastRetry = msg.lastRetryTime ?
+                    now.getTime() - new Date(msg.lastRetryTime).getTime() :
+                    now.getTime() - new Date(msg.timestamp).getTime();
+
+                if (timeSinceLastRetry > 30 * 1000) { // 30 seconds
+                    try {
+                        // Update status to sending
+                        setMessages(prev => prev.map(m =>
+                            m.id === msg.id ? { ...m, status: 'sending' } : m
+                        ));
+
+                        // Get current user ID and conversation
+                        const cookies = getClientCookies();
+                        const userId = (cookies['user-id'] as string) || SecureSession.getUserId();
+
+                        let currentConversation = conversations.find(c =>
+                            c.participants.some((p: any) => p.user.username === msg.to)
+                        );
+
+                        // If conversation not found, create it
+                        if (!currentConversation && userId) {
+                            const { data: selectedUserData } = await supabaseAdmin
+                                .from('users')
+                                .select('id')
+                                .eq('username', msg.to)
+                                .maybeSingle();
+
+                            if (selectedUserData) {
+                                const response = await fetch('/api/conversations', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        participantIds: [userId, selectedUserData.id]
+                                    }),
+                                });
+
+                                if (response.ok) {
+                                    currentConversation = await response.json();
+                                    setConversations(prev => [...prev, currentConversation]);
+                                }
+                            }
+                        }
+
+                        if (currentConversation && userId) {
+                            const response = await fetch('/api/messages', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    conversationId: currentConversation.id,
+                                    senderId: userId,
+                                    content: msg.message,
+                                    to: msg.to,
+                                    from: username
+                                }),
+                            });
+
+                            if (response.ok) {
+                                // Remove from failed messages
+                                const updatedFailed = failed.filter((m: Message) => m.id !== msg.id);
+                                chatStorage.setItem('failed-messages', updatedFailed);
+
+                                // Update message status to sent
+                                setMessages(prev => prev.map(m =>
+                                    m.id === msg.id ? { ...m, status: 'sent' } : m
+                                ));
+                            } else {
+                                throw new Error('Failed to send message');
+                            }
+                        } else {
+                            console.error('No conversation or user ID found for retry');
+                        }
+                    } catch (error) {
+                        console.error('Failed to retry message:', error);
+                        // Update retry count and last retry time
+                        msg.retryCount = (msg.retryCount || 0) + 1;
+                        msg.lastRetryTime = new Date();
+                        saveFailedMessageLocal(msg);
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Failed to retry messages:', error);
+        }
+    };
+
+    // Auto-retry failed messages
+    useEffect(() => {
+        if (autoRetryEnabled && isConnected) {
+            const interval = setInterval(() => {
+                retryFailedMessages();
+            }, 10000); // Retry every 10 seconds
+            setRetryInterval(interval);
+        } else if (retryInterval) {
+            clearInterval(retryInterval);
+            setRetryInterval(null);
+        }
+
+        return () => {
+            if (retryInterval) {
+                clearInterval(retryInterval);
+            }
+        };
+    }, [autoRetryEnabled, isConnected]);
+
     const removeFailedMessage = (id: string) => {
         try {
-            const failed = JSON.parse(localStorage.getItem('failed-messages') || '[]');
+            const failed = storageHelpers.getFailedMessages() || [];
             const newFailed = failed.filter((m: Message) => m.id !== id);
-            localStorage.setItem('failed-messages', JSON.stringify(newFailed));
+            chatStorage.setItem('failed-messages', newFailed);
         } catch (error) {
             console.error('Error removing failed message:', error);
         }
@@ -345,7 +750,7 @@ export default function ChatPage() {
 
     // Restore failed messages on mount
     useEffect(() => {
-        const failed = JSON.parse(localStorage.getItem('failed-messages') || '[]');
+        const failed = storageHelpers.getFailedMessages() || [];
         if (failed.length > 0) {
             setMessages(prev => {
                 const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
@@ -363,7 +768,7 @@ export default function ChatPage() {
             const processQueue = async () => {
                 if (isProcessing) return;
 
-                const failed = JSON.parse(localStorage.getItem('failed-messages') || '[]');
+                const failed: Message[] = storageHelpers.getFailedMessages() || [];
                 if (failed.length === 0) return;
 
                 isProcessing = true;
@@ -440,64 +845,62 @@ export default function ChatPage() {
                 removeFailedMessage(msg.id!);
             } else {
                 setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'failed' } : m));
-                saveFailedMessage({ ...msg, status: 'failed' });
+                saveFailedMessageLocal({ ...msg, status: 'failed' });
             }
         });
     };
 
-    const PeerConnection: PeerConnectionManager = (() => {
-        return {
-            getInstance: (stream: MediaStream) => {
-                if (peerConnectionRef.current) peerConnectionRef.current.close();
+    const PeerConnection: PeerConnectionManager = useMemo(() => ({
+        getInstance: (stream: MediaStream) => {
+            if (peerConnectionRef.current) peerConnectionRef.current.close();
 
-                const pc = new RTCPeerConnection({
-                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-                });
+            const pc = new RTCPeerConnection({
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            });
 
-                stream.getTracks().forEach(track => {
-                    console.log(`Adding local track: ${track.kind}, enabled: ${track.enabled}`);
-                    pc.addTrack(track, stream);
-                });
+            stream.getTracks().forEach(track => {
+                console.log(`Adding local track: ${track.kind}, enabled: ${track.enabled}`);
+                pc.addTrack(track, stream);
+            });
 
-                pc.onicecandidate = (e) => {
-                    if (e.candidate) {
-                        socketRef.current?.emit('icecandidate', e.candidate);
-                    }
-                };
-
-                pc.ontrack = (e) => {
-                    console.log('Received remote stream:', e.streams[0]);
-                    console.log('Track kinds:', e.streams[0]?.getTracks().map(t => t.kind));
-
-                    if (e.streams[0]) {
-                        // Set remote video stream state
-                        setRemoteStream(e.streams[0]);
-
-                        // Show remote video
-                        setShowRemoteVideo(true);
-
-                        // Log for debugging
-                        e.streams[0].getTracks().forEach(track => {
-                            console.log(`Remote track: ${track.kind}, enabled: ${track.enabled}, state: ${track.readyState}`);
-                        });
-                    }
-                };
-
-                pc.onconnectionstatechange = () => {
-                    if (pc.connectionState === 'connected') setConnectionState('connected');
-                };
-
-                peerConnectionRef.current = pc;
-                return pc;
-            },
-            reset: () => {
-                if (peerConnectionRef.current) {
-                    peerConnectionRef.current.close();
-                    peerConnectionRef.current = null;
+            pc.onicecandidate = (e) => {
+                if (e.candidate) {
+                    socketRef.current?.emit('icecandidate', e.candidate);
                 }
+            };
+
+            pc.ontrack = (e) => {
+                console.log('Received remote stream:', e.streams[0]);
+                console.log('Track kinds:', e.streams[0]?.getTracks().map(t => t.kind));
+
+                if (e.streams[0]) {
+                    // Set remote video stream state
+                    setRemoteStream(e.streams[0]);
+
+                    // Show remote video
+                    setShowRemoteVideo(true);
+
+                    // Log for debugging
+                    e.streams[0].getTracks().forEach(track => {
+                        console.log(`Remote track: ${track.kind}, enabled: ${track.enabled}, state: ${track.readyState}`);
+                    });
+                }
+            };
+
+            pc.onconnectionstatechange = () => {
+                if (pc.connectionState === 'connected') setConnectionState('connected');
+            };
+
+            peerConnectionRef.current = pc;
+            return pc;
+        },
+        reset: () => {
+            if (peerConnectionRef.current) {
+                peerConnectionRef.current.close();
+                peerConnectionRef.current = null;
             }
-        };
-    })();
+        }
+    }), []);
 
     const startCall = async (isAudio: boolean) => {
         if (!selectedUser) return;
@@ -636,64 +1039,176 @@ export default function ChatPage() {
         e.preventDefault();
         if (!inputMessage.trim() || !selectedUser) return;
 
-        // In the new structure, we should find/create a conversation first
-        // For simplicity in this large file, we'll assume conversation exists or handle it
-        const currentConversation = conversations.find(c =>
-            c.participants.some((p: any) => p.user.username === selectedUser)
-        );
-
-        if (!currentConversation) {
-            console.error('No active conversation found for', selectedUser);
-            // In a real app, you'd create one here
-            return;
-        }
-
         const tempContent = inputMessage.trim();
         setInputMessage('');
         setReplyingTo(null);
 
-        try {
-            // 1. Save to DB via API (User's requirement: save everything to DB)
-            const savedMsg = await apiService.sendMessage({
-                conversationId: currentConversation.id,
-                senderId: localStorage.getItem('webrtc-userId') || '',
-                content: tempContent,
+        // Create temporary message with sending status
+        const tempMessage: Message = {
+            id: `temp-${Date.now()}`,
+            from: username,
+            to: selectedUser,
+            message: tempContent,
+            timestamp: new Date(),
+            status: 'sending',
+            retryCount: 0,
+            replyTo: replyingTo ? {
+                id: replyingTo.id,
+                from: replyingTo.from,
+                message: replyingTo.message
+            } : undefined,
+        };
+
+        // Add to UI immediately with sending status
+        setMessages(prev => [...prev, tempMessage]);
+
+        // Add timeout to prevent stuck in sending state
+        const timeoutId = setTimeout(() => {
+            setMessages(prev => prev.map(m =>
+                m.id === tempMessage.id ? {
+                    ...m,
+                    status: 'failed',
+                    retryCount: 1,
+                    lastRetryTime: new Date()
+                } : m
+            ));
+
+            // Save to localStorage for retry
+            saveFailedMessageLocal({
+                ...tempMessage,
+                status: 'failed',
+                retryCount: 1,
+                lastRetryTime: new Date()
             });
 
-            // 2. Emit via socket for real-time (using original socket logic but with DB ID)
-            if (socketRef.current?.connected) {
-                socketRef.current.emit('send-message', {
+            // Restore input message
+            setInputMessage(tempContent);
+            console.warn('Message sending timed out, marked as failed');
+        }, 10000); // 10 second timeout
+
+        try {
+            // Send message using hook
+            const savedMsg = await sendMessage(
+                tempContent,
+                selectedUser,
+                username,
+                conversations,
+                replyingTo
+            );
+
+            // Clear timeout on success
+            clearTimeout(timeoutId);
+
+            // Update local state with the saved message
+            setMessages(prev => prev.map(m =>
+                m.id === tempMessage.id ? {
                     ...savedMsg,
                     from: username,
                     to: selectedUser,
-                    message: tempContent, // for legacy socket listener compatibility
+                    message: tempContent,
+                    timestamp: new Date(savedMsg.timestamp),
                     status: 'sent'
+                } : m
+            ));
+
+            // Emit to recipient via socket
+            if (socketRef.current?.connected) {
+                socketRef.current.emit('send-message', {
+                    id: savedMsg.id,
+                    from: username,
+                    to: selectedUser,
+                    message: tempContent,
+                    timestamp: savedMsg.timestamp,
+                    status: 'sent',
+                    isVoiceMessage: false,
+                    isEdited: false,
+                    isDeleted: false,
+                    isPinned: false,
+                    replyTo: replyingTo ? {
+                        id: replyingTo.id,
+                        from: replyingTo.from,
+                        message: replyingTo.message
+                    } : undefined,
+                    groupId: null,
+                    chunkIndex: null,
+                    totalChunks: null
                 });
             }
 
-            // 3. Update local state
-            setMessages(prev => [...prev, {
-                ...savedMsg,
-                from: username,
-                to: selectedUser,
-                message: tempContent,
-                timestamp: new Date(),
-                status: 'sent'
-            }]);
-
         } catch (error) {
             console.error('Failed to send message:', error);
-            // Even if it fails, the user wanted it stored (the API should handle that if possible)
+
+            // Clear timeout on error
+            clearTimeout(timeoutId);
+
+            // Update message status to failed
+            setMessages(prev => prev.map(m =>
+                m.id === tempMessage.id ? {
+                    ...m,
+                    status: 'failed',
+                    retryCount: 1,
+                    lastRetryTime: new Date()
+                } : m
+            ));
+
+            // Save to localStorage for retry
+            saveFailedMessageLocal({
+                ...tempMessage,
+                status: 'failed',
+                retryCount: 1,
+                lastRetryTime: new Date()
+            });
+
+            // Restore input message so user can retry
+            setInputMessage(tempContent);
         }
     };
 
-    const handleEditMessage = (msg: Message) => {
-        setEditingMessage(msg);
-        setInputMessage(msg.message);
-        setReplyingTo(null); // Clear reply if editing
-        // Focus input
-        const input = document.querySelector('input[type="text"]') as HTMLInputElement;
-        if (input) input.focus();
+    const handleUpdateMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingMessage || !inputMessage.trim() || !selectedUser) return;
+
+        const tempContent = inputMessage.trim();
+        setEditingMessage(null);
+        setInputMessage('');
+
+        try {
+            // Update message in database
+            const response = await fetch('/api/messages', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    messageId: editingMessage.id,
+                    content: tempContent,
+                    from: username,
+                    to: selectedUser
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to update message');
+            }
+
+            const updatedMsg = await response.json();
+
+            // Update local state
+            setMessages(prev => prev.map(msg =>
+                msg.id === editingMessage.id
+                    ? { ...msg, message: tempContent, isEdited: true }
+                    : msg
+            ));
+
+            // Socket event is handled by the API server
+            // No need to emit from client side
+
+        } catch (error) {
+            console.error('Failed to update message:', error);
+            // Restore editing state if failed
+            setEditingMessage(editingMessage);
+            setInputMessage(tempContent);
+        }
     };
 
     const handleCancelEdit = () => {
@@ -701,59 +1216,62 @@ export default function ChatPage() {
         setInputMessage('');
     };
 
+    const handleEditMessage = (msg: Message) => {
+        setEditingMessage(msg);
+        setInputMessage(msg.message);
+        setReplyingTo(null);
+    };
+
     const handleSendVoice = async (audioBlob: Blob, duration: number) => {
         if (!selectedUser) return;
 
-        const userId = localStorage.getItem('webrtc-userId') || '';
-        const currentConversation = conversations.find(c =>
-            c.participants.some((p: any) => p.user.username === selectedUser)
-        );
-
-        if (!currentConversation) return;
-
         try {
-            // 1. Upload to Supabase
-            const fileName = `voice-${Date.now()}-${userId}`;
-            const publicUrl = await uploadAudio(audioBlob, fileName);
+            // Send voice message using hook
+            const savedMsg = await sendVoiceMessage(
+                audioBlob,
+                duration,
+                selectedUser,
+                username,
+                conversations
+            );
 
-            // 2. Save to DB
-            const savedMsg = await apiService.sendMessage({
-                conversationId: currentConversation.id,
-                senderId: userId,
-                isVoice: true,
-                audioUrl: publicUrl,
-                audioDuration: duration
-            });
-
-            // 3. Emit via socket
-            if (socketRef.current?.connected) {
-                socketRef.current.emit('send-message', {
-                    ...savedMsg,
-                    from: username,
-                    to: selectedUser,
-                    message: '🎤 Voice message',
-                    isVoiceMessage: true,
-                    audioUrl: publicUrl,
-                    audioDuration: duration,
-                    status: 'sent'
-                });
-            }
-
-            // 4. Update state
+            // Update local state
             setMessages(prev => [...prev, {
                 ...savedMsg,
                 from: username,
                 to: selectedUser,
                 message: '🎤 Voice message',
-                timestamp: new Date(),
+                timestamp: new Date(savedMsg.timestamp),
                 status: 'sent',
                 isVoiceMessage: true,
-                audioUrl: publicUrl,
-                audioDuration: duration
+                audioUrl: savedMsg.audioUrl,
+                audioDuration: savedMsg.audioDuration
             }]);
 
+            // Emit to recipient via socket
+            if (socketRef.current?.connected) {
+                socketRef.current.emit('send-message', {
+                    id: savedMsg.id,
+                    from: username,
+                    to: selectedUser,
+                    message: '🎤 Voice message',
+                    timestamp: savedMsg.timestamp,
+                    status: 'sent',
+                    isVoiceMessage: true,
+                    audioUrl: savedMsg.audioUrl,
+                    audioDuration: savedMsg.audioDuration,
+                    isEdited: false,
+                    isDeleted: false,
+                    isPinned: false,
+                    replyTo: null,
+                    groupId: null,
+                    chunkIndex: null,
+                    totalChunks: null
+                });
+            }
+
         } catch (error) {
-            console.error('Voice message failed:', error);
+            console.error('Failed to send voice message:', error);
             alert('Failed to send voice message');
         }
     };
@@ -769,12 +1287,47 @@ export default function ChatPage() {
         }
     };
 
-    const handleDeleteMessage = (id: string, type: 'me' | 'everyone') => {
-        if (type === 'me') {
-            setMessages(prev => prev.filter(m => m.id !== id));
-        } else {
-            setMessages(prev => prev.map(m => m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m));
-            socketRef.current?.emit('delete-message', { id, to: selectedUser });
+    // Auto retry failed messages when there are 2 or more
+    useEffect(() => {
+        const failedMessages = messages.filter(m => m.status === 'failed');
+
+        if (failedMessages.length >= 2 && isConnected && socketRef.current) {
+            console.log(`🔄 Auto-retrying ${failedMessages.length} failed messages`);
+
+            // Retry all failed messages with delay between each
+            failedMessages.forEach((msg, index) => {
+                setTimeout(() => {
+                    if (msg.id) {
+                        console.log(`🔄 Auto-retrying message ${index + 1}/${failedMessages.length}:`, msg.id);
+                        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'pending' } : m));
+
+                        if (isConnected && socketRef.current) {
+                            sendMessageInternal(msg);
+                        }
+                    }
+                }, index * 1000); // 1 second delay between each retry
+            });
+        }
+    }, [messages, isConnected]);
+
+    const handleDeleteMessage = async (id: string, type: 'me' | 'everyone') => {
+        try {
+            if (type === 'me') {
+                // Delete for me - hide message for current user only
+                setMessages(prev => prev.map(m =>
+                    m.id === id ? { ...m, isHidden: true } : m
+                ));
+                console.log('� Hidden message for current user:', id);
+            } else {
+                setMessages(prev => prev.map(m =>
+                    m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m
+                ));
+                if (socketRef.current && selectedUser) {
+                    socketRef.current?.emit('delete-message', { id, to: selectedUser });
+                }
+            }
+        } catch (error) {
+            console.error('❌ Failed to delete message:', error);
         }
     };
 
@@ -796,19 +1349,40 @@ export default function ChatPage() {
         socketRef.current?.emit('pin-message', { id: msg.id, isPinned, to: selectedUser });
     };
 
-    const scrollToMessage = (id: string) => {
-        const element = document.getElementById(`msg-${id}`);
-        if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const handleHideMessage = (id: string) => {
+        console.log('🙈 Hiding message:', id);
+        setMessages(prev => prev.map(m => m.id === id ? { ...m, isHidden: true } : m));
+    };
 
-            setHighlightedMessageId(id);
-            setTimeout(() => setHighlightedMessageId(null), 2000);
+    const handleUnhideMessage = (id: string) => {
+        console.log('👁️ Unhiding message:', id);
+        setMessages(prev => prev.map(m => m.id === id ? { ...m, isHidden: false } : m));
+    };
+
+    const handleRefreshMessages = () => {
+        if (selectedUser) {
+            console.log('🔄 Manual refresh triggered for:', selectedUser);
+            loadMessages(selectedUser);
         }
-        setShowPinsDropdown(false);
+    };
+
+    const handleRetryMessage = (msg: Message) => {
+        // Update status to sending
+        setMessages(prev => prev.map(m =>
+            m.id === msg.id ? { ...m, status: 'sending' } : m
+        ));
+
+        // Retry immediately
+        retryFailedMessages();
+    };
+
+    const toggleAutoRetry = () => {
+        setAutoRetryEnabled(!autoRetryEnabled);
     };
 
     const handleClearData = () => {
-        localStorage.removeItem('webrtc-username');
+        // Clear secure session (requires server-side)
+        SecureSession.clearSession();
         setUsername('');
         setSelectedUser(null);
         setMessages([]);
@@ -820,13 +1394,155 @@ export default function ChatPage() {
         router.push('/');
     };
 
+    const handleClearChat = () => {
+        if (selectedUser) {
+            setMessages([]);
+            // Clear failed messages for this conversation
+            const failed = storageHelpers.getFailedMessages() || [];
+            const updatedFailed = failed.filter((m: Message) => m.to !== selectedUser);
+            chatStorage.setItem('failed-messages', updatedFailed);
+        }
+    };
+
+    const handleClearAllMessages = async () => {
+        if (!selectedUser || !username) return;
+
+        try {
+            // Find current conversation
+            let currentConversation = conversations.find(c =>
+                c.participants.some((p: any) => p.user.username === selectedUser)
+            );
+
+            if (!currentConversation) {
+                // Try to get conversation ID
+                const cookies = getClientCookies();
+                const userId = (cookies['user-id'] as string) || SecureSession.getUserId();
+
+                if (userId) {
+                    const { data: selectedUserData } = await supabaseAdmin
+                        .from('users')
+                        .select('id')
+                        .eq('username', selectedUser)
+                        .maybeSingle();
+
+                    if (selectedUserData) {
+                        const response = await fetch('/api/conversations', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                participantIds: [userId, selectedUserData.id]
+                            }),
+                        });
+
+                        if (response.ok) {
+                            currentConversation = await response.json();
+                        }
+                    }
+                }
+            }
+
+            if (currentConversation) {
+                // Delete all messages from database
+                const response = await fetch(`/api/conversations/${currentConversation.id}/messages/delete`, {
+                    method: 'DELETE',
+                });
+
+                if (response.ok) {
+                    // Clear local messages
+                    setMessages([]);
+                    // Clear failed messages for this conversation
+                    const failed = storageHelpers.getFailedMessages() || [];
+                    const updatedFailed = failed.filter((m: Message) => m.to !== selectedUser);
+                    chatStorage.setItem('failed-messages', updatedFailed);
+
+                    // Emit socket event for real-time sync
+                    if (socketRef.current?.connected) {
+                        socketRef.current.emit('clear-all-messages', {
+                            from: username,
+                            to: selectedUser,
+                            conversationId: currentConversation.id
+                        });
+                    }
+
+                    console.log('All messages deleted successfully');
+                } else {
+                    throw new Error('Failed to delete messages');
+                }
+            }
+        } catch (error) {
+            console.error('Failed to clear all messages:', error);
+            alert('Failed to delete messages. Please try again.');
+        }
+    };
+
+    // Load user conversations from API
+    const loadConversations = async (userId: string) => {
+        try {
+            const response = await fetch(`/api/conversations?userId=${userId}`);
+            if (response.ok) {
+                const conversationsData = await response.json();
+                setConversations(conversationsData);
+                console.log('✅ Conversations loaded successfully:', conversationsData.length, 'conversations');
+            } else {
+                console.error('❌ Failed to load conversations:', response.statusText);
+            }
+        } catch (error) {
+            console.error('❌ Error loading conversations:', error);
+            throw error;
+        }
+    };
+
+    const handleLogout = async () => {
+        try {
+            await api.post('/auth/logout');
+        } catch {
+            /* ignore */
+        }
+        handleClearData();
+    };
+
+    const handleProfileUpdated = (newUsername?: string) => {
+        if (newUsername) {
+            setUsername(newUsername);
+        }
+    };
+
     const currentChatMessages = messages.filter(
-        (msg) =>
-            (msg.from === username && msg.to === selectedUser) ||
-            (msg.from === selectedUser && msg.to === username)
+        (msg: Message) => {
+            const shouldInclude = (msg.from === username && msg.to === selectedUser) ||
+                (msg.from === selectedUser && msg.to === username);
+            console.log('🔍 Message filter:', {
+                messageId: msg.id,
+                from: msg.from,
+                to: msg.to,
+                username,
+                selectedUser,
+                shouldInclude,
+                isSentMessage: msg.from === username,
+                isReceivedMessage: msg.from === selectedUser,
+                message: msg.message?.substring(0, 20) + '...'
+            });
+            return shouldInclude;
+        }
     );
 
     const pinnedMessages = currentChatMessages.filter(m => m.isPinned);
+
+    // Debug: Log current state
+    console.log('🔍 Debug Info:', {
+        totalMessages: messages.length,
+        currentChatMessages: currentChatMessages.length,
+        username,
+        selectedUser,
+        allMessages: messages.map(m => ({
+            id: m.id,
+            from: m.from,
+            to: m.to,
+            message: m.message?.substring(0, 20) + '...',
+            isSent: m.from === username,
+            isReceived: m.from === selectedUser
+        }))
+    });
 
     if (isLoading) {
         return <FullPageLoader />;
@@ -839,13 +1555,17 @@ export default function ChatPage() {
                 <ResizableSidebar selectedUser={selectedUser}>
                     <Sidebar
                         username={username}
-                        users={users}
+                        users={allUsers}
                         selectedUser={selectedUser}
                         setSelectedUser={setSelectedUser}
                         searchQuery={searchQuery}
                         setSearchQuery={setSearchQuery}
                         messages={messages}
+                        conversations={conversations}
                         unreadCounts={unreadCounts}
+                        onLogout={handleLogout}
+                        onEditProfile={() => setShowEditProfile(true)}
+                        isLoading={isConversationsLoading}
                     />
                 </ResizableSidebar>
 
@@ -858,6 +1578,9 @@ export default function ChatPage() {
                                 onBack={() => setSelectedUser(null)}
                                 onStartVideoCall={() => startCall(false)}
                                 onStartAudioCall={() => startCall(true)}
+                                onClearChat={handleClearChat}
+                                onClearAllMessages={handleClearAllMessages}
+                                onRefreshMessages={handleRefreshMessages}
                             />
 
                             {/* Pinned Messages Banner */}
@@ -887,27 +1610,24 @@ export default function ChatPage() {
                                             {pinnedMessages.slice().reverse().map((msg) => (
                                                 <div
                                                     key={msg.id}
-                                                    onClick={() => scrollToMessage(msg.id!)}
-                                                    className="px-4 py-3 border-b border-[#f0f2f5] last:border-0 hover:bg-[#f8f9fa] cursor-pointer flex flex-col gap-0.5 relative group/pin"
+                                                    className="p-3 border-b border-[#f0f2f5] hover:bg-[#f8f9fa] cursor-pointer"
+                                                    onClick={() => {
+                                                        setHighlightedMessageId(msg.id || '');
+                                                        setShowPinsDropdown(false);
+                                                    }}
                                                 >
-                                                    <div className="flex-1 min-w-0 pr-8">
-                                                        <span className="text-[11px] font-bold text-[#00a884]">
-                                                            {msg.from === username ? 'You' : msg.from}
-                                                        </span>
-                                                        <p className="text-[13px] text-[#111b21] line-clamp-2">
-                                                            {msg.message}
-                                                        </p>
+                                                    <div className="flex items-start gap-2">
+                                                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#00a884]/10 text-[#00a884] mt-1">
+                                                            <Pin size={12} className="fill-current" />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-[13px] font-medium text-[#111b21]">{msg.from}</p>
+                                                            <p className="text-[14px] text-[#3b4a54] break-words">{msg.message}</p>
+                                                            <p className="text-[11px] text-[#8696a0] mt-1">
+                                                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                            </p>
+                                                        </div>
                                                     </div>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handlePinMessage(msg);
-                                                        }}
-                                                        className="absolute right-4 top-1/2 -translate-y-1/2 p-2 hover:bg-black/5 rounded-full text-[#667781] transition-colors opacity-0 group-hover/pin:opacity-100"
-                                                        title="Unpin"
-                                                    >
-                                                        <X size={16} />
-                                                    </button>
                                                 </div>
                                             ))}
                                         </div>
@@ -919,10 +1639,12 @@ export default function ChatPage() {
                                 messages={currentChatMessages}
                                 username={username}
                                 onRetry={handleRetry}
-                                onReply={(msg) => setReplyingTo(msg)}
+                                onReply={(msg: Message) => setReplyingTo(msg)}
                                 onDelete={handleDeleteMessage}
                                 onPin={handlePinMessage}
                                 onEdit={handleEditMessage}
+                                onHide={handleHideMessage}
+                                onUnhide={handleUnhideMessage}
                                 highlightedMessageId={highlightedMessageId}
                             />
 
@@ -931,6 +1653,7 @@ export default function ChatPage() {
                                 setInputMessage={setInputMessage}
                                 onSendMessage={handleSendMessage}
                                 onSendVoice={handleSendVoice}
+                                onUpdateMessage={handleUpdateMessage}
                                 replyingTo={replyingTo}
                                 editingMessage={editingMessage}
                                 onCancelReply={() => setReplyingTo(null)}
@@ -979,15 +1702,49 @@ export default function ChatPage() {
 
             <AuthOverlay
                 username={username}
-                onUsernameCreated={(u) => {
+                onUsernameCreated={(u, userId) => {
+                    console.log('Login successful, setting up user session...');
                     setUsername(u);
-                    localStorage.setItem('webrtc-username', u);
+
+                    // Wait a moment for cookies to be set, then load data
+                    setTimeout(async () => {
+                        const cookies = getClientCookies();
+                        const userData = SecureSession.getUser();
+                        const finalUserId = userId || (cookies['user-id'] as string) || userData.userId;
+
+                        if (finalUserId) {
+                            try {
+                                await loadConversations(finalUserId);
+                                console.log('✅ Conversations API loaded successfully');
+                            } catch (error) {
+                                console.error('❌ Failed to load conversations:', error);
+                            }
+
+                            const failed = storageHelpers.getFailedMessages() || [];
+                            if (failed.length > 0) {
+                                console.log('🔄 Restoring failed messages:', failed.length);
+                                setMessages(prev => {
+                                    const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
+                                    return [...prev, ...newMessages];
+                                });
+                            }
+                        } else {
+                            console.error('❌ No user ID found after login');
+                        }
+                    }, 100);
+
                     socketRef.current?.emit('join-user', u);
                 }}
                 onClearData={() => {
-                    localStorage.removeItem('webrtc-username');
+                    SecureSession.clearSession();
                     setUsername('');
                 }}
+            />
+
+            <EditProfileModal
+                isOpen={showEditProfile}
+                onClose={() => setShowEditProfile(false)}
+                onSuccess={handleProfileUpdated}
             />
         </div>
     );

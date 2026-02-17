@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import prisma from '../../../utils/prisma';
+import { supabaseAdmin } from '../../../utils/supabase-server';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { serialize } from 'cookie';
@@ -18,31 +18,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return res.status(400).json({ message: 'Missing required fields' });
         }
 
-        // Check if user exists
-        const existingUser = await prisma.user.findFirst({
-            where: {
-                OR: [
-                    { username },
-                    { email: email || undefined },
-                    { phoneNumber: phoneNumber || undefined }
-                ]
-            }
-        });
+        const conditions: string[] = [`username.eq.${JSON.stringify(username)}`];
+        if (email) conditions.push(`email.eq.${JSON.stringify(email)}`);
+        if (phoneNumber) conditions.push(`phone_number.eq.${JSON.stringify(phoneNumber)}`);
+        const { data: existing } = await supabaseAdmin
+            .from('users')
+            .select('id')
+            .or(conditions.join(','))
+            .limit(1);
 
-        if (existingUser) {
+        if (existing?.length) {
             return res.status(400).json({ message: 'User already exists' });
         }
 
         const hashedPassword = await bcrypt.hash(password, 12);
 
-        const user = await prisma.user.create({
-            data: {
+        const { data: user, error } = await supabaseAdmin
+            .from('users')
+            .insert({
                 username,
                 email: email || null,
-                phoneNumber: phoneNumber || null,
+                phone_number: phoneNumber || null,
                 password: hashedPassword,
-            },
-        });
+            })
+            .select('id, username, email, phone_number')
+            .single();
+
+        if (error) throw error;
 
         const token = jwt.sign(
             { userId: user.id, username: user.username },
@@ -54,18 +56,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
-            maxAge: 60 * 60 * 24 * 7, // 1 week
+            maxAge: 60 * 60 * 24 * 7,
             path: '/',
         });
 
         res.setHeader('Set-Cookie', cookie);
         return res.status(201).json({
             message: 'User created successfully',
-            user: { username: user.username, email: user.email, phoneNumber: user.phoneNumber }
+            user: { username: user.username, email: user.email, phoneNumber: user.phone_number }
         });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Signup error:', error);
-        return res.status(500).json({ message: error.message || 'Error creating user' });
+        return res.status(500).json({ message: (error as Error).message || 'Error creating user' });
     }
 }
