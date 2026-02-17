@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { Eye, EyeOff, MessageCircle, Lock, Mail, User } from 'lucide-react';
 import { frontendAuth } from '@/utils/frontendAuth';
@@ -19,13 +19,11 @@ function LoginForm() {
     const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const router = useRouter();
-    const searchParams = useSearchParams();
 
     const {
         register,
         handleSubmit,
         formState: { errors },
-        setValue,
     } = useForm<LoginFormData>();
 
     const onSubmit = async (data: LoginFormData) => {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth-server';
+import { getSession, refreshSession } from '@/lib/auth-server';
 import { jwtVerify } from 'jose';
 
 const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback_secret_dont_use_in_production');
@@ -29,15 +29,47 @@ export async function GET(request: NextRequest) {
             }
         }
         
+        // If still no session, try to refresh using refresh token
+        if (!session) {
+            console.log(' No valid session found, attempting refresh...');
+            
+            // Create a response object for refreshSession
+            const response = NextResponse.json({});
+            
+            // Try to refresh the session
+            session = await refreshSession(request, response);
+            
+            if (session) {
+                console.log(' Session refreshed successfully');
+                // Return the refreshed session with new cookies
+                return NextResponse.json({
+                    message: ' Authentication successful! (Session refreshed)',
+                    user: {
+                        userId: session.userId,
+                        username: session.username,
+                        authenticated: true
+                    },
+                    timestamp: new Date().toISOString(),
+                    sessionRefreshed: true
+                }, {
+                    headers: response.headers
+                });
+            }
+        }
+        
         if (!session) {
             return NextResponse.json(
-                { error: 'Unauthorized - No session found' },
+                { 
+                    error: 'Unauthorized - No valid session found',
+                    requiresLogin: true,
+                    message: 'Please log in again to continue'
+                },
                 { status: 401 }
             );
         }
 
         return NextResponse.json({
-            message: '✅ Authentication successful!',
+            message: ' Authentication successful!',
             user: {
                 userId: session.userId,
                 username: session.username,
