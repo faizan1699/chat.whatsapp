@@ -17,6 +17,7 @@ interface MessageItemProps {
     onUnhide?: (id: string) => void;
     isHighlighted?: boolean;
     highlightKey?: number;
+    failedMessagesCount?: number;
 }
 
 export default function MessageItem({
@@ -30,7 +31,8 @@ export default function MessageItem({
     onHide,
     onUnhide,
     isHighlighted,
-    highlightKey
+    highlightKey,
+    failedMessagesCount
 }: MessageItemProps) {
     const [visibleWords, setVisibleWords] = useState(30);
     const [showActions, setShowActions] = useState(false);
@@ -422,13 +424,18 @@ export default function MessageItem({
                 </div>
 
                 {/* Retry Button for Failed Messages */}
-                {message.status === 'failed' && isMe && (
+                {message.status === 'failed' && isMe && (failedMessagesCount || 0) === 1 && (
                     <button
                         onClick={() => onRetry?.(message)}
                         className="text-[10px] text-red-500 underline text-left mt-1 hover:text-red-600 transition-colors"
                     >
                         Failed to send. Click to retry.
                     </button>
+                )}
+                {message.status === 'failed' && isMe && (failedMessagesCount || 0) > 1 && (
+                    <div className="text-[10px] text-orange-500 text-left mt-1">
+                        Retrying failed messages automatically...
+                    </div>
                 )}
 
                 {/* Tail Decoration (Simplified) */}

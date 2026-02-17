@@ -96,7 +96,7 @@ export default function ChatPage() {
             const timer = setTimeout(() => {
                 setHighlightedMessageId(null);
             }, 2500); // 2.5 seconds to match animation duration
-            
+
             return () => clearTimeout(timer);
         }
     }, [highlightedMessageId]);
@@ -169,7 +169,7 @@ export default function ChatPage() {
             console.log('📨 Current user:', username);
             console.log('📨 Selected user:', selectedUser);
             console.log('📨 Message from:', data.from, 'to:', data.to);
-            
+
             setMessages(prev => {
                 // Check if message already exists to avoid duplicates
                 const exists = prev.some(m => m.id === data.id);
@@ -196,7 +196,7 @@ export default function ChatPage() {
             }
 
             // If we receive a message for the current conversation, reload messages to ensure sync
-            if ((data.from === selectedUser && data.to === username) || 
+            if ((data.from === selectedUser && data.to === username) ||
                 (data.from === username && data.to === selectedUser)) {
                 console.log('🔄 Message for current conversation, reloading...');
                 setTimeout(() => loadMessages(selectedUser!), 1000);
@@ -204,32 +204,32 @@ export default function ChatPage() {
         });
 
         socket.on('message-status-update', ({ messageId, status }: { messageId: string; status: string }) => {
-            setMessages(prev => prev.map(m => 
+            setMessages(prev => prev.map(m =>
                 m.id === messageId ? { ...m, status: status as any } : m
             ));
         });
 
         socket.on('message-edited', ({ id, message }: { id: string; message: string }) => {
-            setMessages(prev => prev.map(m => 
+            setMessages(prev => prev.map(m =>
                 m.id === id ? { ...m, message, isEdited: true } : m
             ));
         });
 
         socket.on('delete-message', ({ id }: { id: string }) => {
-            setMessages(prev => prev.map(m => 
+            setMessages(prev => prev.map(m =>
                 m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m
             ));
         });
 
         socket.on('pin-message', ({ id, isPinned }: { id: string; isPinned: boolean }) => {
-            setMessages(prev => prev.map(m => 
+            setMessages(prev => prev.map(m =>
                 m.id === id ? { ...m, isPinned } : m
             ));
         });
 
         socket.on('clear-all-messages', ({ from, to }: { from: string; to: string }) => {
             if (to === username) {
-                setMessages(prev => prev.filter(m => 
+                setMessages(prev => prev.filter(m =>
                     !((m.from === from && m.to === to) || (m.from === to && m.to === from))
                 ));
             }
@@ -465,10 +465,10 @@ export default function ChatPage() {
 
                     if (currentConversation && unreadCounts[selectedUsername] > 0) {
                         // Use WebSocket instead of HTTP API
-                        const unreadMsgs = messages.filter(m => 
+                        const unreadMsgs = messages.filter(m =>
                             m.from === selectedUsername && m.status !== 'read' && m.to === username
                         );
-                        
+
                         if (unreadMsgs.length > 0 && socketRef.current) {
                             unreadMsgs.forEach(msg => {
                                 if (msg.id) {
@@ -476,7 +476,7 @@ export default function ChatPage() {
                                 }
                             });
                         }
-                        
+
                         setUnreadCounts(prev => ({
                             ...prev,
                             [selectedUsername]: 0
@@ -524,7 +524,7 @@ export default function ChatPage() {
                     hasSession: !!storedSession,
                     username: storedSession?.user?.username
                 });
-                
+
                 if (storedSession) {
                     console.log('✅ User authenticated:', storedSession.user.username);
                     setUsername(storedSession.user.username);
@@ -601,10 +601,10 @@ export default function ChatPage() {
 
         // Set up storage event listener
         window.addEventListener('storage', handleStorageChange);
-        
+
         // Also check periodically (less frequently) as fallback
         const interval = setInterval(checkSessionChange, 30000); // 30 seconds instead of 5
-        
+
         return () => {
             window.removeEventListener('storage', handleStorageChange);
             clearInterval(interval);
@@ -1125,10 +1125,10 @@ export default function ChatPage() {
                     isDeleted: false,
                     isPinned: false,
                     replyTo: replyingTo ? {
-    id: replyingTo.id,
-    from: replyingTo.from,
-    message: replyingTo.message
-} : undefined,
+                        id: replyingTo.id,
+                        from: replyingTo.from,
+                        message: replyingTo.message
+                    } : undefined,
                     groupId: null,
                     chunkIndex: null,
                     totalChunks: null
@@ -1287,25 +1287,43 @@ export default function ChatPage() {
         }
     };
 
+    // Auto retry failed messages when there are 2 or more
+    useEffect(() => {
+        const failedMessages = messages.filter(m => m.status === 'failed');
+
+        if (failedMessages.length >= 2 && isConnected && socketRef.current) {
+            console.log(`🔄 Auto-retrying ${failedMessages.length} failed messages`);
+
+            // Retry all failed messages with delay between each
+            failedMessages.forEach((msg, index) => {
+                setTimeout(() => {
+                    if (msg.id) {
+                        console.log(`🔄 Auto-retrying message ${index + 1}/${failedMessages.length}:`, msg.id);
+                        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'pending' } : m));
+
+                        if (isConnected && socketRef.current) {
+                            sendMessageInternal(msg);
+                        }
+                    }
+                }, index * 1000); // 1 second delay between each retry
+            });
+        }
+    }, [messages, isConnected]);
+
     const handleDeleteMessage = async (id: string, type: 'me' | 'everyone') => {
         try {
             if (type === 'me') {
                 // Delete for me - hide message for current user only
-                setMessages(prev => prev.map(m => 
+                setMessages(prev => prev.map(m =>
                     m.id === id ? { ...m, isHidden: true } : m
                 ));
                 console.log('� Hidden message for current user:', id);
             } else {
-                // Delete for everyone - remove from database completely
-                // Update local state immediately for better UX (show as deleted)
-                setMessages(prev => prev.map(m => 
+                setMessages(prev => prev.map(m =>
                     m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m
                 ));
-                
-                // Send socket event to delete from database
                 if (socketRef.current && selectedUser) {
                     socketRef.current?.emit('delete-message', { id, to: selectedUser });
-                    console.log('🗑️ Deleting message from database for everyone:', id, 'to:', selectedUser);
                 }
             }
         } catch (error) {
@@ -1492,7 +1510,7 @@ export default function ChatPage() {
     const currentChatMessages = messages.filter(
         (msg: Message) => {
             const shouldInclude = (msg.from === username && msg.to === selectedUser) ||
-                                (msg.from === selectedUser && msg.to === username);
+                (msg.from === selectedUser && msg.to === username);
             console.log('🔍 Message filter:', {
                 messageId: msg.id,
                 from: msg.from,

@@ -35,6 +35,10 @@ export default function MessageList({
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messageListRef = useRef<HTMLDivElement>(null);
     const [highlightKey, setHighlightKey] = useState(0);
+    const [autoScroll, setAutoScroll] = useState(true);
+
+    // Calculate failed messages count
+    const failedMessagesCount = messages.filter(m => m.status === 'failed').length;
 
     // Scroll to bottom and/or highlighted message
     const scrollToBottom = () => {
@@ -61,9 +65,23 @@ export default function MessageList({
         }
     };
 
+    // Handle scroll events to detect user scrolling
+    const handleScroll = () => {
+        if (!messageListRef.current) return;
+        
+        const { scrollTop, scrollHeight, clientHeight } = messageListRef.current;
+        const isAtBottom = scrollHeight - scrollTop <= clientHeight + 50; // 50px threshold
+        
+        // Enable auto-scroll if user is at bottom, disable if they scrolled up
+        setAutoScroll(isAtBottom);
+    };
+
+    // Auto-scroll to bottom when new messages arrive (only if auto-scroll is enabled)
     useEffect(() => {
-        scrollToBottom();
-    }, [messages]);
+        if (autoScroll) {
+            scrollToBottom();
+        }
+    }, [messages, autoScroll]);
 
     // Scroll to highlighted message when it changes
     useEffect(() => {
@@ -121,7 +139,10 @@ export default function MessageList({
     return (
         <div className="relative flex-1 overflow-hidden">
             <div ref={messageListRef} className="chat-bg-pattern absolute inset-0 z-0 opacity-10"></div>
-            <div className="relative z-10 flex h-full flex-col overflow-y-auto p-4 space-y-2">
+            <div 
+                className="relative z-10 flex h-full flex-col overflow-y-auto p-4 space-y-2"
+                onScroll={handleScroll}
+            >
                 {messagesWithSeparators}
                 <div ref={messagesEndRef} />
             </div>
