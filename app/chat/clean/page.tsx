@@ -27,7 +27,6 @@ export default function CleanChatPage() {
                     setUsername(session.user.username);
                     setIsLoading(false);
                     
-                    // Load conversations
                     loadConversations(session.user.id);
                 } else {
                     console.log('❌ No session found, showing login');
@@ -137,7 +136,6 @@ export default function CleanChatPage() {
         />;
     }
 
-    // Extract users from conversations
     const users = conversations.reduce((acc: { [key: string]: string }, conv) => {
         conv.participants.forEach((p: any) => {
             if (p.user.username !== username) {
@@ -149,7 +147,6 @@ export default function CleanChatPage() {
 
     return (
         <div className="flex h-screen bg-gray-100">
-            {/* Sidebar */}
             <div className="w-80 bg-white border-r border-gray-200">
                 <Sidebar
                     username={username}

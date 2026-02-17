@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Pin, ChevronDown, X } from 'lucide-react';
 import { frontendAuth } from '@/utils/frontendAuth';
 import IncomingCallModal from '@/components/video/IncomingCallModal';
@@ -43,15 +43,20 @@ interface PeerConnectionManager {
 
 export default function ChatPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
 
     // Hook to handle route change conversations loading
     useRouteChangeConversations();
 
+    // Get conversation data from URL parameters
+    const conversationId = searchParams?.get('conversationId');
+    const conversationUser = searchParams?.get('user');
+
     const [username, setUsername] = useState<string>('');
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [users, setUsers] = useState<User>({});
-    const [selectedUser, setSelectedUser] = useState<string | null>(null);
-    const selectedUserRef = useRef<string | null>(null);
+    const [selectedUsername, setSelectedUser] = useState<string | null>(null);
+    const selectedUsernameRef = useRef<string | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
     const [conversations, setConversations] = useState<any[]>([]);
     const [inputMessage, setInputMessage] = useState('');
@@ -121,8 +126,8 @@ export default function ChatPage() {
 
     // Sync refs with state
     useEffect(() => {
-        selectedUserRef.current = selectedUser;
-    }, [selectedUser]);
+        selectedUsernameRef.current = selectedUsername;
+    }, [selectedUsername]);
 
     useEffect(() => {
         isWindowFocusedRef.current = isWindowFocused;
@@ -141,13 +146,13 @@ export default function ChatPage() {
     // Merge online users with conversation users
     const allUsers = { ...conversationUsers, ...users };
     useEffect(() => {
-        if (selectedUser) {
+        if (selectedUsername) {
             setUnreadCounts(prev => ({
                 ...prev,
-                [selectedUser]: 0
+                [selectedUsername]: 0
             }));
         }
-    }, [selectedUser]);
+    }, [selectedUsername]);
 
     // Socket connection setup
     const socket = useSocket();
@@ -176,7 +181,7 @@ export default function ChatPage() {
         socket.on('receive-message', (data: Message) => {
             console.log('📨 Received message:', data);
             console.log('📨 Current user:', username);
-            console.log('📨 Selected user:', selectedUser);
+            console.log('📨 Selected user:', selectedUsername);
             console.log('📨 Message from:', data.from, 'to:', data.to);
 
             setMessages(prev => {
@@ -210,10 +215,10 @@ export default function ChatPage() {
             }
 
             // If we receive a message for the current conversation, reload messages to ensure sync
-            if ((data.from === selectedUser && data.to === username) ||
-                (data.from === username && data.to === selectedUser)) {
+            if ((data.from === selectedUsername && data.to === username) ||
+                (data.from === username && data.to === selectedUsername)) {
                 console.log('🔄 Message for current conversation, reloading...');
-                setTimeout(() => loadMessages(selectedUser!), 1000);
+                setTimeout(() => loadMessages(selectedUsername!), 1000);
             }
         });
 
@@ -316,9 +321,9 @@ export default function ChatPage() {
 
     // Mark messages as read when focusing or changing user
     useEffect(() => {
-        if (selectedUser && isWindowFocused && socketRef.current) {
+        if (selectedUsername && isWindowFocused && socketRef.current) {
             // Find messages from this user that are not read
-            const unreadMsgs = messages.filter(m => m.from === selectedUser && m.status !== 'read' && m.to === username);
+            const unreadMsgs = messages.filter(m => m.from === selectedUsername && m.status !== 'read' && m.to === username);
 
             if (unreadMsgs.length > 0) {
                 unreadMsgs.forEach(msg => {
@@ -329,11 +334,11 @@ export default function ChatPage() {
 
                 // Optimistically update local state
                 setMessages(prev => prev.map(m =>
-                    (m.from === selectedUser && m.to === username && m.status !== 'read') ? { ...m, status: 'read' as const } : m
+                    (m.from === selectedUsername && m.to === username && m.status !== 'read') ? { ...m, status: 'read' as const } : m
                 ));
             }
         }
-    }, [selectedUser, isWindowFocused, messages.length]);
+    }, [selectedUsername, isWindowFocused, messages.length]);
 
 
     // Add no-scroll class to body for chat page
@@ -376,10 +381,6 @@ export default function ChatPage() {
     const loadMessages = async (selectedUsername: string) => {
         setIsMessagesLoading(true);
         try {
-            console.log('🔄 Loading messages for:', selectedUsername);
-            console.log('🔄 Current conversations:', conversations.length);
-
-            // Find conversation for this user
             let currentConversation = conversations.find(c =>
                 c.participants.some((p: any) => p.user.username === selectedUsername)
             );
@@ -394,22 +395,22 @@ export default function ChatPage() {
 
                 if (userId) {
                     // Try to find conversation by participants
-                    const { data: selectedUserData } = await supabaseAdmin
+                    const { data: selectedUsernameData } = await supabaseAdmin
                         .from('users')
                         .select('id')
                         .eq('username', selectedUsername)
                         .maybeSingle();
 
-                    console.log('Selected user data:', selectedUserData);
+                    console.log('Selected user data:', selectedUsernameData);
 
-                    if (selectedUserData) {
+                    if (selectedUsernameData) {
                         const response = await fetch('/api/conversations', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                             },
                             body: JSON.stringify({
-                                participantIds: [userId, selectedUserData.id]
+                                participantIds: [userId, selectedUsernameData.id]
                             }),
                         });
 
@@ -423,7 +424,13 @@ export default function ChatPage() {
 
             if (currentConversation) {
                 console.log('🔄 Fetching messages API for conversation:', currentConversation.id);
-                const response = await fetch(`/api/conversations/${currentConversation.id}/messages`);
+                const response = await fetch(`/api/conversations/${currentConversation.id}/messages`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${frontendAuth.getSession()?.accessToken || ''}`
+                    }
+                });
                 if (response.ok) {
                     const messagesData = await response.json();
                     console.log('✅ Messages API loaded successfully:', messagesData.length, 'messages');
@@ -525,21 +532,21 @@ export default function ChatPage() {
 
     // Load messages when selected user changes
     useEffect(() => {
-        if (selectedUser && username) {
-            loadMessages(selectedUser);
+        if (selectedUsername && username) {
+            loadMessages(selectedUsername);
         }
-    }, [selectedUser, username]);
+    }, [selectedUsername, username]);
 
     // Also reload messages periodically to sync with database
     useEffect(() => {
-        if (selectedUser && username) {
+        if (selectedUsername && username) {
             const interval = setInterval(() => {
-                loadMessages(selectedUser);
+                loadMessages(selectedUsername);
             }, 10000); // Reload every 10 seconds
 
             return () => clearInterval(interval);
         }
-    }, [selectedUser, username]);
+    }, [selectedUsername, username]);
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -591,7 +598,6 @@ export default function ChatPage() {
         checkAuth();
     }, []);
 
-    // Check cookie consent and show reminder after 10 seconds if not accepted
     useEffect(() => {
         if (username && !hasCookieAcceptance()) {
             const timer = setTimeout(() => {
@@ -602,7 +608,6 @@ export default function ChatPage() {
         }
     }, [username]);
 
-    // Listen for session changes using localStorage events
     useEffect(() => {
         const checkSessionChange = () => {
             try {
@@ -617,15 +622,39 @@ export default function ChatPage() {
                             loadConversations(storedSession.user.id);
                         }
                     } else {
-                        // Session was cleared, redirect to login
-                        console.log('❌ Session cleared, redirecting to login');
-                        router.push('/login');
+                        console.log('❌ Session cleared, showing login');
+                        setIsLoading(false);
+                        setIsConversationsLoading(false);
                     }
                 }
             } catch (error) {
-                console.error('Error checking session:', error);
+                console.error('Error checking authentication:', error);
+                setIsLoading(false);
+                setIsConversationsLoading(false);
             }
         };
+
+        checkSessionChange();
+
+        useEffect(() => {
+            if (conversationId && conversationUser && !selectedUsername) {
+                console.log('🔗 Found conversation in URL:', { conversationId, user: conversationUser });
+                setSelectedUser(conversationUser);
+
+                // Create a temporary conversation object for URL parameters
+                const tempConversation = {
+                    id: conversationId,
+                    participants: [
+                        { user: { id: 'temp-user', username: conversationUser } },
+                        { user: { id: 'temp-current', username: username } }
+                    ]
+                };
+
+                // Add to conversations state for loading
+                setConversations([tempConversation]);
+                console.log('✅ Temporary conversation created from URL parameters');
+            }
+        }, [conversationId, conversationUser, selectedUsername]);
 
         // Listen for storage events (for cross-tab changes)
         const handleStorageChange = (e: StorageEvent) => {
@@ -634,6 +663,7 @@ export default function ChatPage() {
             }
         };
 
+        // ... (rest of the code remains the same)
         // Check immediately
         checkSessionChange();
 
@@ -681,7 +711,6 @@ export default function ChatPage() {
                             m.id === msg.id ? { ...m, status: 'sending' } : m
                         ));
 
-                        // Get current user ID and conversation
                         const cookies = getClientCookies();
                         const userId = (cookies['user-id'] as string) || SecureSession.getUserId();
 
@@ -689,20 +718,19 @@ export default function ChatPage() {
                             c.participants.some((p: any) => p.user.username === msg.to)
                         );
 
-                        // If conversation not found, create it
                         if (!currentConversation && userId) {
-                            const { data: selectedUserData } = await supabaseAdmin
+                            const { data: selectedUsernameData } = await supabaseAdmin
                                 .from('users')
                                 .select('id')
                                 .eq('username', msg.to)
                                 .maybeSingle();
 
-                            if (selectedUserData) {
+                            if (selectedUsernameData) {
                                 const response = await fetch('/api/conversations', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({
-                                        participantIds: [userId, selectedUserData.id]
+                                        participantIds: [userId, selectedUsernameData.id]
                                     }),
                                 });
 
@@ -938,12 +966,12 @@ export default function ChatPage() {
                 peerConnectionRef.current = null;
             }
         }
-    }), []);
+    }), [socketRef]);
 
     const startCall = async (isAudio: boolean) => {
-        if (!selectedUser) return;
+        if (!selectedUsername) return;
         setIsAudioOnly(isAudio);
-        setCallParticipant(selectedUser);
+        setCallParticipant(selectedUsername);
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -959,12 +987,12 @@ export default function ChatPage() {
 
             socketRef.current?.emit('offer', {
                 from: username,
-                to: selectedUser,
+                to: selectedUsername,
                 offer,
                 isAudioOnly: isAudio
             });
 
-            callerRef.current = [username, selectedUser];
+            callerRef.current = [username, selectedUsername];
             setShowEndCallButton(true);
             setIsCallActive(true);
             setConnectionState('connecting');
@@ -1023,7 +1051,7 @@ export default function ChatPage() {
     };
 
     const handleEndCallRequest = () => {
-        const otherUser = callerRef.current.find(u => u !== username) || selectedUser || callParticipant;
+        const otherUser = callerRef.current.find(u => u !== username) || selectedUsername || callParticipant;
         if (otherUser) {
             socketRef.current?.emit('call-ended', { from: username, to: otherUser });
         }
@@ -1077,7 +1105,7 @@ export default function ChatPage() {
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!inputMessage.trim() || !selectedUser) return;
+        if (!inputMessage.trim() || !selectedUsername) return;
 
         const tempContent = inputMessage.trim();
         setInputMessage('');
@@ -1087,7 +1115,7 @@ export default function ChatPage() {
         const tempMessage: Message = {
             id: `temp-${Date.now()}`,
             from: username,
-            to: selectedUser,
+            to: selectedUsername,
             message: tempContent,
             timestamp: new Date(),
             status: 'sending',
@@ -1130,7 +1158,7 @@ export default function ChatPage() {
             // Send message using hook
             const savedMsg = await sendMessage(
                 tempContent,
-                selectedUser,
+                selectedUsername,
                 username,
                 conversations,
                 replyingTo
@@ -1144,7 +1172,7 @@ export default function ChatPage() {
                 m.id === tempMessage.id ? {
                     ...savedMsg,
                     from: username,
-                    to: selectedUser,
+                    to: selectedUsername,
                     message: tempContent,
                     timestamp: new Date(savedMsg.timestamp),
                     status: 'sent'
@@ -1155,7 +1183,7 @@ export default function ChatPage() {
                 socketRef.current.emit('send-message', {
                     id: savedMsg.id,
                     from: username,
-                    to: selectedUser,
+                    to: selectedUsername,
                     message: tempContent,
                     timestamp: savedMsg.timestamp,
                     status: 'sent',
@@ -1207,7 +1235,7 @@ export default function ChatPage() {
 
     const handleUpdateMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!editingMessage || !inputMessage.trim() || !selectedUser) return;
+        if (!editingMessage || !inputMessage.trim() || !selectedUsername) return;
 
         const tempContent = inputMessage.trim();
         setEditingMessage(null);
@@ -1223,7 +1251,7 @@ export default function ChatPage() {
                     messageId: editingMessage.id,
                     content: tempContent,
                     from: username,
-                    to: selectedUser
+                    to: selectedUsername
                 }),
             });
 
@@ -1258,13 +1286,13 @@ export default function ChatPage() {
     };
 
     const handleSendVoice = async (audioBlob: Blob, duration: number) => {
-        if (!selectedUser) return;
+        if (!selectedUsername) return;
 
         try {
             const savedMsg = await sendVoiceMessage(
                 audioBlob,
                 duration,
-                selectedUser,
+                selectedUsername,
                 username,
                 conversations
             );
@@ -1272,7 +1300,7 @@ export default function ChatPage() {
             setMessages(prev => [...prev, {
                 ...savedMsg,
                 from: username,
-                to: selectedUser,
+                to: selectedUsername,
                 message: '🎤 Voice message',
                 timestamp: new Date(savedMsg.timestamp),
                 status: 'sent',
@@ -1285,7 +1313,7 @@ export default function ChatPage() {
                 socketRef.current.emit('send-message', {
                     id: savedMsg.id,
                     from: username,
-                    to: selectedUser,
+                    to: selectedUsername,
                     message: '🎤 Voice message',
                     timestamp: savedMsg.timestamp,
                     status: 'sent',
@@ -1374,8 +1402,8 @@ export default function ChatPage() {
 
                 if (response.ok) {
                     setMessages(prev => prev.filter(m => m.id !== id));
-                    if (socketRef.current && selectedUser) {
-                        socketRef.current?.emit('delete-message', { id, to: selectedUser });
+                    if (socketRef.current && selectedUsername) {
+                        socketRef.current?.emit('delete-message', { id, to: selectedUsername });
                     }
 
                     console.log('✅ Message deleted for everyone:', id);
@@ -1393,7 +1421,7 @@ export default function ChatPage() {
 
         const currentPins = messages.filter(m =>
             m.isPinned &&
-            ((m.from === username && m.to === selectedUser) || (m.from === selectedUser && m.to === username))
+            ((m.from === username && m.to === selectedUsername) || (m.from === selectedUsername && m.to === username))
         );
 
         if (isPinned && currentPins.length >= 3) {
@@ -1402,7 +1430,7 @@ export default function ChatPage() {
         }
 
         setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isPinned } : m));
-        socketRef.current?.emit('pin-message', { id: msg.id, isPinned, to: selectedUser });
+        socketRef.current?.emit('pin-message', { id: msg.id, isPinned, to: selectedUsername });
     };
 
     const handleHideMessage = (id: string) => {
@@ -1416,9 +1444,9 @@ export default function ChatPage() {
     };
 
     const handleRefreshMessages = () => {
-        if (selectedUser) {
-            console.log('🔄 Manual refresh triggered for:', selectedUser);
-            loadMessages(selectedUser);
+        if (selectedUsername) {
+            console.log('🔄 Manual refresh triggered for:', selectedUsername);
+            loadMessages(selectedUsername);
         }
     };
 
@@ -1436,20 +1464,20 @@ export default function ChatPage() {
     };
 
     const handleClearChat = () => {
-        if (selectedUser) {
+        if (selectedUsername) {
             setMessages([]);
             const failed = storageHelpers.getFailedMessages() || [];
-            const updatedFailed = failed.filter((m: Message) => m.to !== selectedUser);
+            const updatedFailed = failed.filter((m: Message) => m.to !== selectedUsername);
             chatStorage.setItem('failed-messages', updatedFailed);
         }
     };
 
     const handleClearAllMessages = async () => {
-        if (!selectedUser || !username) return;
+        if (!selectedUsername || !username) return;
 
         try {
             let currentConversation = conversations.find(c =>
-                c.participants.some((p: any) => p.user.username === selectedUser)
+                c.participants.some((p: any) => p.user.username === selectedUsername)
             );
 
             if (!currentConversation) {
@@ -1457,18 +1485,18 @@ export default function ChatPage() {
                 const userId = (cookies['user-id'] as string) || SecureSession.getUserId();
 
                 if (userId) {
-                    const { data: selectedUserData } = await supabaseAdmin
+                    const { data: selectedUsernameData } = await supabaseAdmin
                         .from('users')
                         .select('id')
-                        .eq('username', selectedUser)
+                        .eq('username', selectedUsername)
                         .maybeSingle();
 
-                    if (selectedUserData) {
+                    if (selectedUsernameData) {
                         const response = await fetch('/api/conversations', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                participantIds: [userId, selectedUserData.id]
+                                participantIds: [userId, selectedUsernameData.id]
                             }),
                         });
 
@@ -1488,13 +1516,13 @@ export default function ChatPage() {
                 if (response.ok) {
                     setMessages([]);
                     const failed = storageHelpers.getFailedMessages() || [];
-                    const updatedFailed = failed.filter((m: Message) => m.to !== selectedUser);
+                    const updatedFailed = failed.filter((m: Message) => m.to !== selectedUsername);
                     chatStorage.setItem('failed-messages', updatedFailed);
 
                     if (socketRef.current?.connected) {
                         socketRef.current.emit('clear-all-messages', {
                             from: username,
-                            to: selectedUser,
+                            to: selectedUsername,
                             conversationId: currentConversation.id
                         });
                     }
@@ -1539,17 +1567,17 @@ export default function ChatPage() {
 
     const currentChatMessages = messages.filter(
         (msg: Message) => {
-            const shouldInclude = (msg.from === username && msg.to === selectedUser) ||
-                (msg.from === selectedUser && msg.to === username);
+            const shouldInclude = (msg.from === username && msg.to === selectedUsername) ||
+                (msg.from === selectedUsername && msg.to === username);
             console.log('🔍 Message filter:', {
                 messageId: msg.id,
                 from: msg.from,
                 to: msg.to,
                 username,
-                selectedUser,
+                selectedUsername,
                 shouldInclude,
                 isSentMessage: msg.from === username,
-                isReceivedMessage: msg.from === selectedUser,
+                isReceivedMessage: msg.from === selectedUsername,
                 message: msg.message?.substring(0, 20) + '...'
             });
             return shouldInclude;
@@ -1563,14 +1591,14 @@ export default function ChatPage() {
         totalMessages: messages.length,
         currentChatMessages: currentChatMessages.length,
         username,
-        selectedUser,
+        selectedUsername,
         allMessages: messages.map(m => ({
             id: m.id,
             from: m.from,
             to: m.to,
             message: m.message?.substring(0, 20) + '...',
             isSent: m.from === username,
-            isReceived: m.from === selectedUser
+            isReceived: m.from === selectedUsername
         }))
     });
 
@@ -1582,11 +1610,11 @@ export default function ChatPage() {
         <div className="min-h-[100dvh] h-[100dvh] flex bg-[#f0f2f5] md:p-4 font-sans">
             <div className="relative flex h-full w-full bg-white shadow-2xl md:rounded-sm">
 
-                <ResizableSidebar selectedUser={selectedUser}>
+                <ResizableSidebar selectedUser={selectedUsername}>
                     <Sidebar
                         username={username}
                         users={allUsers}
-                        selectedUser={selectedUser}
+                        selectedUser={selectedUsername}
                         setSelectedUser={setSelectedUser}
                         searchQuery={searchQuery}
                         setSearchQuery={setSearchQuery}
@@ -1600,11 +1628,11 @@ export default function ChatPage() {
                 </ResizableSidebar>
 
                 {/* Main Chat Area */}
-                <main className={`flex flex-1 flex-col bg-[#efeae2] relative ${!selectedUser ? 'hidden md:flex' : 'flex'}`}>
-                    {selectedUser ? (
+                <main className={`flex flex-1 flex-col bg-[#efeae2] relative ${!selectedUsername ? 'hidden md:flex' : 'flex'}`}>
+                    {selectedUsername ? (
                         <>
                             <ChatHeader
-                                selectedUser={selectedUser}
+                                selectedUser={selectedUsername}
                                 onBack={() => setSelectedUser(null)}
                                 onStartVideoCall={() => startCall(false)}
                                 onStartAudioCall={() => startCall(true)}

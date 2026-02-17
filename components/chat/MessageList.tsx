@@ -120,7 +120,7 @@ export default function MessageList({
         <div className="relative flex-1 overflow-hidden">
             <div ref={messageListRef} className="chat-bg-pattern absolute inset-0 z-0 opacity-10"></div>
             <div 
-                className="relative z-10 flex h-full flex-col overflow-y-auto p-4 space-y-2"
+                className="relative z-10 flex h-full flex-col overflow-y-auto overflow-hidden p-4 space-y-2"
                 onScroll={handleScroll}
             >
                 {loading ? (
