@@ -29,15 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             email_verified: false,
             verification_otp: email ? otp : null,
             verification_otp_expires: email ? otpExpires.toISOString() : null,
-            termsAccepted: true,
-            termsAcceptedAt: new Date().toISOString(),
         };
-
-        // Add cookie consent if provided
-        if (cookieConsent) {
-            userData.cookieConsent = cookieConsent;
-            userData.cookieConsentAt = new Date().toISOString();
-        }
 
         const { data: user, error } = await supabaseAdmin
             .from('users')

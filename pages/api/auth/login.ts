@@ -86,7 +86,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 httpOnly: true,
                 secure: isProduction,
                 sameSite: 'strict',
-                maxAge: 60 * 60, // 1 hour
+                maxAge: 60 * 60 * 60, // 1 hour
                 path: '/',
             }),
             serialize('refresh_token', refreshToken, {
