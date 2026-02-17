@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import { frontendAuth } from '@/utils/frontendAuth';
 import AuthOverlay from '@/components/global/AuthOverlay';
@@ -163,16 +163,13 @@ export default function CleanChatPage() {
                 />
             </div>
 
-            {/* Chat Area */}
             <div className="flex-1 flex flex-col">
                 {selectedUser ? (
-                    <>
-                        {/* Header */}
+                    <Fragment>
                         <div className="bg-white border-b border-gray-200 px-6 py-4">
                             <h2 className="text-lg font-semibold">{selectedUser}</h2>
                         </div>
 
-                        {/* Messages */}
                         <div className="flex-1 overflow-y-auto p-6 space-y-4">
                             {messages
                                 .filter(m => (m.from === username && m.to === selectedUser) || (m.from === selectedUser && m.to === username))
@@ -215,7 +212,7 @@ export default function CleanChatPage() {
                                 </button>
                             </div>
                         </form>
-                    </>
+                    </Fragment>
                 ) : (
                     <div className="flex-1 flex items-center justify-center">
                         <div className="text-center">

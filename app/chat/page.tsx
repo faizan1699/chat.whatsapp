@@ -636,26 +636,6 @@ export default function ChatPage() {
 
         checkSessionChange();
 
-        useEffect(() => {
-            if (conversationId && conversationUser && !selectedUsername) {
-                console.log('🔗 Found conversation in URL:', { conversationId, user: conversationUser });
-                setSelectedUser(conversationUser);
-
-                // Create a temporary conversation object for URL parameters
-                const tempConversation = {
-                    id: conversationId,
-                    participants: [
-                        { user: { id: 'temp-user', username: conversationUser } },
-                        { user: { id: 'temp-current', username: username } }
-                    ]
-                };
-
-                // Add to conversations state for loading
-                setConversations([tempConversation]);
-                console.log('✅ Temporary conversation created from URL parameters');
-            }
-        }, [conversationId, conversationUser, selectedUsername]);
-
         // Listen for storage events (for cross-tab changes)
         const handleStorageChange = (e: StorageEvent) => {
             if (e.key === 'user_data' || e.key === 'session_token') {
@@ -678,6 +658,27 @@ export default function ChatPage() {
             clearInterval(interval);
         };
     }, [username, router]);
+
+    // Check for URL parameters and set user/conversation if available
+    useEffect(() => {
+        if (conversationId && conversationUser && !selectedUsername) {
+            console.log('🔗 Found conversation in URL:', { conversationId, user: conversationUser });
+            setSelectedUser(conversationUser);
+
+            // Create a temporary conversation object for URL parameters
+            const tempConversation = {
+                id: conversationId,
+                participants: [
+                    { user: { id: 'temp-user', username: conversationUser } },
+                    { user: { id: 'temp-current', username: username } }
+                ]
+            };
+
+            // Add to conversations state for loading
+            setConversations([tempConversation]);
+            console.log('✅ Temporary conversation created from URL parameters');
+        }
+    }, [conversationId, conversationUser, selectedUsername]);
 
     // Persistence Helpers
     const saveFailedMessageLocal = (msg: Message) => {
