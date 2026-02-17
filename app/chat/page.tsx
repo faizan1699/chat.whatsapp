@@ -218,12 +218,12 @@ export default function ChatPage() {
                 }
             }
 
-            // If we receive a message for the current conversation, reload messages to ensure sync
-            if ((data.from === selectedUsername && data.to === username) ||
-                (data.from === username && data.to === selectedUsername)) {
-                console.log('🔄 Message for current conversation, reloading...');
-                setTimeout(() => loadMessages(selectedUsername!), 1000);
-            }
+            // WebSocket handles real-time updates, no need to reload
+            // if ((data.from === selectedUsername && data.to === username) ||
+            //     (data.from === username && data.to === selectedUsername)) {
+            //     console.log('🔄 Message for current conversation, reloading...');
+            //     setTimeout(() => loadMessages(selectedUsername!), 1000);
+            // }
         });
 
         socket.on('message-status-update', ({ messageId, status }: { messageId: string; status: string }) => {
@@ -528,16 +528,16 @@ export default function ChatPage() {
         }
     }, [selectedUsername, username]);
 
-    // Also reload messages periodically to sync with database
-    useEffect(() => {
-        if (selectedUsername && username) {
-            const interval = setInterval(() => {
-                loadMessages(selectedUsername);
-            }, 10000); // Reload every 10 seconds
+    // Remove periodic reload - WebSocket handles real-time updates
+    // useEffect(() => {
+    //     if (selectedUsername && username) {
+    //         const interval = setInterval(() => {
+    //             loadMessages(selectedUsername);
+    //         }, 10000); // Reload every 10 seconds
 
-            return () => clearInterval(interval);
-        }
-    }, [selectedUsername, username]);
+    //         return () => clearInterval(interval);
+    //     }
+    // }, [selectedUsername, username]);
 
     useEffect(() => {
         const checkAuth = async () => {

@@ -6,7 +6,6 @@ export const useRouteChangeConversations = () => {
   const hasLoadedConversations = useRef(false);
 
   useEffect(() => {
-    // Only load conversations once when first visiting chat pages
     if (pathname && (pathname === '/chat' || pathname.startsWith('/chat/')) && !hasLoadedConversations.current) {
       hasLoadedConversations.current = true;
     }
