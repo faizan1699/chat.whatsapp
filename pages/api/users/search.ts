@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import prisma from '../../../utils/prisma';
+import { supabaseAdmin } from '../../../utils/supabase-server';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'GET') return res.status(405).end();
@@ -11,25 +11,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-        const users = await prisma.user.findMany({
-            where: {
-                OR: [
-                    { email: { contains: q, mode: 'insensitive' } },
-                    { phoneNumber: { contains: q } },
-                    { username: { contains: q, mode: 'insensitive' } },
-                ],
-            },
-            select: {
-                id: true,
-                username: true,
-                email: true,
-                phoneNumber: true,
-                avatar: true,
-            },
-            limit: 10,
-        });
+        const searchTerm = `%${q}%`;
+        const { data: users, error } = await supabaseAdmin
+            .from('users')
+            .select('id, username, email, phone_number, avatar')
+            .or(`username.ilike.${JSON.stringify(searchTerm)},email.ilike.${JSON.stringify(searchTerm)},phone_number.ilike.${JSON.stringify(searchTerm)}`)
+            .limit(10);
 
-        res.status(200).json(users);
+        if (error) throw error;
+
+        const mapped = (users || []).map((u) => ({
+            id: u.id,
+            username: u.username,
+            email: u.email,
+            phoneNumber: u.phone_number,
+            avatar: u.avatar,
+        }));
+
+        res.status(200).json(mapped);
     } catch (error) {
         console.error('Search error:', error);
         res.status(500).json({ error: 'Internal server error' });

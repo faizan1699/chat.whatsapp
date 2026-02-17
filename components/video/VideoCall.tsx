@@ -102,13 +102,13 @@ export default function VideoCall({
       {username === "" && <UsernameEntry onUsernameCreated={onUsernameCreated} />}
 
       {/* Edit Modal */}
-      {showEditModal && (
-        <EditProfileModal
-          username={username}
-          onClose={() => setShowEditModal(false)}
-          onUsernameChange={onUsernameChange!}
-        />
-      )}
+      <EditProfileModal
+        isOpen={!!showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSuccess={(newUsername) => {
+          if (newUsername) onUsernameChange?.(newUsername);
+        }}
+      />
 
       {/* Video Call Interface */}
       {username !== "" && (

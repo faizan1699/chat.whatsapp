@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { Server as ServerIO, Socket } from 'socket.io';
 import { Server as NetServer } from 'http';
 import { Socket as NetSocket } from 'net';
-import prisma from '../../utils/prisma';
+import { supabaseAdmin } from '../../utils/supabase-server';
 
 interface SocketWithIO extends NetSocket {
   server: NetServer & {
@@ -12,6 +12,37 @@ interface SocketWithIO extends NetSocket {
 
 interface SocketWithUsername extends Socket {
   username?: string;
+}
+
+async function getOrCreateConversation(fromUserId: string, toUserId: string) {
+  const { data: participants } = await supabaseAdmin
+    .from('conversation_participants')
+    .select('conversation_id')
+    .in('user_id', [fromUserId, toUserId]);
+
+  if (participants?.length) {
+    const convCounts: Record<string, number> = {};
+    participants.forEach((p) => {
+      convCounts[p.conversation_id] = (convCounts[p.conversation_id] || 0) + 1;
+    });
+    const sharedConv = Object.entries(convCounts).find(([, c]) => c === 2);
+    if (sharedConv) {
+      return sharedConv[0];
+    }
+  }
+
+  const { data: newConv } = await supabaseAdmin
+    .from('conversations')
+    .insert({ is_group: false })
+    .select('id')
+    .single();
+
+  if (!newConv) return null;
+  await supabaseAdmin.from('conversation_participants').insert([
+    { user_id: fromUserId, conversation_id: newConv.id },
+    { user_id: toUserId, conversation_id: newConv.id },
+  ]);
+  return newConv.id;
 }
 
 export const config = {
@@ -30,14 +61,13 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
       path: '/api/socket',
       addTrailingSlash: false,
       cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-      }
+        origin: '*',
+        methods: ['GET', 'POST'],
+      },
     });
 
     (res.socket as SocketWithIO).server.io = io;
 
-    // Online users mapping
     const allusers: { [key: string]: string } = {};
 
     io.on('connection', (socket: SocketWithUsername) => {
@@ -59,36 +89,57 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
       });
 
       socket.on('send-message', async (data, callback) => {
-        const { to, from } = data;
+        const { to, from, message, id, timestamp, status, isVoiceMessage, audioUrl, audioDuration } = data;
 
-        if (allusers[to] && allusers[from]) {
+        if (allusers[to]) {
           try {
-            // Save message to PostgreSQL via Prisma
-            await prisma.message.create({
-              data: {
-                id: data.id,
-                from: data.from,
-                to: data.to,
-                message: data.message || "",
-                timestamp: new Date(data.timestamp),
-                status: data.status || "sent",
-                isVoiceMessage: !!data.isVoiceMessage,
-                audioUrl: data.audioUrl || null,
-                audioDuration: data.audioDuration || null,
-                isEdited: !!data.isEdited,
-                isDeleted: !!data.isDeleted,
-                isPinned: !!data.isPinned,
-                replyTo: data.replyTo ? (data.replyTo as any) : null,
-                groupId: data.groupId || null,
-                chunkIndex: data.chunkIndex !== undefined ? data.chunkIndex : null,
-                totalChunks: data.totalChunks !== undefined ? data.totalChunks : null,
-              }
+            // Save to database first
+            const { data: fromUser } = await supabaseAdmin
+              .from('users')
+              .select('id')
+              .eq('username', from)
+              .single();
+            const { data: toUser } = await supabaseAdmin
+              .from('users')
+              .select('id')
+              .eq('username', to)
+              .single();
+
+            if (!fromUser || !toUser) {
+              if (callback) callback({ status: 'error', message: 'User not found' });
+              return;
+            }
+
+            const convId = await getOrCreateConversation(fromUser.id, toUser.id);
+            if (!convId) {
+              if (callback) callback({ status: 'error', message: 'Failed to create conversation' });
+              return;
+            }
+
+            await supabaseAdmin.from('messages').insert({
+              id,
+              conversation_id: convId,
+              sender_id: fromUser.id,
+              content: message || '',
+              timestamp: timestamp ? new Date(timestamp).toISOString() : new Date().toISOString(),
+              status: status || 'sent',
+              is_voice_message: !!isVoiceMessage,
+              audio_url: audioUrl || null,
+              audio_duration: audioDuration ?? null,
+              is_edited: !!data.isEdited,
+              is_deleted: !!data.isDeleted,
+              is_pinned: !!data.isPinned,
+              reply_to: data.replyTo || null,
+              group_id: data.groupId || null,
+              chunk_index: data.chunkIndex ?? null,
+              total_chunks: data.totalChunks ?? null,
             });
 
+            // Send only to recipient
             io.to(allusers[to]).emit('receive-message', data);
-            if (callback) callback({ status: 'ok' });
+            if (callback) callback({ status: 'ok', id: data.id });
           } catch (error) {
-            console.error('Error saving message to PostgreSQL:', error);
+            console.error('Error saving message:', error);
             if (callback) callback({ status: 'error', message: 'Failed to save message' });
           }
         } else {
@@ -98,33 +149,29 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
 
       socket.on('delete-message', async ({ id, to }) => {
         try {
-          const msg = await prisma.message.findUnique({ where: { id } });
+          const { data: msg } = await supabaseAdmin
+            .from('messages')
+            .select('timestamp')
+            .eq('id', id)
+            .single();
           if (!msg) return;
 
           const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-          if (msg.timestamp < oneHourAgo) {
-            // Cannot delete for everyone after 1 hour
-            return;
-          }
+          if (new Date(msg.timestamp) < oneHourAgo) return;
 
-          await prisma.message.update({
-            where: { id },
-            data: {
-              isDeleted: true,
-              message: "",
-              audioUrl: null,
-            }
-          });
+          await supabaseAdmin
+            .from('messages')
+            .update({ is_deleted: true, content: '', audio_url: null })
+            .eq('id', id);
 
           if (allusers[to]) {
             io.to(allusers[to]).emit('delete-message', { id });
           }
         } catch (error) {
-          console.error('Error deleting message from PostgreSQL:', error);
+          console.error('Error deleting message:', error);
         }
       });
 
-      // WebRTC Signal Forwarding
       socket.on('offer', (payload) => {
         if (allusers[payload.to]) io.to(allusers[payload.to]).emit('offer', payload);
       });
@@ -147,30 +194,62 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponse) => {
 
       socket.on('mark-delivered', async ({ messageId, to }) => {
         try {
-          await prisma.message.update({ where: { id: messageId }, data: { status: 'delivered' } });
+          await supabaseAdmin
+            .from('messages')
+            .update({ status: 'delivered' })
+            .eq('id', messageId);
           if (allusers[to]) io.to(allusers[to]).emit('message-status-update', { messageId, status: 'delivered' });
-        } catch (e) { }
+        } catch (e) {
+          /**/
+        }
       });
 
       socket.on('mark-read', async ({ messageId, to }) => {
         try {
-          await prisma.message.update({ where: { id: messageId }, data: { status: 'read' } });
+          await supabaseAdmin
+            .from('messages')
+            .update({ status: 'read' })
+            .eq('id', messageId);
           if (allusers[to]) io.to(allusers[to]).emit('message-status-update', { messageId, status: 'read' });
-        } catch (e) { }
+        } catch (e) {
+          /**/
+        }
       });
 
       socket.on('edit-message', async ({ id, to, message }) => {
         try {
-          await prisma.message.update({ where: { id }, data: { message, isEdited: true } });
+          await supabaseAdmin
+            .from('messages')
+            .update({ content: message, is_edited: true })
+            .eq('id', id);
           if (allusers[to]) io.to(allusers[to]).emit('message-edited', { id, message });
-        } catch (e) { }
+        } catch (e) {
+          /**/
+        }
       });
 
       socket.on('pin-message', async ({ id, isPinned, to }) => {
         try {
-          await prisma.message.update({ where: { id }, data: { isPinned } });
+          await supabaseAdmin.from('messages').update({ is_pinned: isPinned }).eq('id', id);
           if (allusers[to]) io.to(allusers[to]).emit('pin-message', { id, isPinned });
-        } catch (e) { }
+        } catch (e) {
+          /**/
+        }
+      });
+
+      socket.on('clear-all-messages', async ({ from, to, conversationId }) => {
+        try {
+          await supabaseAdmin
+            .from('messages')
+            .delete()
+            .eq('conversation_id', conversationId);
+          
+          if (allusers[to]) {
+            io.to(allusers[to]).emit('clear-all-messages', { from, to });
+          }
+        } catch (e) {
+          console.error('Error clearing all messages:', e);
+        }
       });
     });
   }

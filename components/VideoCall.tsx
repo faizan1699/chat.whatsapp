@@ -85,13 +85,13 @@ export default function VideoCall({
 
       {username === "" && <UsernameEntry onUsernameCreated={onUsernameCreated} />}
 
-      {showEditModal && (
-        <EditProfileModal
-          username={username}
-          onClose={() => setShowEditModal(false)}
-          onUsernameChange={onUsernameChange!}
-        />
-      )}
+      <EditProfileModal
+        isOpen={!!showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSuccess={(newUsername) => {
+          if (newUsername) onUsernameChange?.(newUsername);
+        }}
+      />
 
       {username !== "" && (
         <div className="w-full h-full flex flex-col p-4 md:p-8">

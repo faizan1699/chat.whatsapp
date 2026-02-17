@@ -6,12 +6,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { User, Mail, Phone, Lock, Loader2, CheckCircle } from 'lucide-react';
 import api from '@/utils/api';
+import { hasCookieAcceptance, getCookiePreferences } from '@/utils/cookieConsent';
 
 const schema = z.object({
     username: z.string().min(2, 'Username must be at least 2 characters'),
     email: z.string().email('Invalid email address').optional().or(z.literal('')),
     phoneNumber: z.string().min(10, 'Invalid phone number').optional().or(z.literal('')),
     password: z.string().min(6, 'Password must be at least 6 characters'),
+    termsAccepted: z.boolean().refine(val => val === true, 'You must accept the terms and conditions'),
 }).refine(data => data.email || data.phoneNumber, {
     message: "Either email or phone number is required",
     path: ["email"]
@@ -20,47 +22,57 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 interface RegistrationFormProps {
-    onSuccess: (user: any) => void;
+    onSuccess: (user: { username: string; userId?: string }, email?: string) => void;
+    onSwitchToLogin?: () => void;
 }
 
-export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
-    const [isLoading, setIsLoading] = useState(false);
+export default function RegistrationForm({ onSuccess, onSwitchToLogin }: RegistrationFormProps) {
     const [error, setError] = useState<string | null>(null);
-    const [isSuccess, setIsSuccess] = useState(false);
-
-    const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
+    const [successNoEmail, setSuccessNoEmail] = useState(false);
+    const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
         resolver: zodResolver(schema),
+        defaultValues: {
+            termsAccepted: false,
+        },
     });
 
     const onSubmit = async (data: FormData) => {
-        setIsLoading(true);
         setError(null);
         try {
-            const response = await api.post('/auth/register', data);
-            setIsSuccess(true);
-            setTimeout(() => {
-                onSuccess(response.data);
-            }, 2000);
-        } catch (err: any) {
-            setError(err.response?.data?.error || 'Registration failed. Please try again.');
-        } finally {
-            setIsLoading(false);
+            // Get cookie consent data if available
+            const cookieConsent = hasCookieAcceptance() ? getCookiePreferences() : null;
+
+            const response = await api.post('/auth/register', {
+                ...data,
+                cookieConsent: cookieConsent,
+            });
+            const userData = {
+                username: data.username,
+                userId: response.data?.userId,
+            };
+            if (data.email) {
+                onSuccess(userData, data.email);
+            } else {
+                setSuccessNoEmail(true);
+                setTimeout(() => onSuccess(userData), 2000);
+            }
+        } catch (err: unknown) {
+            setError((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Registration failed. Please try again.');
         }
     };
 
-    if (isSuccess) {
+    if (successNoEmail) {
         return (
             <div className="flex flex-col items-center justify-center p-8 text-center animate-in zoom-in duration-300">
                 <CheckCircle size={64} className="text-[#00a884] mb-4" />
                 <h2 className="text-2xl font-bold text-[#111b21]">Success!</h2>
-                <p className="text-[#667781] mt-2">Account created. An OTP has been sent via WhatsApp if you provided a phone number.</p>
-                <p className="text-[#00a884] mt-4 font-medium italic">Redirecting to chat...</p>
+                <p className="text-[#667781] mt-2">Account created. Redirecting to chat...</p>
             </div>
         );
     }
 
     return (
-        <div className="z-10 w-full md:w-[95%] max-w-[1000px] bg-white shadow-2xl md:rounded-sm flex flex-col md:flex-row overflow-hidden min-h-[600px]">
+        <div className="z-10 w-full md:w-[95%] max-w-[1000px] bg-white shadow-2xl md:rounded-sm flex flex-col md:flex-row overflow-auto min-h-[600px]">
             <div className="flex-1 p-8 md:p-16 flex flex-col bg-[#f0f2f5]">
                 <h1 className="text-2xl md:text-3xl font-light text-[#41525d] mb-6">Create your NexChat account</h1>
                 <p className="text-[#667781] mb-8">Secure, real-time messaging with your friends and family.</p>
@@ -76,7 +88,7 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
                         <div className="h-8 w-8 rounded-full bg-[#00a884]/10 flex items-center justify-center shrink-0">
                             <span className="text-[#00a884] font-bold text-sm">2</span>
                         </div>
-                        <p className="text-[#41525d]">Verify your account via WhatsApp OTP</p>
+                        <p className="text-[#41525d]">Verify your account via Email OTP</p>
                     </div>
                     <div className="flex items-start gap-4">
                         <div className="h-8 w-8 rounded-full bg-[#00a884]/10 flex items-center justify-center shrink-0">
@@ -109,7 +121,7 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
                     </div>
 
                     <div className="space-y-1.5">
-                        <label className="text-[13px] font-medium text-[#00a884] uppercase tracking-wider">Email (Optional)</label>
+                        <label className="text-[13px] font-medium text-[#00a884] uppercase tracking-wider">Email (OTP bhejenge - zaroori)</label>
                         <div className="relative">
                             <Mail className="absolute left-3 top-2.5 text-[#667781]" size={18} />
                             <input
@@ -122,7 +134,7 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
                     </div>
 
                     <div className="space-y-1.5">
-                        <label className="text-[13px] font-medium text-[#00a884] uppercase tracking-wider">Phone Number (Required for OTP)</label>
+                        <label className="text-[13px] font-medium text-[#00a884] uppercase tracking-wider">Phone Number (Optional)</label>
                         <div className="relative">
                             <Phone className="absolute left-3 top-2.5 text-[#667781]" size={18} />
                             <input
@@ -148,19 +160,49 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
                         {errors.password && <p className="text-xs text-red-500">{errors.password.message}</p>}
                     </div>
 
+                <div className="space-y-1.5">
+                    <div className="flex items-start gap-3">
+                        <input
+                            type="checkbox"
+                            id="termsAccepted"
+                            {...register('termsAccepted')}
+                            className="mt-1 h-4 w-4 text-[#00a884] border-[#e9edef] rounded focus:ring-[#00a884]"
+                        />
+                        <label htmlFor="termsAccepted" className="text-xs text-[#667781] leading-relaxed">
+                            I accept the{' '}
+                            <a href="/legal/user-agreement" target="_blank" rel="noopener noreferrer" className="text-[#00a884] hover:underline">
+                                Terms and Conditions
+                            </a>
+                            {' '}and{' '}
+                            <a href="/legal/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-[#00a884] hover:underline">
+                                Privacy Policy
+                            </a>
+                        </label>
+                    </div>
+                    {errors.termsAccepted && <p className="text-xs text-red-500">{errors.termsAccepted.message}</p>}
+                </div>
+
                     <button
                         type="submit"
-                        disabled={isLoading}
+                        disabled={isSubmitting}
                         className="w-full bg-[#00a884] hover:bg-[#008069] text-white font-bold py-3.5 rounded-lg transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 mt-6"
                     >
-                        {isLoading ? (
+                        {isSubmitting ? (
                             <Loader2 className="animate-spin" size={20} />
                         ) : (
                             "Register & Verify"
                         )}
                     </button>
 
-                    <p className="text-center text-xs text-[#8696a0] mt-6">
+                    {onSwitchToLogin && (
+                        <p className="text-center text-sm text-[#667781] mt-4">
+                            Already have an account?{' '}
+                            <button type="button" onClick={onSwitchToLogin} className="text-[#00a884] font-medium hover:underline">
+                                Login
+                            </button>
+                        </p>
+                    )}
+                    <p className="text-center text-xs text-[#8696a0] mt-2">
                         By registering, you agree to our Terms of Service and Privacy Policy.
                     </p>
                 </form>

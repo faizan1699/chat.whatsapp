@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Smile, Paperclip, Send, Mic, X, Check } from 'lucide-react';
-import { Message } from './MessageItem';
+import { Message, ReplyTo } from '@/types/message';
 import VoiceRecorder from '../audio/VoiceRecorder';
 import dynamic from 'next/dynamic';
 import { EmojiStyle, Theme, PickerProps } from 'emoji-picker-react';
@@ -22,6 +22,7 @@ interface ChatFooterProps {
     setInputMessage: (msg: string) => void;
     onSendMessage: (e: React.FormEvent) => void;
     onSendVoice: (audioBlob: Blob, duration: number) => void;
+    onUpdateMessage?: (e: React.FormEvent) => void;
     replyingTo?: Message | null;
     editingMessage?: Message | null;
     onCancelReply?: () => void;
@@ -33,6 +34,7 @@ export default function ChatFooter({
     setInputMessage,
     onSendMessage,
     onSendVoice,
+    onUpdateMessage,
     replyingTo,
     editingMessage,
     onCancelReply,
@@ -157,7 +159,11 @@ export default function ChatFooter({
                             </button>
                         </div>
                         <form onSubmit={(e) => {
-                            onSendMessage(e);
+                            if (editingMessage && onUpdateMessage) {
+                                onUpdateMessage(e);
+                            } else {
+                                onSendMessage(e);
+                            }
                         }} className="flex flex-1 items-end gap-1 md:gap-2 min-w-0 relative py-1">
                             <div className="flex-1 relative flex items-center">
                                 <textarea

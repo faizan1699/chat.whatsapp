@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat Access Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background: #d4edda; border-color: #c3e6cb; }
+        .error { background: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Chat Page Access Test</h1>
+    
+    <div class="test">
+        <h3>Step 1: Test Login API</h3>
+        <button onclick="testLogin()">Test Login</button>
+        <div id="login-result"></div>
+    </div>
+    
+    <div class="test">
+        <h3>Step 2: Store Session</h3>
+        <button onclick="storeSession()">Store Session</button>
+        <div id="store-result"></div>
+    </div>
+    
+    <div class="test">
+        <h3>Step 3: Test Chat Access</h3>
+        <button onclick="testChatAccess()">Test Chat Page</button>
+        <div id="chat-result"></div>
+    </div>
+    
+    <div class="test">
+        <h3>Step 4: Clear Session</h3>
+        <button onclick="clearSession()">Clear Session</button>
+        <div id="clear-result"></div>
+    </div>
+
+    <script>
+        async function testLogin() {
+            try {
+                const response = await fetch('http://localhost:3001/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        identifier: 'testuser',
+                        password: 'password123'
+                    })
+                });
+                
+                const data = await response.json();
+                const resultDiv = document.getElementById('login-result');
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ Login Successful!<br>
+                            User: ${data.user.username}<br>
+                            Token: ${data.accessToken.substring(0, 50)}...
+                        </div>
+                    `;
+                    window.testData = data;
+                } else {
+                    resultDiv.innerHTML = `<div class="error">❌ Login Failed: ${data.message}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('login-result').innerHTML = 
+                    `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        }
+        
+        function storeSession() {
+            if (!window.testData) {
+                document.getElementById('store-result').innerHTML = 
+                    '<div class="error">❌ Please test login first</div>';
+                return;
+            }
+            
+            // Simulate frontendAuth.setSession
+            localStorage.setItem('session_token', window.testData.accessToken);
+            localStorage.setItem('refresh_token', window.testData.refreshToken);
+            localStorage.setItem('user_data', JSON.stringify(window.testData.user));
+            
+            document.getElementById('store-result').innerHTML = `
+                <div class="success">
+                    ✅ Session Stored!<br>
+                    User: ${window.testData.user.username}<br>
+                    Tokens saved to localStorage
+                </div>
+            `;
+        }
+        
+        async function testChatAccess() {
+            const session = {
+                accessToken: localStorage.getItem('session_token'),
+                refreshToken: localStorage.getItem('refresh_token'),
+                user: JSON.parse(localStorage.getItem('user_data') || 'null')
+            };
+            
+            const resultDiv = document.getElementById('chat-result');
+            
+            if (session.accessToken && session.user) {
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        ✅ Session Found!<br>
+                        User: ${session.user.username}<br>
+                        Chat page should be accessible<br>
+                        <a href="http://localhost:3001/chat" target="_blank">Open Chat Page</a>
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        ❌ No Session Found!<br>
+                        Chat page will redirect to login<br>
+                        <a href="http://localhost:3001/chat" target="_blank">Test Redirect</a>
+                    </div>
+                `;
+            }
+        }
+        
+        function clearSession() {
+            localStorage.removeItem('session_token');
+            localStorage.removeItem('refresh_token');
+            localStorage.removeItem('user_data');
+            
+            document.getElementById('clear-result').innerHTML = `
+                <div class="success">
+                    ✅ Session Cleared!<br>
+                    Chat page will now redirect to login
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
