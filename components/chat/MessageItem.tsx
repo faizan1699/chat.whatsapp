@@ -347,13 +347,13 @@ export default function MessageItem({
                             <span className={`flex items-center text-[12px] transition-colors
                              ${message.status === 'read' ? 'text-[#53bdeb]'
                                     : message.status === 'failed' ? 'text-red-500'
-                                        : message.status === 'pending'
+                                        : message.status === 'pending' || message.status === 'sending'
                                             ? 'text-gray-400'
                                             : 'text-[#667781]'
                                 }`
                             }
                             >
-                                {message.status === 'pending' ? (
+                                {(message.status === 'pending' || message.status === 'sending') ? (
                                     <div className="w-[12px] h-[12px] border-2 border-[#667781]/20 border-t-[#667781] rounded-full animate-spin"></div>
                                 ) : (
                                     {

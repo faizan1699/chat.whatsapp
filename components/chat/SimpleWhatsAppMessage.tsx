@@ -10,16 +10,17 @@ interface SimpleMessageProps {
 export default function SimpleWhatsAppMessage({ message, isOwn }: SimpleMessageProps) {
     const formatTime = (timestamp: string | Date) => {
         const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
-        return date.toLocaleTimeString('en-US', { 
-            hour: '2-digit', 
-            minute: '2-digit' 
+        return date.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit'
         });
     };
 
     const getStatusIcon = () => {
         switch (message.status) {
+            case 'sending':
             case 'pending':
-                return <span className="text-gray-400 text-xs">⏳</span>;
+                return <div className="w-3 h-3 border border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>;
             case 'sent':
                 return <span className="text-gray-400 text-xs">✓</span>;
             case 'delivered':
@@ -56,12 +57,11 @@ export default function SimpleWhatsAppMessage({ message, isOwn }: SimpleMessageP
                 )}
 
                 {/* Message Bubble */}
-                <div className={`relative px-4 py-2 rounded-2xl ${
-                    isOwn 
-                        ? 'bg-[#dcf8c6] text-gray-800 rounded-br-2xl' 
+                <div className={`relative px-4 py-2 rounded-2xl ${isOwn
+                        ? 'bg-[#dcf8c6] text-gray-800 rounded-br-2xl'
                         : 'bg-white text-gray-800 rounded-bl-2xl shadow-sm'
-                } ${message.isDeleted ? 'opacity-60' : ''}`}>
-                    
+                    } ${message.isDeleted ? 'opacity-60' : ''}`}>
+
                     {/* Pinned Indicator */}
                     {message.isPinned && (
                         <div className="absolute -top-6 left-2 flex items-center text-xs text-gray-500">

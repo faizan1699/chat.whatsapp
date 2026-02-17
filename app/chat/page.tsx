@@ -267,14 +267,31 @@ export default function ChatPage() {
             playRingtone();
         });
 
-        socket.on('answer', (payload) => {
-            // TODO: Implement handleAnswer
+        socket.on('answer', async (payload) => {
             console.log('Received answer:', payload);
+            if (peerConnectionRef.current) {
+                try {
+                    await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(payload.answer));
+                    processBufferedIceCandidates(peerConnectionRef.current);
+                    setConnectionState('connected');
+                } catch (error) {
+                    console.error('Error setting remote description:', error);
+                }
+            }
         });
 
-        socket.on('icecandidate', (candidate) => {
-            // TODO: Implement handleIceCandidate
+        socket.on('icecandidate', async (candidate) => {
             console.log('Received ICE candidate:', candidate);
+            if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
+                try {
+                    await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+                } catch (error) {
+                    console.error('Error adding ICE candidate:', error);
+                }
+            } else {
+                // Buffer ICE candidates until remote description is set
+                iceCandidatesBuffer.current.push(candidate);
+            }
         });
 
         socket.on('call-ended', () => {
@@ -521,39 +538,21 @@ export default function ChatPage() {
         }
     };
 
-    // Load messages when selected user changes
     useEffect(() => {
         if (selectedUsername && username) {
             loadMessages(selectedUsername);
         }
     }, [selectedUsername, username]);
 
-    // Remove periodic reload - WebSocket handles real-time updates
-    // useEffect(() => {
-    //     if (selectedUsername && username) {
-    //         const interval = setInterval(() => {
-    //             loadMessages(selectedUsername);
-    //         }, 10000); // Reload every 10 seconds
-
-    //         return () => clearInterval(interval);
-    //     }
-    // }, [selectedUsername, username]);
-
     useEffect(() => {
         const checkAuth = async () => {
             try {
-                // Check session using frontend auth utility
                 const storedSession = frontendAuth.getSession();
-                console.log('🔐 Checking authentication:', {
-                    storedSession: storedSession,
-                    hasSession: !!storedSession,
-                    username: storedSession?.user?.username
-                });
 
                 if (storedSession) {
                     console.log('✅ User authenticated:', storedSession.user.username);
                     setUsername(storedSession.user.username);
-                    setIsLoading(false); // Set loading to false when data is available
+                    setIsLoading(false); 
                     setIsConversationsLoading(true);
 
                     // Load user data
