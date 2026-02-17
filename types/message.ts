@@ -23,6 +23,7 @@ export interface Message {
     chunkIndex?: number;
     totalChunks?: number;
     isDeleted?: boolean;
+    isDeletedFromMe?: Record<string, boolean>; // Store user IDs who deleted this message for themselves
     // Failed message tracking
     retryCount?: number;
     lastRetryTime?: Date;

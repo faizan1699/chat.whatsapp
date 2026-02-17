@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, Suspense, Fragment } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { Eye, EyeOff, MessageCircle, Lock, Mail, User, UserPlus, Check } from 'lucide-react';
 import { frontendAuth } from '@/utils/frontendAuth';
+import { authToast } from '@/utils/toast';
+import { hasCookieAcceptance } from '@/utils/cookieConsent';
 
 interface RegisterFormData {
     username: string;
@@ -60,16 +62,27 @@ function RegisterForm() {
 
             if (response.ok) {
                 console.log('✅ Registration successful:', data.username);
+                authToast.registerSuccess();
                 setIsSuccess(true);
-                
+
+                // Check cookie consent and show reminder after 10 seconds if not accepted
+                if (!hasCookieAcceptance()) {
+                    setTimeout(() => {
+                        authToast.cookieConsent();
+                    }, 10000); // 10 seconds
+                }
+
                 setTimeout(() => {
                     router.push('/login');
                 }, 1000);
             } else {
                 setError(responseData.error || responseData.message || 'Registration failed');
+                // Show error toast
+                authToast.registerError(responseData.error || responseData.message);
             }
         } catch (error) {
             setError('Network error. Please try again.');
+            authToast.registerError('Network error. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -99,7 +112,6 @@ function RegisterForm() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-primary-100 flex items-center justify-center p-4">
             <div className="w-full max-w-md">
-                {/* Logo and Brand */}
                 <div className="text-center mb-8 animate-slide-up">
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-500 rounded-full mb-4 shadow-medium">
                         <MessageCircle className="w-8 h-8 text-white" />
@@ -108,7 +120,6 @@ function RegisterForm() {
                     <p className="text-gray-600">Create your account to get started</p>
                 </div>
 
-                {/* Registration Card */}
                 <div className="bg-white rounded-2xl shadow-strong border border-gray-100 p-8 animate-slide-up">
                     <div className="mb-6">
                         <h2 className="text-xl font-semibold text-gray-900 mb-2">Create Account</h2>
@@ -116,7 +127,6 @@ function RegisterForm() {
                     </div>
 
                     <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
-                        {/* Username Field */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                 Username
@@ -139,9 +149,8 @@ function RegisterForm() {
                                         },
                                     })}
                                     type="text"
-                                    className={`block w-full pl-10 pr-3 py-3 border ${
-                                        errors.username ? 'border-semantic-error' : 'border-gray-300'
-                                    } rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors`}
+                                    className={`block w-full pl-10 pr-3 py-3 border ${errors.username ? 'border-semantic-error' : 'border-gray-300'
+                                        } rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors`}
                                     placeholder="Choose a username"
                                 />
                             </div>
@@ -150,7 +159,6 @@ function RegisterForm() {
                             )}
                         </div>
 
-                        {/* Email Field */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                 Email Address
@@ -169,9 +177,8 @@ function RegisterForm() {
                                         },
                                     })}
                                     type="email"
-                                    className={`block w-full pl-10 pr-3 py-3 border ${
-                                        errors.email ? 'border-semantic-error' : 'border-gray-300'
-                                    } rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors`}
+                                    className={`block w-full pl-10 pr-3 py-3 border ${errors.email ? 'border-semantic-error' : 'border-gray-300'
+                                        } rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors`}
                                     placeholder="Enter your email"
                                 />
                             </div>
@@ -180,7 +187,6 @@ function RegisterForm() {
                             )}
                         </div>
 
-                        {/* Password Field */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                 Password
@@ -203,9 +209,8 @@ function RegisterForm() {
                                         },
                                     })}
                                     type={showPassword ? 'text' : 'password'}
-                                    className={`block w-full pl-10 pr-10 py-3 border ${
-                                        errors.password ? 'border-semantic-error' : 'border-gray-300'
-                                    } rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors`}
+                                    className={`block w-full pl-10 pr-10 py-3 border ${errors.password ? 'border-semantic-error' : 'border-gray-300'
+                                        } rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors`}
                                     placeholder="Create a strong password"
                                 />
                                 <button
@@ -225,7 +230,6 @@ function RegisterForm() {
                             )}
                         </div>
 
-                        {/* Confirm Password Field */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                 Confirm Password
@@ -241,9 +245,8 @@ function RegisterForm() {
                                         validate: (value) => value === password || 'Passwords do not match',
                                     })}
                                     type={showConfirmPassword ? 'text' : 'password'}
-                                    className={`block w-full pl-10 pr-10 py-3 border ${
-                                        errors.confirmPassword ? 'border-semantic-error' : 'border-gray-300'
-                                    } rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors`}
+                                    className={`block w-full pl-10 pr-10 py-3 border ${errors.confirmPassword ? 'border-semantic-error' : 'border-gray-300'
+                                        } rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors`}
                                     placeholder="Confirm your password"
                                 />
                                 <button
@@ -263,7 +266,6 @@ function RegisterForm() {
                             )}
                         </div>
 
-                        {/* Terms and Conditions */}
                         <div>
                             <div className="flex items-start">
                                 <input
@@ -272,9 +274,8 @@ function RegisterForm() {
                                         required: 'You must agree to the terms and conditions',
                                     })}
                                     type="checkbox"
-                                    className={`mt-1 h-4 w-4 text-primary-500 border-gray-300 rounded focus:ring-primary-500 ${
-                                        errors.agreeToTerms ? 'border-semantic-error' : ''
-                                    }`}
+                                    className={`mt-1 h-4 w-4 text-primary-500 border-gray-300 rounded focus:ring-primary-500 ${errors.agreeToTerms ? 'border-semantic-error' : ''
+                                        }`}
                                 />
                                 <label htmlFor="agreeToTerms" className="ml-2 text-sm text-gray-600">
                                     I agree to the{' '}
@@ -292,29 +293,27 @@ function RegisterForm() {
                             )}
                         </div>
 
-                        {/* Error Message */}
                         {error && (
                             <div className="bg-red-50 border border-semantic-error rounded-lg p-3">
                                 <p className="text-sm text-semantic-error">{error}</p>
                             </div>
                         )}
 
-                        {/* Submit Button */}
                         <button
                             type="submit"
                             disabled={loading}
                             className="w-full bg-primary-500 hover:bg-primary-600 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                         >
                             {loading ? (
-                                <>
+                                <Fragment>
                                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                                     Creating Account...
-                                </>
+                                </Fragment>
                             ) : (
-                                <>
+                                <Fragment>
                                     <UserPlus className="w-5 h-5 mr-2" />
                                     Create Account
-                                </>
+                                </Fragment>
                             )}
                         </button>
                     </form>

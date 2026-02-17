@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Fragment, useEffect, useRef, useState } from 'react';
 import MessageItem from './MessageItem';
 import DateSeparator from './DateSeparator';
+import MessageSkeleton from './MessageSkeleton';
 import { Message, ReplyTo } from '@/types/message';
 
 interface MessageListProps {
@@ -14,9 +15,8 @@ interface MessageListProps {
     onPin: (msg: Message) => void;
     onEdit: (msg: Message) => void;
     onReact?: (messageId: string, emoji: string) => void;
-    onHide?: (id: string) => void;
-    onUnhide?: (id: string) => void;
     highlightedMessageId?: string | null;
+    loading?: boolean;
 }
 
 export default function MessageList({
@@ -28,19 +28,14 @@ export default function MessageList({
     onPin,
     onEdit,
     onReact,
-    onHide,
-    onUnhide,
-    highlightedMessageId
+    highlightedMessageId,
+    loading
 }: MessageListProps) {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messageListRef = useRef<HTMLDivElement>(null);
-    const [highlightKey, setHighlightKey] = useState(0);
-    const [autoScroll, setAutoScroll] = useState(true);
+    const [highlightKey, setHighlightKey] = useState<number>(0);
+    const [autoScroll, setAutoScroll] = useState<boolean>(true);
 
-    // Calculate failed messages count
-    const failedMessagesCount = messages.filter(m => m.status === 'failed').length;
-
-    // Scroll to bottom and/or highlighted message
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
@@ -51,12 +46,10 @@ export default function MessageList({
             const messageRect = messageElement.getBoundingClientRect();
             const containerRect = messageListRef.current.getBoundingClientRect();
             
-            // Check if message is visible in viewport
             const isVisible = messageRect.top >= containerRect.top && 
                             messageRect.bottom <= containerRect.bottom;
             
             if (!isVisible) {
-                // Scroll message into view with some padding
                 messageElement.scrollIntoView({ 
                     behavior: 'smooth', 
                     block: 'center' 
@@ -65,51 +58,41 @@ export default function MessageList({
         }
     };
 
-    // Handle scroll events to detect user scrolling
     const handleScroll = () => {
         if (!messageListRef.current) return;
         
         const { scrollTop, scrollHeight, clientHeight } = messageListRef.current;
-        const isAtBottom = scrollHeight - scrollTop <= clientHeight + 50; // 50px threshold
+        const isAtBottom = scrollHeight - scrollTop <= clientHeight + 50;
         
-        // Enable auto-scroll if user is at bottom, disable if they scrolled up
         setAutoScroll(isAtBottom);
     };
 
-    // Auto-scroll to bottom when new messages arrive (only if auto-scroll is enabled)
     useEffect(() => {
         if (autoScroll) {
             scrollToBottom();
         }
     }, [messages, autoScroll]);
 
-    // Scroll to highlighted message when it changes
     useEffect(() => {
         if (highlightedMessageId) {
-            // Increment highlight key to re-trigger animation
             setHighlightKey(prev => prev + 1);
-            // Small delay to ensure message is rendered
             setTimeout(() => {
                 scrollToMessage(highlightedMessageId);
             }, 100);
             
-            // Clear highlight after animation completes (2.5 seconds)
             const clearTimer = setTimeout(() => {
-                // This will be handled by parent component
             }, 2500);
             
             return () => clearTimeout(clearTimer);
         }
     }, [highlightedMessageId]);
 
-    // Group messages by date and add date separators
     const messagesWithSeparators: React.ReactNode[] = [];
     let lastDate: Date | null = null;
 
     messages?.forEach((msg, idx) => {
         const msgDate = new Date(msg.timestamp);
         
-        // Add date separator if date changed
         if (!lastDate || msgDate.toDateString() !== lastDate.toDateString()) {
             messagesWithSeparators.push(
                 <DateSeparator key={`date-${msgDate.toDateString()}`} date={msgDate} />
@@ -117,7 +100,6 @@ export default function MessageList({
             lastDate = msgDate;
         }
 
-        // Add message
         messagesWithSeparators.push(
             <MessageItem
                 key={msg.id || idx}
@@ -128,8 +110,6 @@ export default function MessageList({
                 onDelete={(id: string) => onDelete?.(id, 'me')}
                 onPin={onPin}
                 onEdit={onEdit}
-                onHide={onHide}
-                onUnhide={onUnhide}
                 isHighlighted={highlightedMessageId === msg.id}
                 highlightKey={highlightKey}
             />
@@ -143,8 +123,14 @@ export default function MessageList({
                 className="relative z-10 flex h-full flex-col overflow-y-auto p-4 space-y-2"
                 onScroll={handleScroll}
             >
-                {messagesWithSeparators}
-                <div ref={messagesEndRef} />
+                {loading ? (
+                    <MessageSkeleton count={8} />
+                ) : (
+                    <Fragment>
+                        {messagesWithSeparators}
+                        <div ref={messagesEndRef} />
+                    </Fragment>
+                )}
             </div>
         </div>
     );

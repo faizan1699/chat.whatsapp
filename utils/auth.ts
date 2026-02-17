@@ -11,7 +11,7 @@ export interface JWTPayload {
 
 export function getAuthUser(req: NextApiRequest): JWTPayload | null {
     const cookies = parse(req.headers.cookie || '');
-    const token = cookies['auth-token'];
+    const token = cookies['access_token'];
     if (!token) return null;
     try {
         const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;

@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { Eye, EyeOff, MessageCircle, Lock, Mail, User } from 'lucide-react';
 import { frontendAuth } from '@/utils/frontendAuth';
+import { authToast } from '@/utils/toast';
+import { hasCookieAcceptance } from '@/utils/cookieConsent';
+import { conversationsManager } from '@/utils/conversationsManager';
 
 interface LoginFormData {
     identifier: string;
@@ -41,19 +44,34 @@ function LoginForm() {
             const responseData = await response.json();
 
             if (response.ok) {
-                // Store session data using frontend auth utility
                 frontendAuth.setSession(
                     responseData.accessToken,
                     responseData.refreshToken,
                     responseData.user
                 );
+                                try {
+                    await conversationsManager.loadConversations('login');
+                    console.log('✅ Conversations pre-loaded after login');
+                } catch (error) {
+                    console.warn('⚠️ Failed to pre-load conversations after login:', error);
+                }
+                
+                authToast.loginSuccess(responseData.user?.username);
+                
+                if (!hasCookieAcceptance()) {
+                    setTimeout(() => {
+                        authToast.cookieConsent();
+                    }, 10000);
+                }
                                 
                 router.push('/chat');
             } else {
                 setError(responseData.message || 'Login failed');
+                authToast.loginError(responseData.message);
             }
         } catch (error) {
             setError('Network error. Please try again.');
+            authToast.loginError('Network error. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -62,7 +80,6 @@ function LoginForm() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
             <div className="w-full max-w-md">
-                {/* Logo and Brand */}
                 <div className="text-center mb-8">
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
                         <MessageCircle className="w-8 h-8 text-white" />
@@ -71,7 +88,6 @@ function LoginForm() {
                     <p className="text-gray-600">Connect with friends securely</p>
                 </div>
 
-                {/* Login Card */}
                 <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
                     <div className="mb-6">
                         <h2 className="text-xl font-semibold text-gray-900 mb-2">Welcome Back</h2>
@@ -79,7 +95,6 @@ function LoginForm() {
                     </div>
 
                     <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
-                        {/* Identifier Field */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                 Username or Email
@@ -145,14 +160,12 @@ function LoginForm() {
                             )}
                         </div>
 
-                        {/* Error Message */}
                         {error && (
                             <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                                 <p className="text-sm text-red-600">{error}</p>
                             </div>
                         )}
 
-                        {/* Submit Button */}
                         <button
                             type="submit"
                             disabled={loading}
@@ -169,7 +182,6 @@ function LoginForm() {
                         </button>
                     </form>
 
-                    {/* Footer */}
                     <div className="mt-6 text-center">
                         <p className="text-sm text-gray-600">
                             Don't have an account?{' '}
@@ -180,7 +192,6 @@ function LoginForm() {
                     </div>
                 </div>
 
-                {/* Security Note */}
                 <div className="mt-6 text-center">
                     <p className="text-xs text-gray-500">
                         🔒 Secured with HTTP-only cookies

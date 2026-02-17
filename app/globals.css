@@ -24,14 +24,14 @@
 body {
   background: var(--wa-bg);
   color: var(--wa-text-primary);
+  touch-action: manipulation;
+  zoom: 1;
 }
 
-/* Apply overflow hidden only to pages with .no-scroll class */
 body.no-scroll {
   overflow: hidden;
 }
 
-/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
 }
@@ -48,7 +48,6 @@ body.no-scroll {
   background: rgba(0, 0, 0, 0.3);
 }
 
-/* Message highlight animations */
 .highlight-message {
   animation: highlightPulse 2s ease-in-out;
   background-color: rgba(6, 207, 156, 0.1) !important;
@@ -95,7 +94,6 @@ body.no-scroll {
   }
 }
 
-/* Shimmer animation for skeleton loaders */
 @keyframes shimmer {
   0% {
     background-position: -200% 0;

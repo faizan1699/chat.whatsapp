@@ -13,8 +13,6 @@ interface MessageItemProps {
     onPin?: (msg: Message) => void;
     onEdit?: (msg: Message) => void;
     onUpdateMessage?: (msg: Message) => void;
-    onHide?: (id: string) => void;
-    onUnhide?: (id: string) => void;
     isHighlighted?: boolean;
     highlightKey?: number;
     failedMessagesCount?: number;
@@ -28,8 +26,6 @@ export default function MessageItem({
     onDelete,
     onPin,
     onEdit,
-    onHide,
-    onUnhide,
     isHighlighted,
     highlightKey,
     failedMessagesCount
@@ -222,29 +218,6 @@ export default function MessageItem({
                             >
                                 <Pin size={16} className={message.isPinned ? 'fill-current' : ''} />
                             </button>
-                            {!isMe && (
-                                <button
-                                    onClick={() => {
-                                        console.log('👁️ Hide/Unhide button clicked:', {
-                                            messageId: message.id,
-                                            isHidden: message.isHidden,
-                                            from: message.from,
-                                            isMe: isMe
-                                        });
-                                        if (message.id) {
-                                            if (message.isHidden) {
-                                                onUnhide?.(message.id);
-                                            } else {
-                                                onHide?.(message.id);
-                                            }
-                                        }
-                                    }}
-                                    className={`p-1.5 hover:bg-black/5 rounded-full transition-colors ${message.isHidden ? 'text-[#00a884]' : 'text-[#667781]'}`}
-                                    title={message.isHidden ? 'Unhide message' : 'Hide message'}
-                                >
-                                    {message.isHidden ? <Eye size={16} /> : <EyeOff size={16} />}
-                                </button>
-                            )}
                             <div className="relative">
                                 <button
                                     onClick={() => setShowDeleteMenu(!showDeleteMenu)}
@@ -258,33 +231,18 @@ export default function MessageItem({
                                         ref={deleteMenuRef}
                                         className="absolute top-full right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border border-gray-100 z-50 overflow-hidden"
                                     >
-                                        {message.isHidden ? (
-                                            <button
-                                                onClick={() => {
-                                                    console.log('👁️ Unhide message clicked:', message.id);
-                                                    if (message.id) {
-                                                        onUnhide?.(message.id);
-                                                    }
-                                                    setShowDeleteMenu(false);
-                                                }}
-                                                className="w-full px-4 py-2 text-left text-[13px] text-[#00a884] hover:bg-green-50 transition-colors"
-                                            >
-                                                Unhide message
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={() => {
-                                                    console.log('🙈 Hide message for me clicked:', message.id);
-                                                    if (message.id) {
-                                                        onDelete?.(message.id, 'me');
-                                                    }
-                                                    setShowDeleteMenu(false);
-                                                }}
-                                                className="w-full px-4 py-2 text-left text-[13px] text-gray-700 hover:bg-gray-50 transition-colors"
-                                            >
-                                                Hide for me
-                                            </button>
-                                        )}
+                                        <button
+                                            onClick={() => {
+                                                console.log('� Delete for me clicked:', message.id);
+                                                if (message.id) {
+                                                    onDelete?.(message.id, 'me');
+                                                }
+                                                setShowDeleteMenu(false);
+                                            }}
+                                            className="w-full px-4 py-2 text-left text-[13px] text-gray-700 hover:bg-gray-50 transition-colors"
+                                        >
+                                            Delete for me
+                                        </button>
                                         {isMe && (
                                             <button
                                                 onClick={() => {
@@ -308,23 +266,7 @@ export default function MessageItem({
 
                 {/* Message Content */}
                 <div className="flex flex-col pr-2">
-                    {message.isHidden ? (
-                        <div className="flex items-center gap-2 py-1 text-[#667781] italic text-[13px]">
-                            <EyeOff size={14} className="opacity-60" />
-                            <span>This message is hidden</span>
-                            <button
-                                onClick={() => message.id && onUnhide?.(message.id)}
-                                className="text-[#00a884] hover:underline text-[12px] ml-auto"
-                            >
-                                Show
-                            </button>
-                        </div>
-                    ) : message.isDeleted ? (
-                        <div className="flex items-center gap-2 py-1 text-[#667781] italic text-[13px]">
-                            <span className="opacity-60 text-[12px]">🚫</span>
-                            <span>This message was deleted</span>
-                        </div>
-                    ) : message.isVoiceMessage ? (
+                    {message.isVoiceMessage ? (
                         <div className="flex items-center gap-3 py-2 min-w-[200px]">
                             <audio
                                 ref={audioRef}
@@ -345,8 +287,8 @@ export default function MessageItem({
                                             style={{ width: duration ? `${(currentTime / duration) * 100}%` : '0%' }}
                                         />
                                     </div>
-                                    <span className="text-[11px] text-[#667781] whitespace-nowrap">
-                                        {formatTime(currentTime)} / {formatTime(message.audioDuration || duration || 0)}
+                                    <span className="text-xs text-[#667781]">
+                                        {formatTime(currentTime)} / {formatTime(duration)}
                                     </span>
                                 </div>
                                 <div className="mt-1">
@@ -366,12 +308,14 @@ export default function MessageItem({
                             </div>
                         </div>
                     ) : (
-                        <p className="text-[14.2px] leading-tight whitespace-pre-wrap py-0.5 min-w-[50px]">
-                            {displayedMessage}
+                        <div className="relative">
+                            <p className="text-[15px] leading-[20px] break-words text-[#111b21] select-text">
+                                {displayedMessage}
+                            </p>
                             {hasMore && (
                                 <button
                                     onClick={handleSeeMore}
-                                    className="ml-1 text-[#00a884] font-bold hover:underline text-[12px]"
+                                    className="text-[#53bdeb] hover:underline text-[13px] font-medium mt-1"
                                 >
                                     Read more
                                 </button>
@@ -384,8 +328,9 @@ export default function MessageItem({
                                     See less
                                 </button>
                             )}
-                        </p>
+                        </div>
                     )}
+                </div>
 
                     {/* Meta data (Time + Status) */}
                     <div className="flex items-center gap-1 ml-auto pt-1 h-5">
@@ -447,8 +392,7 @@ export default function MessageItem({
                             ? 'polygon(0 0, 0 100%, 100% 0)'
                             : 'polygon(100% 0, 100% 100%, 0 0)'
                     }} />
-                </div>
             </div>
-        </div >
+        </div>
     );
 }
