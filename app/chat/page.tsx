@@ -19,6 +19,7 @@ import { SecureSession } from '@/utils/secureSession';
 import { useMessageApi } from '@/hooks/useMessageApi';
 import { useSocket } from '@/hooks/useSocket';
 import { useRouteChangeConversations } from '@/hooks/useRouteChangeConversations';
+import { useApiHook } from '@/hooks/useApiHook';
 import { storageHelpers, STORAGE_KEYS, chatStorage } from '@/utils/storage';
 import { supabaseAdmin } from '@/utils/supabase-server';
 import { uploadAudio } from '@/utils/supabase';
@@ -44,6 +45,9 @@ interface PeerConnectionManager {
 export default function ChatPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
+    
+    // API Hook for all chat-related API calls
+    const apiHook = useApiHook();
 
     // Hook to handle route change conversations loading
     useRouteChangeConversations();
@@ -404,18 +408,10 @@ export default function ChatPage() {
                     console.log('Selected user data:', selectedUsernameData);
 
                     if (selectedUsernameData) {
-                        const response = await fetch('/api/conversations', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                participantIds: [userId, selectedUsernameData.id]
-                            }),
-                        });
-
-                        if (response.ok) {
-                            currentConversation = await response.json();
+                        const result = await apiHook.createConversation([userId, selectedUsernameData.id]);
+                        
+                        if (result.data) {
+                            currentConversation = result.data;
                             setConversations(prev => [...prev, currentConversation]);
                         }
                     }
@@ -424,15 +420,10 @@ export default function ChatPage() {
 
             if (currentConversation) {
                 console.log('🔄 Fetching messages API for conversation:', currentConversation.id);
-                const response = await fetch(`/api/conversations/${currentConversation.id}/messages`, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${frontendAuth.getSession()?.accessToken || ''}`
-                    }
-                });
-                if (response.ok) {
-                    const messagesData = await response.json();
+                const result = await apiHook.getMessages(currentConversation.id);
+                
+                if (result.data) {
+                    const messagesData = result.data;
                     console.log('✅ Messages API loaded successfully:', messagesData.length, 'messages');
 
                     // Format messages for frontend and calculate unread counts
@@ -515,7 +506,7 @@ export default function ChatPage() {
                         }));
                     }
                 } else {
-                    console.error('❌ Failed to load messages API:', response.status, response.statusText);
+                    console.error('❌ Failed to load messages API:', result.error);
                     setMessages([]);
                 }
             } else {
@@ -743,21 +734,15 @@ export default function ChatPage() {
                         }
 
                         if (currentConversation && userId) {
-                            const response = await fetch('/api/messages', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({
-                                    conversationId: currentConversation.id,
-                                    senderId: userId,
-                                    content: msg.message,
-                                    to: msg.to,
-                                    from: username
-                                }),
+                            const result = await apiHook.sendMessage({
+                                conversationId: currentConversation.id,
+                                senderId: userId,
+                                content: msg.message,
+                                to: msg.to,
+                                from: username
                             });
 
-                            if (response.ok) {
+                            if (result.data) {
                                 // Remove from failed messages
                                 const updatedFailed = failed.filter((m: Message) => m.id !== msg.id);
                                 chatStorage.setItem('failed-messages', updatedFailed);
@@ -767,7 +752,7 @@ export default function ChatPage() {
                                     m.id === msg.id ? { ...m, status: 'sent' } : m
                                 ));
                             } else {
-                                throw new Error('Failed to send message');
+                                throw new Error(result.error || 'Failed to send message');
                             }
                         } else {
                             console.error('No conversation or user ID found for retry');
@@ -1541,9 +1526,12 @@ export default function ChatPage() {
 
     const loadConversations = async (userId: string) => {
         try {
-            const conversationsData = await conversationsManager.loadConversations('page-load');
-            setConversations(conversationsData);
-            console.log('✅ Conversations loaded successfully:', conversationsData.length, 'conversations');
+            const result = await apiHook.getConversations(userId);
+            if (result.error) {
+                throw new Error(result.error);
+            }
+            setConversations(result.data || []);
+            console.log('✅ Conversations loaded successfully:', result.data?.length || 0, 'conversations');
         } catch (error) {
             console.error('❌ Error loading conversations:', error);
             throw error;

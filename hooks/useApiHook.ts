@@ -21,7 +21,7 @@ interface UseApiHook {
 
 const getAuthHeaders = () => {
   const session = frontendAuth.getSession();
-  const token = session?.token || localStorage.getItem('session_token');
+  const token = session?.accessToken || localStorage.getItem('session_token');
   
   return {
     'Content-Type': 'application/json',
