@@ -50,7 +50,7 @@ export default function LoginPage() {
                 
                 console.log('✅ Login successful:', responseData.user.username);
                 
-                router.push('/chat/secure');
+                router.push('/chat');
                 router.refresh(); 
             } else {
                 setError(responseData.message || 'Login failed');
