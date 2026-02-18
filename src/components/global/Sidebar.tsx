@@ -89,12 +89,12 @@ export default function Sidebar({
             const userDataStr = localStorage.getItem('user_data') || '';
             const userData = userDataStr ? JSON.parse(userDataStr) : null;
             const userId = userData?.id;
-            
+
             if (!userId) {
                 alert('Session expired. Please log in again.');
                 return;
             }
-            
+
             if (user.id === userId) {
                 alert('Cannot start a chat with yourself.');
                 return;
@@ -103,7 +103,7 @@ export default function Sidebar({
             const conversation = await apiService.createConversation([userId, user.id]);
             setSelectedUser(user.username);
             setShowGlobalSearch(false);
-            
+
             // Call callback to refresh conversations list
             if (onConversationCreated) {
                 onConversationCreated();
@@ -113,7 +113,6 @@ export default function Sidebar({
         }
     };
 
-    // Get unique conversation partners from conversations
     const conversationPartners = useMemo(() => {
         const partners = new Set<string>();
         if (Array.isArray(conversations)) {
@@ -127,30 +126,39 @@ export default function Sidebar({
                 }
             });
         }
+
+        if (Array.isArray(messages)) {
+            messages.forEach(msg => {
+                if (msg.from === username && msg.to && msg.to !== username) {
+                    partners.add(msg.to);
+                } else if (msg.to === username && msg.from && msg.from !== username) {
+                    partners.add(msg.from);
+                }
+            });
+        }
+
         return Array.from(partners);
-    }, [conversations, username]);
+    }, [conversations, messages, username]);
 
     const filteredUsers = conversationPartners
         .filter(u => u.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const getLastMessage = (user: string) => {
-        // First try to get last message from conversations data
         if (Array.isArray(conversations)) {
-            const userConversation = conversations.find(conv => 
+            const userConversation = conversations.find(conv =>
                 conv && conv.participants && Array.isArray(conv.participants) &&
                 conv.participants.some((p: any) => p && p.user && p.user.username === user)
             );
-            
+
             if (userConversation?.messages?.length > 0) {
                 return userConversation.messages[0];
             }
         }
-        
-        // Fallback to messages array
+
         if (Array.isArray(messages)) {
             return messages.filter(m => (m.from === user && m.to === username) || (m.from === username && m.to === user)).pop();
         }
-        
+
         return null;
     };
 
@@ -244,7 +252,7 @@ export default function Sidebar({
                 <div className="px-4 py-2 text-[13px] font-bold text-[#00a884] uppercase tracking-wider">
                     Recent Chats
                 </div>
-                
+
                 {/* Show skeleton loaders when loading */}
                 {isLoading ? (
                     <>

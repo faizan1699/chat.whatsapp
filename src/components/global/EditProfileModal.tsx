@@ -5,7 +5,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { X, User, Loader2, Lock, Mail, Phone } from 'lucide-react';
-import api from '@/utils/api';
 
 const profileSchema = z.object({
     username: z.string().min(2, 'Username must be at least 2 characters'),
@@ -42,15 +41,28 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
 
     useEffect(() => {
         if (isOpen) {
-            api.get('/auth/profile').then((res) => {
-                const d = res.data;
+            fetch('/api/users/profile').then((res) => {
+                if (res.ok) {
+                    return res.json();
+                }
+                throw new Error('Failed to fetch profile');
+            }).then((data) => {
+                const d = data.data;
                 profileForm.reset({
                     username: d?.username || '',
                     email: d?.email || '',
-                    phone: d?.phone || '',
+                    phone: d?.phoneNumber || '',
                     avatar: d?.avatar || '',
                 });
-            }).catch(() => {});
+            }).catch(() => {
+                // Reset with empty values on error
+                profileForm.reset({
+                    username: '',
+                    email: '',
+                    phone: '',
+                    avatar: '',
+                });
+            });
         }
     }, [isOpen, profileForm]);
 
@@ -58,16 +70,29 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
         setProfileLoading(true);
         profileForm.clearErrors('root');
         try {
-            const res = await api.patch('/auth/profile', {
-                username: data.username,
-                email: data.email || undefined,
-                phone: data.phone || undefined,
-                avatar: data.avatar || undefined,
+            const res = await fetch('/api/users/profile', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    username: data.username,
+                    email: data.email || undefined,
+                    phoneNumber: data.phone || undefined,
+                    avatar: data.avatar || undefined,
+                }),
             });
-            onSuccess(res.data?.username);
+            
+            const responseData = await res.json();
+            
+            if (!res.ok) {
+                throw new Error(responseData.error || 'Update failed');
+            }
+            
+            onSuccess(responseData.data?.username);
             onClose();
         } catch (err: unknown) {
-            const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Update failed';
+            const msg = err instanceof Error ? err.message : 'Update failed';
             profileForm.setError('root', { type: 'manual', message: msg });
         } finally {
             setProfileLoading(false);
@@ -76,14 +101,27 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
 
     const onPasswordSubmit = async (data: PasswordFormData) => {
         try {
-            await api.post('/auth/change-password', {
-                currentPassword: data.currentPassword,
-                newPassword: data.newPassword,
+            const res = await fetch('/api/auth/change-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    currentPassword: data.currentPassword,
+                    newPassword: data.newPassword,
+                }),
             });
+            
+            const responseData = await res.json();
+            
+            if (!res.ok) {
+                throw new Error(responseData.error || 'Failed to change password');
+            }
+            
             passwordForm.reset();
             onClose();
         } catch (err: unknown) {
-            const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed';
+            const msg = err instanceof Error ? err.message : 'Failed to change password';
             passwordForm.setError('root', { message: msg });
         }
     };

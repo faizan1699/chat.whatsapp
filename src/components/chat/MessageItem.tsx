@@ -12,6 +12,8 @@ interface MessageItemProps {
     onDelete?: (id: string, type: 'me' | 'everyone') => void;
     onPin?: (msg: Message) => void;
     onEdit?: (msg: Message) => void;
+    onHide?: (id: string) => void;
+    onUnhide?: (id: string) => void;
     onUpdateMessage?: (msg: Message) => void;
     isHighlighted?: boolean;
     highlightKey?: number;
@@ -26,6 +28,8 @@ export default function MessageItem({
     onDelete,
     onPin,
     onEdit,
+    onHide,
+    onUnhide,
     isHighlighted,
     highlightKey,
     failedMessagesCount

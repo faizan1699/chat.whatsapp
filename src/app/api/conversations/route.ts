@@ -46,15 +46,50 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Get all conversation IDs to fetch participants
+    const conversationIds = conversations?.map(item => item.conversation_id) || [];
+
+    // Fetch all participants for these conversations with user details
+    const { data: participants, error: participantsError } = await supabaseAdmin
+      .from('conversation_participants')
+      .select(`
+        conversation_id,
+        user_id,
+        users (
+          id,
+          username,
+          email,
+          avatar
+        )
+      `)
+      .in('conversation_id', conversationIds);
+
+    if (participantsError) {
+      console.error('Database error fetching participants:', participantsError);
+      return NextResponse.json(
+        { error: 'Failed to fetch participants' },
+        { status: 500 }
+      );
+    }
+
     // Transform the data to match expected format
-    const transformedConversations = conversations?.map((item: any) => ({
-      id: item.conversations?.id,
-      name: item.conversations?.name,
-      is_group: item.conversations?.is_group,
-      created_at: item.conversations?.created_at,
-      updated_at: item.conversations?.updated_at,
-      conversation_id: item.conversation_id
-    })) || [];
+    const transformedConversations = conversations?.map((item: any) => {
+      const conversationParticipants = participants?.filter(
+        p => p.conversation_id === item.conversation_id
+      ) || [];
+
+      return {
+        id: item.conversations?.id,
+        name: item.conversations?.name,
+        is_group: item.conversations?.is_group,
+        created_at: item.conversations?.created_at,
+        updated_at: item.conversations?.updated_at,
+        conversation_id: item.conversation_id,
+        participants: conversationParticipants.map((p: any) => ({
+          user: p.users
+        }))
+      };
+    }) || [];
 
     return NextResponse.json({
       data: transformedConversations,
@@ -133,8 +168,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Fetch the complete conversation with participants
+    const { data: completeConversation, error: fetchError } = await supabaseAdmin
+      .from('conversation_participants')
+      .select(`
+        conversation_id,
+        users (
+          id,
+          username,
+          email,
+          avatar
+        )
+      `)
+      .eq('conversation_id', conversation.id);
+
+    if (fetchError) {
+      console.error('Error fetching complete conversation:', fetchError);
+    }
+
+    const responseConversation = {
+      ...conversation,
+      participants: completeConversation?.map((p: any) => ({
+        user: p.users
+      })) || []
+    };
+
     return NextResponse.json({
-      data: conversation,
+      data: responseConversation,
       message: 'Conversation created successfully'
     });
 

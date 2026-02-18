@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
 import { Pin, ChevronDown, X } from 'lucide-react';
@@ -121,7 +121,7 @@ export default function ChatPage() {
 
     // Extract unique users from conversations
     const conversationUsers = conversations.reduce((acc: { [key: string]: string }, conv) => {
-        conv.participants.forEach((p: any) => {
+        conv.participants?.forEach((p: any) => {
             if (p.user.username !== username) {
                 acc[p.user.username] = p.user.id;
             }
@@ -1480,7 +1480,8 @@ export default function ChatPage() {
         try {
             const response = await fetch(`/api/conversations?userId=${userId}`);
             if (response.ok) {
-                const conversationsData = await response.json();
+                const responseData = await response.json();
+                const conversationsData = responseData.data || [];
                 setConversations(conversationsData);
                 console.log('✅ Conversations loaded successfully:', conversationsData.length, 'conversations');
             } else {
@@ -1572,7 +1573,7 @@ export default function ChatPage() {
                 {/* Main Chat Area */}
                 <main className={`flex flex-1 flex-col bg-[#efeae2] relative ${!selectedUser ? 'hidden md:flex' : 'flex'}`}>
                     {selectedUser ? (
-                        <>
+                        <Fragment>
                             <ChatHeader
                                 selectedUser={selectedUser}
                                 onBack={() => setSelectedUser(null)}
@@ -1659,7 +1660,7 @@ export default function ChatPage() {
                                 onCancelReply={() => setReplyingTo(null)}
                                 onCancelEdit={handleCancelEdit}
                             />
-                        </>
+                        </Fragment>
                     ) : (
                         <EmptyChatState />
                     )}
