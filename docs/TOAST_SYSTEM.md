@@ -42,7 +42,7 @@ import { authToast } from '@/utils/toast';
 authToast.loginSuccess('username');
 
 // Login error (with optional custom message)
-authToast.loginError('Invalid credentials');
+authToast.loginError('Invalid creden');
 
 // Registration success
 authToast.registerSuccess();
