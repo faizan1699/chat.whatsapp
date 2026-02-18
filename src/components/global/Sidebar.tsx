@@ -38,6 +38,7 @@ interface SidebarProps {
     unreadCounts?: { [key: string]: number };
     onLogout?: () => void;
     onEditProfile?: () => void;
+    onConversationCreated?: () => void; // Add callback for when conversation is created
     isLoading?: boolean; // Add loading prop
 }
 
@@ -53,6 +54,7 @@ export default function Sidebar({
     unreadCounts = {},
     onLogout,
     onEditProfile,
+    onConversationCreated,
     isLoading = false, // Default to false
 }: SidebarProps) {
     const [showGlobalSearch, setShowGlobalSearch] = useState(false);
@@ -101,6 +103,11 @@ export default function Sidebar({
             const conversation = await apiService.createConversation([userId, user.id]);
             setSelectedUser(user.username);
             setShowGlobalSearch(false);
+            
+            // Call callback to refresh conversations list
+            if (onConversationCreated) {
+                onConversationCreated();
+            }
         } catch (error) {
             console.error('Failed to create conversation:', error);
         }
@@ -109,13 +116,17 @@ export default function Sidebar({
     // Get unique conversation partners from conversations
     const conversationPartners = useMemo(() => {
         const partners = new Set<string>();
-        conversations.forEach(conv => {
-            conv.participants.forEach((p: any) => {
-                if (p.user.username !== username) {
-                    partners.add(p.user.username);
+        if (Array.isArray(conversations)) {
+            conversations.forEach(conv => {
+                if (conv && conv.participants && Array.isArray(conv.participants)) {
+                    conv.participants.forEach((p: any) => {
+                        if (p && p.user && p.user.username && p.user.username !== username) {
+                            partners.add(p.user.username);
+                        }
+                    });
                 }
             });
-        });
+        }
         return Array.from(partners);
     }, [conversations, username]);
 
@@ -124,16 +135,23 @@ export default function Sidebar({
 
     const getLastMessage = (user: string) => {
         // First try to get last message from conversations data
-        const userConversation = conversations.find(conv => 
-            conv.participants.some((p: any) => p.user.username === user)
-        );
-        
-        if (userConversation?.messages?.length > 0) {
-            return userConversation.messages[0];
+        if (Array.isArray(conversations)) {
+            const userConversation = conversations.find(conv => 
+                conv && conv.participants && Array.isArray(conv.participants) &&
+                conv.participants.some((p: any) => p && p.user && p.user.username === user)
+            );
+            
+            if (userConversation?.messages?.length > 0) {
+                return userConversation.messages[0];
+            }
         }
         
         // Fallback to messages array
-        return messages.filter(m => (m.from === user && m.to === username) || (m.from === username && m.to === user)).pop();
+        if (Array.isArray(messages)) {
+            return messages.filter(m => (m.from === user && m.to === username) || (m.from === username && m.to === user)).pop();
+        }
+        
+        return null;
     };
 
     return (

@@ -1,10 +1,8 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-
-import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Pin, ChevronDown, X } from 'lucide-react';
 import { frontendAuth } from '@/utils/frontendAuth';
 import IncomingCallModal from '@/components/video/IncomingCallModal';
@@ -20,9 +18,8 @@ import FullPageLoader from '@/components/global/FullPageLoader';
 import { SecureSession } from '@/utils/secureSession';
 import { useMessageApi } from '@/hooks/useMessageApi';
 import { useSocket } from '@/hooks/useSocket';
-import { useRouteChangeConversations } from '@/hooks/useRouteChangeConversations';
-import { useApiHook } from '@/hooks/useApiHook';
 import { storageHelpers, STORAGE_KEYS, chatStorage } from '@/utils/storage';
+import { supabaseAdmin } from '@/utils/supabase-server';
 import { uploadAudio } from '@/utils/supabase';
 import api from '@/utils/api';
 import ChatFooter from '@/components/chat/ChatFooter';
@@ -30,10 +27,6 @@ import EmptyChatState from '@/components/chat/EmptyChatState';
 import CallOverlay from '@/components/video/CallOverlay';
 import MessageList from '@/components/chat/MessageList';
 import ChatHeader from '@/components/chat/ChatHeader';
-import { chatToast, toast, authToast } from '@/utils/toast';
-import { hasCookieAcceptance } from '@/utils/cookieConsent';
-import { conversationsManager } from '@/utils/conversationsManager';
-import { supabaseAdmin } from '@/utils/supabase-server';
 
 interface User {
     [key: string]: string;
@@ -44,146 +37,1455 @@ interface PeerConnectionManager {
     reset: () => void;
 }
 
-export default function ChatPageContent() {
+export default function ChatPage() {
     const router = useRouter();
-    const searchParams = useSearchParams();
-    
-    // Rest of the original component code...
-    const [isLoading, setIsLoading] = useState(true);
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [currentUser, setCurrentUser] = useState<any>(null);
-    const [conversations, setConversations] = useState<any[]>([]);
-    const [selectedConversation, setSelectedConversation] = useState<any>(null);
+    const [username, setUsername] = useState<string>('');
+    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [users, setUsers] = useState<User>({});
+    const [selectedUser, setSelectedUser] = useState<string | null>(null);
+    const selectedUserRef = useRef<string | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
-    const [message, setMessage] = useState('');
-    const [replyTo, setReplyTo] = useState<ReplyTo | null>(null);
-    const [editingMessage, setEditingMessage] = useState<string | null>(null);
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-    const [showProfileModal, setShowProfileModal] = useState(false);
-    const [incomingCall, setIncomingCall] = useState<any>(null);
-    const [activeCall, setActiveCall] = useState<any>(null);
+    const [conversations, setConversations] = useState<any[]>([]);
+    const [inputMessage, setInputMessage] = useState('');
+    const [isConnected, setIsConnected] = useState<boolean>(false);
+    const socketRef = useRef<Socket | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+    const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+    const [showPinsDropdown, setShowPinsDropdown] = useState<boolean>(false);
+
+    const [isWindowFocused, setIsWindowFocused] = useState<boolean>(true);
+    const isWindowFocusedRef = useRef(true);
+    const [autoRetryEnabled, setAutoRetryEnabled] = useState<boolean>(true);
+    const [retryInterval, setRetryInterval] = useState<NodeJS.Timeout | null>(null);
+    const [isConversationsLoading, setIsConversationsLoading] = useState<boolean>(false);
+
+    // Message API hook
+    const {
+        sendMessage,
+        sendVoiceMessage,
+        updateMessage,
+        deleteMessage,
+        pinMessage,
+        fetchMessages,
+        retryMessage,
+        loading: messageLoading,
+        error: messageError
+    } = useMessageApi();
+
+    // Call States
+    const [isCallActive, setIsCallActive] = useState<boolean>(false);
+    const [incomingCall, setIncomingCall] = useState<{ from: string; to: string; offer: RTCSessionDescriptionInit; isAudioOnly?: boolean } | null>(null);
+    const [showEndCallButton, setShowEndCallButton] = useState<boolean>(false);
+    const [showRemoteVideo, setShowRemoteVideo] = useState<boolean>(false);
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-    const [isRecording, setIsRecording] = useState(false);
-    const [recordingTime, setRecordingTime] = useState(0);
-    const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-    const [showAuthOverlay, setShowAuthOverlay] = useState(false);
-    const [callNotification, setCallNotification] = useState<any>(null);
-    const [isFullscreen, setIsFullscreen] = useState(false);
-    const [isPip, setIsPip] = useState(false);
-    const [isMuted, setIsMuted] = useState(false);
-    const [isVideoOff, setIsVideoOff] = useState(false);
-    const [screenShare, setScreenShare] = useState(false);
-    const [socket, setSocket] = useState<Socket | null>(null);
-    const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
-    const [isResizing, setIsResizing] = useState(false);
-    const [sidebarWidth, setSidebarWidth] = useState(320);
-    const [showPin, setShowPin] = useState(false);
-    const [showDropdown, setShowDropdown] = useState(false);
-    const [isTyping, setIsTyping] = useState(false);
-    const [typingUsers, setTypingUsers] = useState<string[]>([]);
-    const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<any[]>([]);
-    const [showSearch, setShowSearch] = useState(false);
-    const [selectedMessages, setSelectedMessages] = useState<string[]>([]);
-    const [showMessageOptions, setShowMessageOptions] = useState(false);
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [showEditModal, setShowEditModal] = useState(false);
-    const [showForwardModal, setShowForwardModal] = useState(false);
-    const [showReplyModal, setShowReplyModal] = useState(false);
-    const [showStarModal, setShowStarModal] = useState(false);
-    const [showInfoModal, setShowInfoModal] = useState(false);
-    const [showSettingsModal, setShowSettingsModal] = useState(false);
-    const [showHelpModal, setShowHelpModal] = useState(false);
-    const [showAboutModal, setShowAboutModal] = useState(false);
-    const [showPrivacyModal, setShowPrivacyModal] = useState(false);
-    const [showTermsModal, setShowShowTermsModal] = useState(false);
-    const [showCookieModal, setShowCookieModal] = useState(false);
-    const [showReportModal, setShowReportModal] = useState(false);
-    const [showBlockModal, setShowBlockModal] = useState(false);
-    const [showMuteModal, setShowMuteModal] = useState(false);
-    const [showUnmuteModal, setShowUnmuteModal] = useState(false);
-    const [showLeaveModal, setShowLeaveModal] = useState(false);
-    const [showDeleteChatModal, setShowDeleteChatModal] = useState(false);
-    const [showClearChatModal, setShowClearChatModal] = useState(false);
-    const [showExportChatModal, setShowExportChatModal] = useState(false);
-    const [showArchiveChatModal, setShowArchiveChatModal] = useState(false);
-    const [showUnarchiveChatModal, setShowUnarchiveChatModal] = useState(false);
-    const [showPinChatModal, setShowPinChatModal] = useState(false);
-    const [showUnpinChatModal, setShowUnpinChatModal] = useState(false);
-    const [showMuteChatModal, setShowMuteChatModal] = useState(false);
-    const [showUnmuteChatModal, setShowUnmuteChatModal] = useState(false);
-    const [showSearchChatModal, setShowSearchChatModal] = useState(false);
-    const [showFilterChatModal, setShowFilterChatModal] = useState(false);
-    const [showSortChatModal, setShowSortChatModal] = useState(false);
-    const [showViewChatModal, setShowViewChatModal] = useState(false);
-    const [showEditChatModal, setShowEditChatModal] = useState(false);
-    const [showDeleteChatConfirmModal, setShowDeleteChatConfirmModal] = useState(false);
-    const [showClearChatConfirmModal, setShowClearChatConfirmModal] = useState(false);
-    const [showExportChatConfirmModal, setShowExportChatConfirmModal] = useState(false);
-    const [showArchiveChatConfirmModal, setShowArchiveChatConfirmModal] = useState(false);
-    const [showUnarchiveChatConfirmModal, setShowUnarchiveChatConfirmModal] = useState(false);
-    const [showPinChatConfirmModal, setShowPinChatConfirmModal] = useState(false);
-    const [showUnpinChatConfirmModal, setShowUnpinChatConfirmModal] = useState(false);
-    const [showMuteChatConfirmModal, setShowMuteChatConfirmModal] = useState(false);
-    const [showUnmuteChatConfirmModal, setShowUnmuteChatConfirmModal] = useState(false);
-    const [showSearchChatConfirmModal, setShowSearchChatConfirmModal] = useState(false);
-    const [showFilterChatConfirmModal, setShowFilterChatConfirmModal] = useState(false);
-    const [showSortChatConfirmModal, setShowSortChatConfirmModal] = useState(false);
-    const [showViewChatConfirmModal, setShowViewChatConfirmModal] = useState(false);
-    const [showEditChatConfirmModal, setShowEditChatConfirmModal] = useState(false);
-    const [showDeleteChatConfirmModal2, setShowDeleteChatConfirmModal2] = useState(false);
-    const [showClearChatConfirmModal2, setShowClearChatConfirmModal2] = useState(false);
-    const [showExportChatConfirmModal2, setShowExportChatConfirmModal2] = useState(false);
-    const [showArchiveChatConfirmModal2, setShowArchiveChatConfirmModal2] = useState(false);
-    const [showUnarchiveChatConfirmModal2, setShowUnarchiveChatConfirmModal2] = useState(false);
-    const [showPinChatConfirmModal2, setShowPinChatConfirmModal2] = useState(false);
-    const [showUnpinChatConfirmModal2, setShowUnpinChatConfirmModal2] = useState(false);
-    const [showMuteChatConfirmModal2, setShowMuteChatConfirmModal2] = useState(false);
-    const [showUnmuteChatConfirmModal2, setShowUnmuteChatConfirmModal2] = useState(false);
-    const [showSearchChatConfirmModal2, setShowSearchChatConfirmModal2] = useState(false);
-    const [showFilterChatConfirmModal2, setShowFilterChatConfirmModal2] = useState(false);
-    const [showSortChatConfirmModal2, setShowSortChatConfirmModal2] = useState(false);
-    const [showViewChatConfirmModal2, setShowViewChatConfirmModal2] = useState(false);
-    const [showEditChatConfirmModal2, setShowEditChatConfirmModal2] = useState(false);
+    const [callTimer, setCallTimer] = useState(0);
+    const [isMuted, setIsMuted] = useState<boolean>(false);
+    const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
+    const [callNotification, setCallNotification] = useState<{ message: string; type: 'start' | 'end' } | null>(null);
+    const [isAudioOnly, setIsAudioOnly] = useState<boolean>(false);
+    const [callParticipant, setCallParticipant] = useState<string>('');
+    const [unreadCounts, setUnreadCounts] = useState<{ [key: string]: number }>({});
+    const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+    const [showEditProfile, setShowEditProfile] = useState(false);
 
-    const apiHook = useApiHook();
-    const messageApi = useMessageApi();
+    // Clear highlighted message after animation
+    useEffect(() => {
+        if (highlightedMessageId) {
+            const timer = setTimeout(() => {
+                setHighlightedMessageId(null);
+            }, 2500); // 2.5 seconds to match animation duration
+
+            return () => clearTimeout(timer);
+        }
+    }, [highlightedMessageId]);
+
+    // Refs
+    const localStreamRef = useRef<MediaStream | null>(null);
+    const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+    const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+    const ringtoneRef = useRef<HTMLAudioElement | null>(null);
+    const iceCandidatesBuffer = useRef<RTCIceCandidateInit[]>([]);
+    const callerRef = useRef<string[]>([]);
+    const chunkBufferRef = useRef<Record<string, Message[]>>({});
+
+    // Sync refs with state
+    useEffect(() => {
+        selectedUserRef.current = selectedUser;
+    }, [selectedUser]);
 
     useEffect(() => {
-        const initializeAuth = async () => {
-            try {
-                const session = frontendAuth.getSession();
-                if (session?.user?.id) {
-                    setIsAuthenticated(true);
-                    setCurrentUser({
-                        id: session.user.id,
-                        username: session.user.username
-                    });
-                    await loadConversations(session.user.id);
+        isWindowFocusedRef.current = isWindowFocused;
+    }, [isWindowFocused]);
+
+    // Extract unique users from conversations
+    const conversationUsers = conversations.reduce((acc: { [key: string]: string }, conv) => {
+        conv.participants.forEach((p: any) => {
+            if (p.user.username !== username) {
+                acc[p.user.username] = p.user.id;
+            }
+        });
+        return acc;
+    }, {});
+
+    // Merge online users with conversation users
+    const allUsers = { ...conversationUsers, ...users };
+    useEffect(() => {
+        if (selectedUser) {
+            setUnreadCounts(prev => ({
+                ...prev,
+                [selectedUser]: 0
+            }));
+        }
+    }, [selectedUser]);
+
+    // Socket connection setup
+    const socket = useSocket();
+
+    useEffect(() => {
+        if (!socket) return;
+
+        socketRef.current = socket;
+
+        // Socket event listeners
+        socket.on('connect', () => {
+            console.log('✅ Socket connected');
+            setIsConnected(true);
+            socket.emit('join-user', username);
+        });
+
+        socket.on('disconnect', () => {
+            console.log('❌ Socket disconnected');
+            setIsConnected(false);
+        });
+
+        socket.on('joined', (onlineUsers: { [key: string]: string }) => {
+            setUsers(onlineUsers);
+        });
+
+        socket.on('receive-message', (data: Message) => {
+            console.log('📨 Received message:', data);
+            console.log('📨 Current user:', username);
+            console.log('📨 Selected user:', selectedUser);
+            console.log('📨 Message from:', data.from, 'to:', data.to);
+
+            setMessages(prev => {
+                // Check if message already exists to avoid duplicates
+                const exists = prev.some(m => m.id === data.id);
+                if (!exists) {
+                    console.log('✅ Adding new message to list');
+                    return [...prev, data];
                 } else {
-                    setShowAuthOverlay(true);
+                    console.log('⚠️ Message already exists, skipping');
+                    return prev;
+                }
+            });
+
+            // Update unread count if message is not from current user
+            if (data.from !== username && data.to === username) {
+                setUnreadCounts(prev => ({
+                    ...prev,
+                    [data.from]: (prev[data.from] || 0) + 1
+                }));
+
+                // Show notification if window is not focused
+                if (!isWindowFocusedRef.current) {
+                    showNotification(data);
+                }
+            }
+
+            // If we receive a message for the current conversation, reload messages to ensure sync
+            if ((data.from === selectedUser && data.to === username) ||
+                (data.from === username && data.to === selectedUser)) {
+                console.log('🔄 Message for current conversation, reloading...');
+                setTimeout(() => loadMessages(selectedUser!), 1000);
+            }
+        });
+
+        socket.on('message-status-update', ({ messageId, status }: { messageId: string; status: string }) => {
+            setMessages(prev => prev.map(m =>
+                m.id === messageId ? { ...m, status: status as any } : m
+            ));
+        });
+
+        socket.on('message-edited', ({ id, message }: { id: string; message: string }) => {
+            setMessages(prev => prev.map(m =>
+                m.id === id ? { ...m, message, isEdited: true } : m
+            ));
+        });
+
+        socket.on('delete-message', ({ id }: { id: string }) => {
+            setMessages(prev => prev.map(m =>
+                m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m
+            ));
+        });
+
+        socket.on('pin-message', ({ id, isPinned }: { id: string; isPinned: boolean }) => {
+            setMessages(prev => prev.map(m =>
+                m.id === id ? { ...m, isPinned } : m
+            ));
+        });
+
+        socket.on('clear-all-messages', ({ from, to }: { from: string; to: string }) => {
+            if (to === username) {
+                setMessages(prev => prev.filter(m =>
+                    !((m.from === from && m.to === to) || (m.from === to && m.to === from))
+                ));
+            }
+        });
+
+        // WebRTC event listeners
+        socket.on('offer', (payload) => {
+            setIncomingCall({
+                from: payload.from,
+                to: payload.to,
+                offer: payload.offer,
+                isAudioOnly: payload.isAudioOnly
+            });
+            playRingtone();
+        });
+
+        socket.on('answer', (payload) => {
+            // TODO: Implement handleAnswer
+            console.log('Received answer:', payload);
+        });
+
+        socket.on('icecandidate', (candidate) => {
+            // TODO: Implement handleIceCandidate
+            console.log('Received ICE candidate:', candidate);
+        });
+
+        socket.on('call-ended', () => {
+            handleEndCallInternal();
+        });
+
+        socket.on('call-rejected', (payload) => {
+            stopRingtone();
+            setCallNotification({ message: `${payload.from} rejected your call`, type: 'end' });
+            setTimeout(() => setCallNotification(null), 3000);
+        });
+
+        return () => {
+            socket.off('connect');
+            socket.off('disconnect');
+            socket.off('joined');
+            socket.off('receive-message');
+            socket.off('message-status-update');
+            socket.off('message-edited');
+            socket.off('delete-message');
+            socket.off('pin-message');
+            socket.off('clear-all-messages');
+            socket.off('offer');
+            socket.off('answer');
+            socket.off('icecandidate');
+            socket.off('call-ended');
+            socket.off('call-rejected');
+        };
+    }, [socket, username]);
+
+    // Request Notification Permission
+    useEffect(() => {
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+
+        const handleFocus = () => setIsWindowFocused(true);
+        const handleBlur = () => setIsWindowFocused(false);
+
+        window.addEventListener('focus', handleFocus);
+        window.addEventListener('blur', handleBlur);
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            window.removeEventListener('blur', handleBlur);
+        };
+    }, []);
+
+    // Mark messages as read when focusing or changing user
+    useEffect(() => {
+        if (selectedUser && isWindowFocused && socketRef.current) {
+            // Find messages from this user that are not read
+            const unreadMsgs = messages.filter(m => m.from === selectedUser && m.status !== 'read' && m.to === username);
+
+            if (unreadMsgs.length > 0) {
+                unreadMsgs.forEach(msg => {
+                    if (msg.id) {
+                        socketRef.current?.emit('mark-read', { messageId: msg.id, to: msg.from });
+                    }
+                });
+
+                // Optimistically update local state
+                setMessages(prev => prev.map(m =>
+                    (m.from === selectedUser && m.to === username && m.status !== 'read') ? { ...m, status: 'read' as const } : m
+                ));
+            }
+        }
+    }, [selectedUser, isWindowFocused, messages.length]);
+
+
+    // Add no-scroll class to body for chat page
+    useEffect(() => {
+        document.body.classList.add('no-scroll');
+
+        return () => {
+            // Remove no-scroll class when component unmounts
+            document.body.classList.remove('no-scroll');
+        };
+    }, []);
+
+    // Periodic check for stuck sending messages
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const now = new Date();
+            setMessages(prev => prev.map(m => {
+                // Check if message has been stuck in sending for more than 15 seconds
+                if (m.status === 'sending' && m.timestamp) {
+                    const timeDiff = now.getTime() - new Date(m.timestamp).getTime();
+                    if (timeDiff > 15000) { // 15 seconds
+                        console.warn('Message stuck in sending state, marking as failed:', m.id);
+                        return {
+                            ...m,
+                            status: 'failed',
+                            retryCount: 1,
+                            lastRetryTime: new Date()
+                        };
+                    }
+                }
+                return m;
+            }));
+        }, 5000); // Check every 5 seconds
+
+        return () => clearInterval(interval);
+    }, []);
+
+    // Mark messages as read function removed - using WebSocket instead
+
+    const loadMessages = async (selectedUsername: string) => {
+        try {
+            console.log('🔄 Loading messages for:', selectedUsername);
+            console.log('🔄 Current conversations:', conversations.length);
+
+            // Find conversation for this user
+            let currentConversation = conversations.find(c =>
+                c.participants.some((p: any) => p.user.username === selectedUsername)
+            );
+
+            console.log('Found conversation:', currentConversation);
+
+            // If not found, try to get/create conversation directly
+            if (!currentConversation) {
+                console.log('🔄 Conversation not found, trying to create...');
+                const cookies = getClientCookies();
+                const userId = cookies['user-id'] || SecureSession.getUserId();
+
+                if (userId) {
+                    // Try to find conversation by participants
+                    const { data: selectedUserData } = await supabaseAdmin
+                        .from('users')
+                        .select('id')
+                        .eq('username', selectedUsername)
+                        .maybeSingle();
+
+                    console.log('Selected user data:', selectedUserData);
+
+                    if (selectedUserData) {
+                        const response = await fetch('/api/conversations', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                participantIds: [userId, selectedUserData.id]
+                            }),
+                        });
+
+                        if (response.ok) {
+                            currentConversation = await response.json();
+                            setConversations(prev => [...prev, currentConversation]);
+                        }
+                    }
+                }
+            }
+
+            if (currentConversation) {
+                console.log('🔄 Fetching messages API for conversation:', currentConversation.id);
+                const response = await fetch(`/api/conversations/${currentConversation.id}/messages`);
+                if (response.ok) {
+                    const messagesData = await response.json();
+                    console.log('✅ Messages API loaded successfully:', messagesData.length, 'messages');
+
+                    // Format messages for frontend and calculate unread counts
+                    const formattedMessages = messagesData.map((msg: any) => ({
+                        id: msg.id,
+                        from: msg.sender?.username || 'Unknown',
+                        to: msg.sender?.username === username ? selectedUsername : username,
+                        message: msg.content,
+                        timestamp: msg.timestamp,
+                        status: msg.status,
+                        isVoiceMessage: msg.is_voice_message,
+                        audioUrl: msg.audio_url,
+                        audioDuration: msg.audio_duration,
+                        isDeleted: msg.is_deleted,
+                        isEdited: msg.is_edited,
+                        isPinned: msg.is_pinned,
+                        replyTo: msg.reply_to ? {
+                            id: msg.reply_to.id,
+                            from: msg.reply_to.sender?.username || 'Unknown',
+                            message: msg.reply_to.content || msg.reply_to.message
+                        } : undefined,
+                        senderId: msg.sender_id
+                    }));
+
+                    // Calculate unread messages for this conversation
+                    const unreadCount = formattedMessages.filter((msg: any) =>
+                        msg.from === selectedUsername &&
+                        msg.status !== 'read' &&
+                        msg.status !== 'delivered'
+                    ).length;
+
+                    // Update unread counts
+                    setUnreadCounts(prev => ({
+                        ...prev,
+                        [selectedUsername]: unreadCount
+                    }));
+
+                    console.log('📊 Unread count for', selectedUsername, ':', unreadCount);
+
+                    setMessages(formattedMessages);
+                    console.log('✅ Loaded messages for', selectedUsername, ':', formattedMessages.length, 'messages');
+                    console.log('📋 All loaded messages:', formattedMessages.map((m: any) => ({
+                        id: m.id,
+                        from: m.from,
+                        to: m.to,
+                        message: m.message?.substring(0, 20) + '...',
+                        status: m.status,
+                        isHidden: m.isHidden
+                    })));
+
+                    if (currentConversation && unreadCounts[selectedUsername] > 0) {
+                        // Use WebSocket instead of HTTP API
+                        const unreadMsgs = messages.filter(m =>
+                            m.from === selectedUsername && m.status !== 'read' && m.to === username
+                        );
+
+                        if (unreadMsgs.length > 0 && socketRef.current) {
+                            unreadMsgs.forEach(msg => {
+                                if (msg.id) {
+                                    socketRef.current?.emit('mark-read', { messageId: msg.id, to: msg.from });
+                                }
+                            });
+                        }
+
+                        setUnreadCounts(prev => ({
+                            ...prev,
+                            [selectedUsername]: 0
+                        }));
+                    }
+                } else {
+                    console.error('❌ Failed to load messages API:', response.status, response.statusText);
+                    setMessages([]);
+                }
+            } else {
+                console.log('ℹ️ No conversation found for', selectedUsername);
+                setMessages([]);
+            }
+        } catch (error) {
+            console.error('❌ Failed to load messages API:', error);
+            setMessages([]);
+        }
+    };
+
+    // Load messages when selected user changes
+    useEffect(() => {
+        if (selectedUser && username) {
+            loadMessages(selectedUser);
+        }
+    }, [selectedUser, username]);
+
+    // Also reload messages periodically to sync with database
+    useEffect(() => {
+        if (selectedUser && username) {
+            const interval = setInterval(() => {
+                loadMessages(selectedUser);
+            }, 10000); // Reload every 10 seconds
+
+            return () => clearInterval(interval);
+        }
+    }, [selectedUser, username]);
+
+    useEffect(() => {
+        const checkAuth = async () => {
+            try {
+                // Check session using frontend auth utility
+                const storedSession = frontendAuth.getSession();
+                console.log('🔐 Checking authentication:', {
+                    storedSession: storedSession,
+                    hasSession: !!storedSession,
+                    username: storedSession?.user?.username
+                });
+
+                if (storedSession) {
+                    console.log('✅ User authenticated:', storedSession.user.username);
+                    setUsername(storedSession.user.username);
+                    setIsLoading(false); // Set loading to false when data is available
+                    setIsConversationsLoading(true);
+
+                    // Load user data
+                    loadConversations(storedSession.user.id).then(() => {
+                        console.log('✅ Conversations loaded');
+                        setIsConversationsLoading(false);
+                    }).catch((error: any) => {
+                        console.error('❌ Failed to load conversations:', error);
+                        setIsConversationsLoading(false);
+                    });
+
+                    // Load failed messages
+                    const failed = storageHelpers.getFailedMessages() || [];
+                    if (failed.length > 0) {
+                        console.log('🔄 Restoring failed messages:', failed.length);
+                        setMessages(prev => {
+                            const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
+                            return [...prev, ...newMessages];
+                        });
+                    }
+                } else {
+                    console.log('❌ No session found, showing login');
+                    setIsLoading(false);
+                    setIsConversationsLoading(false);
                 }
             } catch (error) {
-                console.error('Auth initialization error:', error);
-                setShowAuthOverlay(true);
-            } finally {
+                console.error('Error checking authentication:', error);
                 setIsLoading(false);
+                setIsConversationsLoading(false);
             }
         };
 
-        initializeAuth();
+        checkAuth();
     }, []);
 
+    // Listen for session changes using localStorage events
+    useEffect(() => {
+        const checkSessionChange = () => {
+            try {
+                const storedSession = frontendAuth.getSession();
+                const currentUsername = storedSession?.user?.username || '';
+
+                if (currentUsername !== username) {
+                    if (currentUsername && storedSession) {
+                        console.log('🔄 Session changed, updating username:', currentUsername);
+                        setUsername(currentUsername);
+                        if (storedSession.user.id) {
+                            loadConversations(storedSession.user.id);
+                        }
+                    } else {
+                        // Session was cleared, redirect to login
+                        console.log('❌ Session cleared, redirecting to login');
+                        router.push('/login');
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking session:', error);
+            }
+        };
+
+        // Listen for storage events (for cross-tab changes)
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === 'user_data' || e.key === 'session_token') {
+                checkSessionChange();
+            }
+        };
+
+        // Check immediately
+        checkSessionChange();
+
+        // Set up storage event listener
+        window.addEventListener('storage', handleStorageChange);
+
+        // Also check periodically (less frequently) as fallback
+        const interval = setInterval(checkSessionChange, 30000); // 30 seconds instead of 5
+
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+            clearInterval(interval);
+        };
+    }, [username, router]);
+
+    // Persistence Helpers
+    const saveFailedMessageLocal = (msg: Message) => {
+        try {
+            storageHelpers.saveFailedMessage({
+                ...msg,
+                retryCount: 1,
+                lastRetryTime: new Date(),
+                status: 'failed'
+            });
+        } catch (error) {
+            console.error('Error saving failed message:', error);
+        }
+    };
+
+    const retryFailedMessages = () => {
+        try {
+            const failed = storageHelpers.getFailedMessages() || [];
+            const now = new Date();
+
+            failed.forEach(async (msg: Message) => {
+                // Only retry if 5 minutes have passed since last retry
+                const timeSinceLastRetry = msg.lastRetryTime ?
+                    now.getTime() - new Date(msg.lastRetryTime).getTime() :
+                    now.getTime() - new Date(msg.timestamp).getTime();
+
+                if (timeSinceLastRetry > 30 * 1000) { // 30 seconds
+                    try {
+                        // Update status to sending
+                        setMessages(prev => prev.map(m =>
+                            m.id === msg.id ? { ...m, status: 'sending' } : m
+                        ));
+
+                        // Get current user ID and conversation
+                        const cookies = getClientCookies();
+                        const userId = (cookies['user-id'] as string) || SecureSession.getUserId();
+
+                        let currentConversation = conversations.find(c =>
+                            c.participants.some((p: any) => p.user.username === msg.to)
+                        );
+
+                        // If conversation not found, create it
+                        if (!currentConversation && userId) {
+                            const { data: selectedUserData } = await supabaseAdmin
+                                .from('users')
+                                .select('id')
+                                .eq('username', msg.to)
+                                .maybeSingle();
+
+                            if (selectedUserData) {
+                                const response = await fetch('/api/conversations', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        participantIds: [userId, selectedUserData.id]
+                                    }),
+                                });
+
+                                if (response.ok) {
+                                    currentConversation = await response.json();
+                                    setConversations(prev => [...prev, currentConversation]);
+                                }
+                            }
+                        }
+
+                        if (currentConversation && userId) {
+                            const response = await fetch('/api/messages', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    conversationId: currentConversation.id,
+                                    senderId: userId,
+                                    content: msg.message,
+                                    to: msg.to,
+                                    from: username
+                                }),
+                            });
+
+                            if (response.ok) {
+                                // Remove from failed messages
+                                const updatedFailed = failed.filter((m: Message) => m.id !== msg.id);
+                                chatStorage.setItem('failed-messages', updatedFailed);
+
+                                // Update message status to sent
+                                setMessages(prev => prev.map(m =>
+                                    m.id === msg.id ? { ...m, status: 'sent' } : m
+                                ));
+                            } else {
+                                throw new Error('Failed to send message');
+                            }
+                        } else {
+                            console.error('No conversation or user ID found for retry');
+                        }
+                    } catch (error) {
+                        console.error('Failed to retry message:', error);
+                        // Update retry count and last retry time
+                        msg.retryCount = (msg.retryCount || 0) + 1;
+                        msg.lastRetryTime = new Date();
+                        saveFailedMessageLocal(msg);
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Failed to retry messages:', error);
+        }
+    };
+
+    // Auto-retry failed messages
+    useEffect(() => {
+        if (autoRetryEnabled && isConnected) {
+            const interval = setInterval(() => {
+                retryFailedMessages();
+            }, 10000); // Retry every 10 seconds
+            setRetryInterval(interval);
+        } else if (retryInterval) {
+            clearInterval(retryInterval);
+            setRetryInterval(null);
+        }
+
+        return () => {
+            if (retryInterval) {
+                clearInterval(retryInterval);
+            }
+        };
+    }, [autoRetryEnabled, isConnected]);
+
+    const removeFailedMessage = (id: string) => {
+        try {
+            const failed = storageHelpers.getFailedMessages() || [];
+            const newFailed = failed.filter((m: Message) => m.id !== id);
+            chatStorage.setItem('failed-messages', newFailed);
+        } catch (error) {
+            console.error('Error removing failed message:', error);
+        }
+    };
+
+    // Restore failed messages on mount
+    useEffect(() => {
+        const failed = storageHelpers.getFailedMessages() || [];
+        if (failed.length > 0) {
+            setMessages(prev => {
+                const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
+                return [...prev, ...newMessages];
+            });
+        }
+    }, []);
+
+    // Retry failed messages when connected (every 5 seconds)
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        let isProcessing = false;
+
+        if (isConnected && socketRef.current) {
+            const processQueue = async () => {
+                if (isProcessing) return;
+
+                const failed: Message[] = storageHelpers.getFailedMessages() || [];
+                if (failed.length === 0) return;
+
+                isProcessing = true;
+                console.log(`Auto-retrying ${failed.length} failed messages...`);
+
+                for (const msg of failed) {
+                    // Update status to pending in UI
+                    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'pending' } : m));
+
+                    try {
+                        await new Promise((resolve, reject) => {
+                            if (!socketRef.current) return reject('Socket not connected');
+
+                            socketRef.current.emit('send-message', msg, (ack: any) => {
+                                if (ack && ack.status === 'ok') {
+                                    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'sent' } : m));
+                                    removeFailedMessage(msg.id!);
+                                    resolve(true);
+                                } else {
+                                    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'failed' } : m));
+                                    reject('Failed to send');
+                                }
+                            });
+                        });
+                        // Wait a bit between messages
+                        await new Promise(r => setTimeout(r, 200));
+                    } catch (err) {
+                        console.error('Error retrying message:', msg.id, err);
+                    }
+                }
+                isProcessing = false;
+            };
+
+            // Run immediately and then every 5 seconds
+            processQueue();
+            interval = setInterval(processQueue, 1000);
+        }
+
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [isConnected]);
+
+    // Timer Effect
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (isCallActive) {
+            interval = setInterval(() => setCallTimer(prev => prev + 1), 1000);
+        }
+        return () => clearInterval(interval);
+    }, [isCallActive]);
+
+    // Ringtone Logic
+    const playRingtone = () => {
+        if (!ringtoneRef.current) {
+            ringtoneRef.current = new Audio('/assets/ringtones/ringtone.mp3');
+            ringtoneRef.current.loop = true;
+        }
+        ringtoneRef.current.play().catch(e => console.log('Audio play error:', e));
+    };
+
+    const stopRingtone = () => {
+        if (ringtoneRef.current) {
+            ringtoneRef.current.pause();
+            ringtoneRef.current.currentTime = 0;
+        }
+    };
+
+    const sendMessageInternal = (msg: Message) => {
+        if (!socketRef.current) return;
+        socketRef.current.emit('send-message', msg, (ack: any) => {
+            if (ack && ack.status === 'ok') {
+                setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'sent' } : m));
+                removeFailedMessage(msg.id!);
+            } else {
+                setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'failed' } : m));
+                saveFailedMessageLocal({ ...msg, status: 'failed' });
+            }
+        });
+    };
+
+    const PeerConnection: PeerConnectionManager = useMemo(() => ({
+        getInstance: (stream: MediaStream) => {
+            if (peerConnectionRef.current) peerConnectionRef.current.close();
+
+            const pc = new RTCPeerConnection({
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            });
+
+            stream.getTracks().forEach(track => {
+                console.log(`Adding local track: ${track.kind}, enabled: ${track.enabled}`);
+                pc.addTrack(track, stream);
+            });
+
+            pc.onicecandidate = (e) => {
+                if (e.candidate) {
+                    socketRef.current?.emit('icecandidate', e.candidate);
+                }
+            };
+
+            pc.ontrack = (e) => {
+                console.log('Received remote stream:', e.streams[0]);
+                console.log('Track kinds:', e.streams[0]?.getTracks().map(t => t.kind));
+
+                if (e.streams[0]) {
+                    // Set remote video stream state
+                    setRemoteStream(e.streams[0]);
+
+                    // Show remote video
+                    setShowRemoteVideo(true);
+
+                    // Log for debugging
+                    e.streams[0].getTracks().forEach(track => {
+                        console.log(`Remote track: ${track.kind}, enabled: ${track.enabled}, state: ${track.readyState}`);
+                    });
+                }
+            };
+
+            pc.onconnectionstatechange = () => {
+                if (pc.connectionState === 'connected') setConnectionState('connected');
+            };
+
+            peerConnectionRef.current = pc;
+            return pc;
+        },
+        reset: () => {
+            if (peerConnectionRef.current) {
+                peerConnectionRef.current.close();
+                peerConnectionRef.current = null;
+            }
+        }
+    }), []);
+
+    const startCall = async (isAudio: boolean) => {
+        if (!selectedUser) return;
+        setIsAudioOnly(isAudio);
+        setCallParticipant(selectedUser);
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: isAudio ? false : true,
+                audio: true
+            });
+            localStreamRef.current = stream;
+            setLocalStream(stream);
+
+            const pc = PeerConnection.getInstance(stream);
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            socketRef.current?.emit('offer', {
+                from: username,
+                to: selectedUser,
+                offer,
+                isAudioOnly: isAudio
+            });
+
+            callerRef.current = [username, selectedUser];
+            setShowEndCallButton(true);
+            setIsCallActive(true);
+            setConnectionState('connecting');
+        } catch (e) {
+            console.error('Media error:', e);
+            alert('Could not access camera/mic');
+        }
+    };
+
+    const handleAcceptCall = async () => {
+        if (!incomingCall) return;
+        stopRingtone();
+
+        const isAudioCall = incomingCall.isAudioOnly === true;
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: !isAudioCall,
+                audio: true
+            });
+            localStreamRef.current = stream;
+            setLocalStream(stream);
+
+            const pc = PeerConnection.getInstance(stream);
+            await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+            processBufferedIceCandidates(pc);
+
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+
+            socketRef.current?.emit('answer', {
+                from: username,
+                to: incomingCall.from,
+                answer
+            });
+
+            setIsAudioOnly(isAudioCall);
+            setIsCallActive(true);
+            setShowRemoteVideo(!isAudioCall);
+            setShowEndCallButton(true);
+            setIncomingCall(null);
+            setCallParticipant(incomingCall.from);
+            setConnectionState('connected');
+        } catch (e) {
+            console.error('Accept call error:', e);
+            alert('Could not accept call: ' + (e as Error).message);
+        }
+    };
+
+    const handleRejectCall = () => {
+        if (!incomingCall) return;
+        stopRingtone();
+        socketRef.current?.emit('call-rejected', { from: username, to: incomingCall.from });
+        setIncomingCall(null);
+    };
+
+    const handleEndCallRequest = () => {
+        const otherUser = callerRef.current.find(u => u !== username) || selectedUser || callParticipant;
+        if (otherUser) {
+            socketRef.current?.emit('call-ended', { from: username, to: otherUser });
+        }
+        handleEndCallInternal();
+    };
+
+    const handleEndCallInternal = () => {
+        PeerConnection.reset();
+        if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(t => t.stop());
+            localStreamRef.current = null;
+        }
+        setLocalStream(null);
+        setRemoteStream(null);
+        setIsCallActive(false);
+        setShowEndCallButton(false);
+        setShowRemoteVideo(false);
+        setCallTimer(0);
+        setCallParticipant('');
+        setConnectionState('disconnected');
+        stopRingtone();
+    };
+
+    const processBufferedIceCandidates = async (pc: RTCPeerConnection) => {
+        while (iceCandidatesBuffer.current.length > 0) {
+            const candidate = iceCandidatesBuffer.current.shift();
+            if (candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+    };
+
+    const showNotification = (data: Message) => {
+        if (!('Notification' in window)) return;
+
+        if (Notification.permission === 'granted') {
+            const options: any = {
+                body: data.message,
+                icon: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.from}`,
+                tag: 'chat-msg',
+                renotify: true
+            };
+            const notification = new Notification(`New message from ${data.from}`, options);
+
+            notification.onclick = () => {
+                window.focus();
+                setSelectedUser(data.from);
+                notification.close();
+            };
+        }
+    };
+
+    const handleSendMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!inputMessage.trim() || !selectedUser) return;
+
+        const tempContent = inputMessage.trim();
+        setInputMessage('');
+        setReplyingTo(null);
+
+        // Create temporary message with sending status
+        const tempMessage: Message = {
+            id: `temp-${Date.now()}`,
+            from: username,
+            to: selectedUser,
+            message: tempContent,
+            timestamp: new Date(),
+            status: 'sending',
+            retryCount: 0,
+            replyTo: replyingTo ? {
+                id: replyingTo.id,
+                from: replyingTo.from,
+                message: replyingTo.message
+            } : undefined,
+        };
+
+        // Add to UI immediately with sending status
+        setMessages(prev => [...prev, tempMessage]);
+
+        // Add timeout to prevent stuck in sending state
+        const timeoutId = setTimeout(() => {
+            setMessages(prev => prev.map(m =>
+                m.id === tempMessage.id ? {
+                    ...m,
+                    status: 'failed',
+                    retryCount: 1,
+                    lastRetryTime: new Date()
+                } : m
+            ));
+
+            // Save to localStorage for retry
+            saveFailedMessageLocal({
+                ...tempMessage,
+                status: 'failed',
+                retryCount: 1,
+                lastRetryTime: new Date()
+            });
+
+            // Restore input message
+            setInputMessage(tempContent);
+            console.warn('Message sending timed out, marked as failed');
+        }, 10000); // 10 second timeout
+
+        try {
+            // Send message using hook
+            const savedMsg = await sendMessage(
+                tempContent,
+                selectedUser,
+                username,
+                conversations,
+                replyingTo
+            );
+
+            // Clear timeout on success
+            clearTimeout(timeoutId);
+
+            // Update local state with the saved message
+            setMessages(prev => prev.map(m =>
+                m.id === tempMessage.id ? {
+                    ...savedMsg,
+                    from: username,
+                    to: selectedUser,
+                    message: tempContent,
+                    timestamp: new Date(savedMsg.timestamp),
+                    status: 'sent'
+                } : m
+            ));
+
+            // Emit to recipient via socket
+            if (socketRef.current?.connected) {
+                socketRef.current.emit('send-message', {
+                    id: savedMsg.id,
+                    from: username,
+                    to: selectedUser,
+                    message: tempContent,
+                    timestamp: savedMsg.timestamp,
+                    status: 'sent',
+                    isVoiceMessage: false,
+                    isEdited: false,
+                    isDeleted: false,
+                    isPinned: false,
+                    replyTo: replyingTo ? {
+                        id: replyingTo.id,
+                        from: replyingTo.from,
+                        message: replyingTo.message
+                    } : undefined,
+                    groupId: null,
+                    chunkIndex: null,
+                    totalChunks: null
+                });
+            }
+
+        } catch (error) {
+            console.error('Failed to send message:', error);
+
+            // Clear timeout on error
+            clearTimeout(timeoutId);
+
+            // Update message status to failed
+            setMessages(prev => prev.map(m =>
+                m.id === tempMessage.id ? {
+                    ...m,
+                    status: 'failed',
+                    retryCount: 1,
+                    lastRetryTime: new Date()
+                } : m
+            ));
+
+            // Save to localStorage for retry
+            saveFailedMessageLocal({
+                ...tempMessage,
+                status: 'failed',
+                retryCount: 1,
+                lastRetryTime: new Date()
+            });
+
+            // Restore input message so user can retry
+            setInputMessage(tempContent);
+        }
+    };
+
+    const handleUpdateMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingMessage || !inputMessage.trim() || !selectedUser) return;
+
+        const tempContent = inputMessage.trim();
+        setEditingMessage(null);
+        setInputMessage('');
+
+        try {
+            // Update message in database
+            const response = await fetch('/api/messages', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    messageId: editingMessage.id,
+                    content: tempContent,
+                    from: username,
+                    to: selectedUser
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to update message');
+            }
+
+            const updatedMsg = await response.json();
+
+            // Update local state
+            setMessages(prev => prev.map(msg =>
+                msg.id === editingMessage.id
+                    ? { ...msg, message: tempContent, isEdited: true }
+                    : msg
+            ));
+
+            // Socket event is handled by the API server
+            // No need to emit from client side
+
+        } catch (error) {
+            console.error('Failed to update message:', error);
+            // Restore editing state if failed
+            setEditingMessage(editingMessage);
+            setInputMessage(tempContent);
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setEditingMessage(null);
+        setInputMessage('');
+    };
+
+    const handleEditMessage = (msg: Message) => {
+        setEditingMessage(msg);
+        setInputMessage(msg.message);
+        setReplyingTo(null);
+    };
+
+    const handleSendVoice = async (audioBlob: Blob, duration: number) => {
+        if (!selectedUser) return;
+
+        try {
+            // Send voice message using hook
+            const savedMsg = await sendVoiceMessage(
+                audioBlob,
+                duration,
+                selectedUser,
+                username,
+                conversations
+            );
+
+            // Update local state
+            setMessages(prev => [...prev, {
+                ...savedMsg,
+                from: username,
+                to: selectedUser,
+                message: '🎤 Voice message',
+                timestamp: new Date(savedMsg.timestamp),
+                status: 'sent',
+                isVoiceMessage: true,
+                audioUrl: savedMsg.audioUrl,
+                audioDuration: savedMsg.audioDuration
+            }]);
+
+            // Emit to recipient via socket
+            if (socketRef.current?.connected) {
+                socketRef.current.emit('send-message', {
+                    id: savedMsg.id,
+                    from: username,
+                    to: selectedUser,
+                    message: '🎤 Voice message',
+                    timestamp: savedMsg.timestamp,
+                    status: 'sent',
+                    isVoiceMessage: true,
+                    audioUrl: savedMsg.audioUrl,
+                    audioDuration: savedMsg.audioDuration,
+                    isEdited: false,
+                    isDeleted: false,
+                    isPinned: false,
+                    replyTo: null,
+                    groupId: null,
+                    chunkIndex: null,
+                    totalChunks: null
+                });
+            }
+
+        } catch (error) {
+            console.error('Failed to send voice message:', error);
+            alert('Failed to send voice message');
+        }
+    };
+
+    const handleRetry = (msg: Message) => {
+        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'pending' } : m));
+        if (isConnected && socketRef.current) {
+            sendMessageInternal(msg);
+        } else {
+            setTimeout(() => {
+                setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'failed' } : m));
+            }, 500);
+        }
+    };
+
+    // Auto retry failed messages when there are 2 or more
+    useEffect(() => {
+        const failedMessages = messages.filter(m => m.status === 'failed');
+
+        if (failedMessages.length >= 2 && isConnected && socketRef.current) {
+            console.log(`🔄 Auto-retrying ${failedMessages.length} failed messages`);
+
+            // Retry all failed messages with delay between each
+            failedMessages.forEach((msg, index) => {
+                setTimeout(() => {
+                    if (msg.id) {
+                        console.log(`🔄 Auto-retrying message ${index + 1}/${failedMessages.length}:`, msg.id);
+                        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'pending' } : m));
+
+                        if (isConnected && socketRef.current) {
+                            sendMessageInternal(msg);
+                        }
+                    }
+                }, index * 1000); // 1 second delay between each retry
+            });
+        }
+    }, [messages, isConnected]);
+
+    const handleDeleteMessage = async (id: string, type: 'me' | 'everyone') => {
+        try {
+            if (type === 'me') {
+                // Delete for me - hide message for current user only
+                setMessages(prev => prev.map(m =>
+                    m.id === id ? { ...m, isHidden: true } : m
+                ));
+                console.log('� Hidden message for current user:', id);
+            } else {
+                setMessages(prev => prev.map(m =>
+                    m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m
+                ));
+                if (socketRef.current && selectedUser) {
+                    socketRef.current?.emit('delete-message', { id, to: selectedUser });
+                }
+            }
+        } catch (error) {
+            console.error('❌ Failed to delete message:', error);
+        }
+    };
+
+    const handlePinMessage = (msg: Message) => {
+        const isPinned = !msg.isPinned;
+
+        // Count pins for current chat
+        const currentPins = messages.filter(m =>
+            m.isPinned &&
+            ((m.from === username && m.to === selectedUser) || (m.from === selectedUser && m.to === username))
+        );
+
+        if (isPinned && currentPins.length >= 3) {
+            alert('Aap sirf 3 messages pin kar sakte hain per chat.');
+            return;
+        }
+
+        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isPinned } : m));
+        socketRef.current?.emit('pin-message', { id: msg.id, isPinned, to: selectedUser });
+    };
+
+    const handleHideMessage = (id: string) => {
+        console.log('🙈 Hiding message:', id);
+        setMessages(prev => prev.map(m => m.id === id ? { ...m, isHidden: true } : m));
+    };
+
+    const handleUnhideMessage = (id: string) => {
+        console.log('👁️ Unhiding message:', id);
+        setMessages(prev => prev.map(m => m.id === id ? { ...m, isHidden: false } : m));
+    };
+
+    const handleRefreshMessages = () => {
+        if (selectedUser) {
+            console.log('🔄 Manual refresh triggered for:', selectedUser);
+            loadMessages(selectedUser);
+        }
+    };
+
+    const handleRetryMessage = (msg: Message) => {
+        // Update status to sending
+        setMessages(prev => prev.map(m =>
+            m.id === msg.id ? { ...m, status: 'sending' } : m
+        ));
+
+        // Retry immediately
+        retryFailedMessages();
+    };
+
+    const toggleAutoRetry = () => {
+        setAutoRetryEnabled(!autoRetryEnabled);
+    };
+
+    const handleClearData = () => {
+        // Clear secure session (requires server-side)
+        SecureSession.clearSession();
+        setUsername('');
+        setSelectedUser(null);
+        setMessages([]);
+        setUsers({});
+        if (socketRef.current) {
+            socketRef.current.disconnect();
+            socketRef.current = null;
+        }
+        router.push('/');
+    };
+
+    const handleClearChat = () => {
+        if (selectedUser) {
+            setMessages([]);
+            // Clear failed messages for this conversation
+            const failed = storageHelpers.getFailedMessages() || [];
+            const updatedFailed = failed.filter((m: Message) => m.to !== selectedUser);
+            chatStorage.setItem('failed-messages', updatedFailed);
+        }
+    };
+
+    const handleClearAllMessages = async () => {
+        if (!selectedUser || !username) return;
+
+        try {
+            // Find current conversation
+            let currentConversation = conversations.find(c =>
+                c.participants.some((p: any) => p.user.username === selectedUser)
+            );
+
+            if (!currentConversation) {
+                // Try to get conversation ID
+                const cookies = getClientCookies();
+                const userId = (cookies['user-id'] as string) || SecureSession.getUserId();
+
+                if (userId) {
+                    const { data: selectedUserData } = await supabaseAdmin
+                        .from('users')
+                        .select('id')
+                        .eq('username', selectedUser)
+                        .maybeSingle();
+
+                    if (selectedUserData) {
+                        const response = await fetch('/api/conversations', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                participantIds: [userId, selectedUserData.id]
+                            }),
+                        });
+
+                        if (response.ok) {
+                            currentConversation = await response.json();
+                        }
+                    }
+                }
+            }
+
+            if (currentConversation) {
+                // Delete all messages from database
+                const response = await fetch(`/api/conversations/${currentConversation.id}/messages/delete`, {
+                    method: 'DELETE',
+                });
+
+                if (response.ok) {
+                    // Clear local messages
+                    setMessages([]);
+                    // Clear failed messages for this conversation
+                    const failed = storageHelpers.getFailedMessages() || [];
+                    const updatedFailed = failed.filter((m: Message) => m.to !== selectedUser);
+                    chatStorage.setItem('failed-messages', updatedFailed);
+
+                    // Emit socket event for real-time sync
+                    if (socketRef.current?.connected) {
+                        socketRef.current.emit('clear-all-messages', {
+                            from: username,
+                            to: selectedUser,
+                            conversationId: currentConversation.id
+                        });
+                    }
+
+                    console.log('All messages deleted successfully');
+                } else {
+                    throw new Error('Failed to delete messages');
+                }
+            }
+        } catch (error) {
+            console.error('Failed to clear all messages:', error);
+            alert('Failed to delete messages. Please try again.');
+        }
+    };
+
+    // Load user conversations from API
     const loadConversations = async (userId: string) => {
         try {
-            const result = await apiHook.getConversations(userId);
-            if (result.error) {
-                throw new Error(result.error);
+            const response = await fetch(`/api/conversations?userId=${userId}`);
+            if (response.ok) {
+                const conversationsData = await response.json();
+                setConversations(conversationsData);
+                console.log('✅ Conversations loaded successfully:', conversationsData.length, 'conversations');
+            } else {
+                console.error('❌ Failed to load conversations:', response.statusText);
             }
-            setConversations(result.data || []);
-            console.log('✅ Conversations loaded successfully:', result.data?.length || 0, 'conversations');
         } catch (error) {
             console.error('❌ Error loading conversations:', error);
             throw error;
@@ -192,105 +1494,258 @@ export default function ChatPageContent() {
 
     const handleLogout = async () => {
         try {
-            frontendAuth.clearSession();
-            setIsAuthenticated(false);
-            setCurrentUser(null);
-            setConversations([]);
-            setSelectedConversation(null);
-            setMessages([]);
-            router.push('/login');
-        } catch (error) {
-            console.error('Logout error:', error);
+            await api.post('/auth/logout');
+        } catch {
+            /* ignore */
+        }
+        handleClearData();
+    };
+
+    const handleProfileUpdated = (newUsername?: string) => {
+        if (newUsername) {
+            setUsername(newUsername);
         }
     };
+
+    const currentChatMessages = messages.filter(
+        (msg: Message) => {
+            const shouldInclude = (msg.from === username && msg.to === selectedUser) ||
+                (msg.from === selectedUser && msg.to === username);
+            console.log('🔍 Message filter:', {
+                messageId: msg.id,
+                from: msg.from,
+                to: msg.to,
+                username,
+                selectedUser,
+                shouldInclude,
+                isSentMessage: msg.from === username,
+                isReceivedMessage: msg.from === selectedUser,
+                message: msg.message?.substring(0, 20) + '...'
+            });
+            return shouldInclude;
+        }
+    );
+
+    const pinnedMessages = currentChatMessages.filter(m => m.isPinned);
+
+    // Debug: Log current state
+    console.log('🔍 Debug Info:', {
+        totalMessages: messages.length,
+        currentChatMessages: currentChatMessages.length,
+        username,
+        selectedUser,
+        allMessages: messages.map(m => ({
+            id: m.id,
+            from: m.from,
+            to: m.to,
+            message: m.message?.substring(0, 20) + '...',
+            isSent: m.from === username,
+            isReceived: m.from === selectedUser
+        }))
+    });
 
     if (isLoading) {
         return <FullPageLoader />;
     }
 
-    if (!isAuthenticated) {
-        return <AuthOverlay 
-            username="" 
-            onUsernameCreated={() => setIsAuthenticated(true)} 
-            onClearData={() => {}} 
-        />;
-    }
-
     return (
-        <div className="flex h-screen bg-gray-50">
-            <ResizableSidebar
-                selectedUser={null}
-                initialWidth={320}
-            >
-                <Sidebar
-                    username={currentUser?.username || ''}
-                    users={{}}
-                    selectedUser={selectedConversation?.id || null}
-                    setSelectedUser={(userId) => {
-                        const conv = conversations.find(c => c.id === userId);
-                        setSelectedConversation(conv || null);
-                    }}
-                    searchQuery={searchQuery}
-                    setSearchQuery={setSearchQuery}
-                    messages={messages}
-                    conversations={conversations}
-                    onLogout={handleLogout}
-                />
-            </ResizableSidebar>
+        <div className="min-h-[100dvh] h-[100dvh] flex bg-[#f0f2f5] md:p-4 font-sans">
+            <div className="relative flex h-full w-full bg-white shadow-2xl md:rounded-sm">
 
-            <div className="flex-1 flex flex-col">
-                {selectedConversation ? (
-                    <Fragment>
-                        <ChatHeader
-                            conversation={selectedConversation}
-                            currentUser={currentUser}
-                            onShowProfile={() => setShowProfileModal(true)}
-                            onShowInfo={() => setShowInfoModal(true)}
-                            onShowSettings={() => setShowSettingsModal(true)}
-                        />
-                        <MessageList
-                            messages={messages}
-                            username={currentUser?.username || currentUser?.email || 'User'}
-                            onRetry={(message) => {/* Handle retry */}}
-                            onReply={(message) => setReplyTo({ id: message.id, from: message.from, message: message.message })}
-                            onEdit={(message) => setEditingMessage(message.id || '')}
-                            onDelete={(messageId, type) => {/* Handle delete */}}
-                            onPin={(message) => {/* Handle pin */}}
-                        />
-                    </Fragment>
-                ) : (
-                    <EmptyChatState />
-                )}
+                <ResizableSidebar selectedUser={selectedUser}>
+                    <Sidebar
+                        username={username}
+                        users={allUsers}
+                        selectedUser={selectedUser}
+                        setSelectedUser={setSelectedUser}
+                        searchQuery={searchQuery}
+                        setSearchQuery={setSearchQuery}
+                        messages={messages}
+                        conversations={conversations}
+                        unreadCounts={unreadCounts}
+                        onLogout={handleLogout}
+                        onEditProfile={() => setShowEditProfile(true)}
+                        isLoading={isConversationsLoading}
+                    />
+                </ResizableSidebar>
+
+                {/* Main Chat Area */}
+                <main className={`flex flex-1 flex-col bg-[#efeae2] relative ${!selectedUser ? 'hidden md:flex' : 'flex'}`}>
+                    {selectedUser ? (
+                        <>
+                            <ChatHeader
+                                selectedUser={selectedUser}
+                                onBack={() => setSelectedUser(null)}
+                                onStartVideoCall={() => startCall(false)}
+                                onStartAudioCall={() => startCall(true)}
+                                onClearChat={handleClearChat}
+                                onClearAllMessages={handleClearAllMessages}
+                                onRefreshMessages={handleRefreshMessages}
+                            />
+
+                            {/* Pinned Messages Banner */}
+                            {pinnedMessages.length > 0 && (
+                                <div className="relative z-30">
+                                    <div
+                                        onClick={() => setShowPinsDropdown(!showPinsDropdown)}
+                                        className="bg-white/90 backdrop-blur px-4 py-2 border-b border-[#f0f2f5] flex items-center gap-2 shadow-sm cursor-pointer hover:bg-white transition-colors animate-in fade-in duration-300"
+                                    >
+                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00a884]/10 text-[#00a884]">
+                                            <Pin size={16} className="fill-current" />
+                                        </div>
+                                        <div className="flex-1 overflow-hidden">
+                                            <p className="text-[12px] font-bold text-[#00a884]">
+                                                {pinnedMessages.length === 1 ? 'Pinned Message' : `${pinnedMessages.length} Pinned Messages`}
+                                            </p>
+                                            <p className="text-[13px] text-[#54656f] truncate">
+                                                {pinnedMessages[pinnedMessages.length - 1].message}
+                                            </p>
+                                        </div>
+                                        <ChevronDown size={18} className={`text-[#667781] transition-transform ${showPinsDropdown ? 'rotate-180' : ''}`} />
+                                    </div>
+
+                                    {/* Pins Dropdown */}
+                                    {showPinsDropdown && (
+                                        <div className="absolute top-full left-0 right-0 bg-white shadow-xl border-b border-[#f0f2f5] max-h-[300px] overflow-y-auto animate-in slide-in-from-top-2 duration-200">
+                                            {pinnedMessages.slice().reverse().map((msg) => (
+                                                <div
+                                                    key={msg.id}
+                                                    className="p-3 border-b border-[#f0f2f5] hover:bg-[#f8f9fa] cursor-pointer"
+                                                    onClick={() => {
+                                                        setHighlightedMessageId(msg.id || '');
+                                                        setShowPinsDropdown(false);
+                                                    }}
+                                                >
+                                                    <div className="flex items-start gap-2">
+                                                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#00a884]/10 text-[#00a884] mt-1">
+                                                            <Pin size={12} className="fill-current" />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-[13px] font-medium text-[#111b21]">{msg.from}</p>
+                                                            <p className="text-[14px] text-[#3b4a54] break-words">{msg.message}</p>
+                                                            <p className="text-[11px] text-[#8696a0] mt-1">
+                                                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            <MessageList
+                                messages={currentChatMessages}
+                                username={username}
+                                onRetry={handleRetry}
+                                onReply={(msg: Message) => setReplyingTo(msg)}
+                                onDelete={handleDeleteMessage}
+                                onPin={handlePinMessage}
+                                onEdit={handleEditMessage}
+                                onHide={handleHideMessage}
+                                onUnhide={handleUnhideMessage}
+                                highlightedMessageId={highlightedMessageId}
+                            />
+
+                            <ChatFooter
+                                inputMessage={inputMessage}
+                                setInputMessage={setInputMessage}
+                                onSendMessage={handleSendMessage}
+                                onSendVoice={handleSendVoice}
+                                onUpdateMessage={handleUpdateMessage}
+                                replyingTo={replyingTo}
+                                editingMessage={editingMessage}
+                                onCancelReply={() => setReplyingTo(null)}
+                                onCancelEdit={handleCancelEdit}
+                            />
+                        </>
+                    ) : (
+                        <EmptyChatState />
+                    )}
+                </main>
             </div>
+
+            <CallOverlay
+                username={username}
+                remoteUser={callParticipant}
+                isCallActive={isCallActive}
+                onEndCall={handleEndCallRequest}
+                callNotification={callNotification}
+                remoteStream={remoteStream}
+                remoteVideoRef={remoteVideoRef}
+                isAudioOnly={isAudioOnly}
+                localStream={localStream}
+                callTimer={callTimer}
+                connectionState={connectionState}
+                isMuted={isMuted}
+                setIsMuted={setIsMuted}
+                onClearData={handleClearData}
+            />
 
             {incomingCall && (
                 <IncomingCallModal
-                    from={incomingCall.callerName}
-                    onAccept={() => {
-                        // Handle accept
-                    }}
-                    onReject={() => setIncomingCall(null)}
+                    from={incomingCall.from}
+                    isAudioOnly={incomingCall.isAudioOnly}
+                    onAccept={handleAcceptCall}
+                    onReject={handleRejectCall}
                 />
             )}
 
-            {activeCall && (
-                <CallOverlay
-                    call={activeCall}
-                    callerName={activeCall.callerName}
-                    localStream={localStream}
-                    remoteStream={remoteStream}
-                    isMuted={isMuted}
-                    isVideoOff={isVideoOff}
-                    onToggleMute={() => setIsMuted(!isMuted)}
-                    onToggleVideo={() => setIsVideoOff(!isVideoOff)}
-                    onEndCall={() => setActiveCall(null)}
-                    onToggleScreenShare={() => setScreenShare(!screenShare)}
-                    isFullscreen={isFullscreen}
-                    onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
-                    isPip={isPip}
-                    onTogglePip={() => setIsPip(!isPip)}
+            {callNotification && (
+                <CallNotification
+                    message={callNotification.message}
+                    type={callNotification.type === 'start' ? 'start' : 'end'}
+                    onClose={() => setCallNotification(null)}
                 />
             )}
+
+            <AuthOverlay
+                username={username}
+                onUsernameCreated={(u, userId) => {
+                    console.log('Login successful, setting up user session...');
+                    setUsername(u);
+
+                    // Wait a moment for cookies to be set, then load data
+                    setTimeout(async () => {
+                        const cookies = getClientCookies();
+                        const userData = SecureSession.getUser();
+                        const finalUserId = userId || (cookies['user-id'] as string) || userData.userId;
+
+                        if (finalUserId) {
+                            try {
+                                await loadConversations(finalUserId);
+                                console.log('✅ Conversations API loaded successfully');
+                            } catch (error) {
+                                console.error('❌ Failed to load conversations:', error);
+                            }
+
+                            const failed = storageHelpers.getFailedMessages() || [];
+                            if (failed.length > 0) {
+                                console.log('🔄 Restoring failed messages:', failed.length);
+                                setMessages(prev => {
+                                    const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
+                                    return [...prev, ...newMessages];
+                                });
+                            }
+                        } else {
+                            console.error('❌ No user ID found after login');
+                        }
+                    }, 100);
+
+                    socketRef.current?.emit('join-user', u);
+                }}
+                onClearData={() => {
+                    SecureSession.clearSession();
+                    setUsername('');
+                }}
+            />
+
+            <EditProfileModal
+                isOpen={showEditProfile}
+                onClose={() => setShowEditProfile(false)}
+                onSuccess={handleProfileUpdated}
+            />
         </div>
     );
 }

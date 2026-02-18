@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth-server';
+import { supabaseAdmin } from '@/utils/supabase-server';
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,10 +23,41 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // For now, return empty conversations array
-    // TODO: Implement actual database logic to fetch conversations
+    // Fetch conversations where user is a participant
+    const { data: conversations, error } = await supabaseAdmin
+      .from('conversation_participants')
+      .select(`
+        conversation_id,
+        conversations (
+          id,
+          name,
+          is_group,
+          created_at,
+          updated_at
+        )
+      `)
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Database error fetching conversations:', error);
+      return NextResponse.json(
+        { error: 'Failed to fetch conversations' },
+        { status: 500 }
+      );
+    }
+
+    // Transform the data to match expected format
+    const transformedConversations = conversations?.map((item: any) => ({
+      id: item.conversations?.id,
+      name: item.conversations?.name,
+      is_group: item.conversations?.is_group,
+      created_at: item.conversations?.created_at,
+      updated_at: item.conversations?.updated_at,
+      conversation_id: item.conversation_id
+    })) || [];
+
     return NextResponse.json({
-      data: [],
+      data: transformedConversations,
       message: 'Conversations fetched successfully'
     });
 
@@ -59,15 +91,50 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // For now, return a mock conversation
-    // TODO: Implement actual database logic to create conversation
+    // Create conversation
+    const { data: conversation, error: conversationError } = await supabaseAdmin
+      .from('conversations')
+      .insert({
+        name: null, // Can be updated later for group chats
+        is_group: participantIds.length > 2
+      })
+      .select()
+      .single();
+
+    if (conversationError) {
+      console.error('Error creating conversation:', conversationError);
+      return NextResponse.json(
+        { error: 'Failed to create conversation' },
+        { status: 500 }
+      );
+    }
+
+    // Add participants
+    const participants = participantIds.map(userId => ({
+      conversation_id: conversation.id,
+      user_id: userId
+    }));
+
+    const { error: participantsError } = await supabaseAdmin
+      .from('conversation_participants')
+      .insert(participants);
+
+    if (participantsError) {
+      console.error('Error adding participants:', participantsError);
+      // Rollback conversation creation if participants failed
+      await supabaseAdmin
+        .from('conversations')
+        .delete()
+        .eq('id', conversation.id);
+      
+      return NextResponse.json(
+        { error: 'Failed to add participants' },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
-      data: {
-        id: `conv_${Date.now()}`,
-        participantIds,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
+      data: conversation,
       message: 'Conversation created successfully'
     });
 

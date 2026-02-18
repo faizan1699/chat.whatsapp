@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useRouter } from 'next/navigation';
 import { Search, UserPlus, Phone, Mail, Loader2 } from 'lucide-react';
 import { apiService } from '@/services/apiService';
 
@@ -16,6 +17,7 @@ interface UserSearchProps {
 export default function UserSearch({ onSelectUser }: UserSearchProps) {
     const [results, setResults] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const router = useRouter();
     const { register, handleSubmit } = useForm<SearchForm>();
 
     const onSubmit = async (data: SearchForm) => {
@@ -31,13 +33,21 @@ export default function UserSearch({ onSelectUser }: UserSearchProps) {
         }
     };
 
+    const handleUserClick = async (user: any) => {
+        // Call the original onSelectUser callback
+        onSelectUser(user);
+        
+        // Navigate to chat page
+        router.push('/chat');
+    };
+
     return (
         <div className="flex flex-col gap-4 p-4">
             <form onSubmit={handleSubmit(onSubmit)} className="relative">
                 <input
                     {...register('query')}
                     className="w-full rounded-lg bg-[#f0f2f5] px-10 py-2 text-[15px] outline-none placeholder:text-[#667781]"
-                    placeholder="Search by email or phone..."
+                    placeholder="Search by username, email or phone..."
                 />
                 <Search className="absolute left-3 top-2.5 text-[#667781]" size={18} />
                 {isLoading && <Loader2 className="absolute right-3 top-2.5 animate-spin text-[#00a884]" size={18} />}
@@ -47,7 +57,7 @@ export default function UserSearch({ onSelectUser }: UserSearchProps) {
                 {results.map((user) => (
                     <button
                         key={user.id}
-                        onClick={() => onSelectUser(user)}
+                        onClick={() => handleUserClick(user)}
                         className="flex items-center gap-3 rounded-lg p-2 hover:bg-[#f5f6f6] transition-colors"
                     >
                         <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-200">

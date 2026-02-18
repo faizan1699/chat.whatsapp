@@ -4,23 +4,23 @@ export const apiService = {
     // User APIs
     searchUser: async (query: string) => {
         const response = await api.get(`/users/search?q=${query}`);
-        return response.data;
+        return response.data?.data || [];
     },
 
     createUser: async (data: any) => {
         const response = await api.post('/users', data);
-        return response.data;
+        return response.data?.data;
     },
 
     // Conversation APIs
     getConversations: async (userId: string) => {
         const response = await api.get(`/conversations?userId=${userId}`);
-        return response.data;
+        return response.data?.data || [];
     },
 
     createConversation: async (participantIds: string[]) => {
         const response = await api.post('/conversations', { participantIds });
-        return response.data;
+        return response.data?.data;
     },
 
     // Message APIs
