@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
+import React, { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
 import { Pin, ChevronDown, X } from 'lucide-react';
-import { frontendAuth } from '@/utils/frontendAuth';
+import { getClientSession, isClientAuthenticated, handleAuthError } from '@/utils/auth-client-new';
 import IncomingCallModal from '@/components/video/IncomingCallModal';
 import MessageItem from '@/components/chat/MessageItem';
 import { Message, ReplyTo } from '@/types/message';
@@ -22,6 +22,7 @@ import { storageHelpers, STORAGE_KEYS, chatStorage } from '@/utils/storage';
 import { supabaseAdmin } from '@/utils/supabase-server';
 import { uploadAudio } from '@/utils/supabase';
 import api from '@/utils/api';
+import { conversationsManager } from '@/utils/conversationsManager';
 import ChatFooter from '@/components/chat/ChatFooter';
 import EmptyChatState from '@/components/chat/EmptyChatState';
 import CallOverlay from '@/components/video/CallOverlay';
@@ -496,6 +497,23 @@ export default function ChatPage() {
         }
     };
 
+    // Load user conversations from API
+    const loadConversations = async (userId: string) => {
+        try {
+            const response = await fetch(`/api/conversations?userId=${userId}`);
+            if (response.ok) {
+                const conversationsData = await response.json();
+                setConversations(conversationsData);
+                console.log('✅ Conversations loaded successfully:', conversationsData.length, 'conversations');
+            } else {
+                console.error('❌ Failed to load conversations:', response.statusText);
+            }
+        } catch (error) {
+            console.error('❌ Error loading conversations:', error);
+            throw error;
+        }
+    };
+
     // Load messages when selected user changes
     useEffect(() => {
         if (selectedUser && username) {
@@ -517,8 +535,8 @@ export default function ChatPage() {
     useEffect(() => {
         const checkAuth = async () => {
             try {
-                // Check session using frontend auth utility
-                const storedSession = frontendAuth.getSession();
+                // Check session using unified auth utility
+                const storedSession = getClientSession();
                 console.log('🔐 Checking authentication:', {
                     storedSession: storedSession,
                     hasSession: !!storedSession,
@@ -526,13 +544,13 @@ export default function ChatPage() {
                 });
 
                 if (storedSession) {
-                    console.log('✅ User authenticated:', storedSession.user.username);
-                    setUsername(storedSession.user.username);
+                    console.log('✅ User authenticated:', storedSession.user?.username);
+                    setUsername(storedSession?.user?.username || '');
                     setIsLoading(false); // Set loading to false when data is available
                     setIsConversationsLoading(true);
 
                     // Load user data
-                    loadConversations(storedSession.user.id).then(() => {
+                    loadConversations(storedSession?.user?.id || '').then(() => {
                         console.log('✅ Conversations loaded');
                         setIsConversationsLoading(false);
                     }).catch((error: any) => {
@@ -566,16 +584,16 @@ export default function ChatPage() {
 
     // Listen for session changes using localStorage events
     useEffect(() => {
-        const checkSessionChange = () => {
+        const checkSessionChange = async () => {
             try {
-                const storedSession = frontendAuth.getSession();
-                const currentUsername = storedSession?.user?.username || '';
+                const storedSession = getClientSession();
+                const currentUsername = storedSession?.username || '';
 
                 if (currentUsername !== username) {
                     if (currentUsername && storedSession) {
                         console.log('🔄 Session changed, updating username:', currentUsername);
                         setUsername(currentUsername);
-                        if (storedSession.user.id) {
+                        if (storedSession?.user?.id) {
                             loadConversations(storedSession.user.id);
                         }
                     } else {
@@ -1446,60 +1464,23 @@ export default function ChatPage() {
                 const response = await fetch(`/api/conversations/${currentConversation.id}/messages/delete`, {
                     method: 'DELETE',
                 });
-
                 if (response.ok) {
                     // Clear local messages
                     setMessages([]);
-                    // Clear failed messages for this conversation
-                    const failed = storageHelpers.getFailedMessages() || [];
-                    const updatedFailed = failed.filter((m: Message) => m.to !== selectedUser);
-                    chatStorage.setItem('failed-messages', updatedFailed);
-
-                    // Emit socket event for real-time sync
-                    if (socketRef.current?.connected) {
-                        socketRef.current.emit('clear-all-messages', {
-                            from: username,
-                            to: selectedUser,
-                            conversationId: currentConversation.id
-                        });
-                    }
-
-                    console.log('All messages deleted successfully');
-                } else {
-                    throw new Error('Failed to delete messages');
                 }
             }
         } catch (error) {
             console.error('Failed to clear all messages:', error);
-            alert('Failed to delete messages. Please try again.');
-        }
-    };
-
-    // Load user conversations from API
-    const loadConversations = async (userId: string) => {
-        try {
-            const response = await fetch(`/api/conversations?userId=${userId}`);
-            if (response.ok) {
-                const responseData = await response.json();
-                const conversationsData = responseData.data || [];
-                setConversations(conversationsData);
-                console.log('✅ Conversations loaded successfully:', conversationsData.length, 'conversations');
-            } else {
-                console.error('❌ Failed to load conversations:', response.statusText);
-            }
-        } catch (error) {
-            console.error('❌ Error loading conversations:', error);
-            throw error;
         }
     };
 
     const handleLogout = async () => {
         try {
-            await api.post('/auth/logout');
-        } catch {
-            /* ignore */
+          const response =  await api.post('/auth/logout');
+           if(response) handleClearData();
+        } catch(error: any) {
+            console.log("logout error" , error?.message);
         }
-        handleClearData();
     };
 
     const handleProfileUpdated = (newUsername?: string) => {
@@ -1545,208 +1526,180 @@ export default function ChatPage() {
         }))
     });
 
-    if (isLoading) {
-        return <FullPageLoader />;
-    }
-
     return (
         <div className="min-h-[100dvh] h-[100dvh] flex bg-[#f0f2f5] md:p-4 font-sans">
-            <div className="relative flex h-full w-full bg-white shadow-2xl md:rounded-sm">
+            {isLoading ? (
+                <FullPageLoader />
+            ) : (
+                <div className="relative flex h-full w-full bg-white shadow-2xl md:rounded-sm">
 
-                <ResizableSidebar selectedUser={selectedUser}>
-                    <Sidebar
-                        username={username}
-                        users={allUsers}
-                        selectedUser={selectedUser}
-                        setSelectedUser={setSelectedUser}
-                        searchQuery={searchQuery}
-                        setSearchQuery={setSearchQuery}
-                        messages={messages}
-                        conversations={conversations}
-                        unreadCounts={unreadCounts}
-                        onLogout={handleLogout}
-                        onEditProfile={() => setShowEditProfile(true)}
-                        isLoading={isConversationsLoading}
-                    />
-                </ResizableSidebar>
+                    <ResizableSidebar selectedUser={selectedUser}>
+                        <Sidebar
+                            username={username}
+                            users={allUsers}
+                            selectedUser={selectedUser}
+                            setSelectedUser={setSelectedUser}
+                            searchQuery={searchQuery}
+                            setSearchQuery={setSearchQuery}
+                            messages={messages}
+                            conversations={conversations}
+                            unreadCounts={unreadCounts}
+                            onLogout={handleLogout}
+                            onEditProfile={() => setShowEditProfile(true)}
+                            isLoading={isConversationsLoading}
+                        />
+                    </ResizableSidebar>
 
-                {/* Main Chat Area */}
-                <main className={`flex flex-1 flex-col bg-[#efeae2] relative ${!selectedUser ? 'hidden md:flex' : 'flex'}`}>
-                    {selectedUser ? (
-                        <Fragment>
-                            <ChatHeader
-                                selectedUser={selectedUser}
-                                onBack={() => setSelectedUser(null)}
-                                onStartVideoCall={() => startCall(false)}
-                                onStartAudioCall={() => startCall(true)}
-                                onClearChat={handleClearChat}
-                                onClearAllMessages={handleClearAllMessages}
-                                onRefreshMessages={handleRefreshMessages}
-                            />
+                    {/* Main Chat Area */}
+                    <main className={`flex flex-1 flex-col bg-[#efeae2] relative ${!selectedUser ? 'hidden md:flex' : 'flex'}`}>
+                        {selectedUser ? (
+                            <Fragment>
+                                <ChatHeader
+                                    selectedUser={selectedUser}
+                                    onBack={() => setSelectedUser(null)}
+                                    onStartVideoCall={() => startCall(false)}
+                                    onStartAudioCall={() => startCall(true)}
+                                    onClearChat={handleClearChat}
+                                    onClearAllMessages={handleClearAllMessages}
+                                    onRefreshMessages={handleRefreshMessages}
+                                />
 
-                            {/* Pinned Messages Banner */}
-                            {pinnedMessages.length > 0 && (
-                                <div className="relative z-30">
-                                    <div
-                                        onClick={() => setShowPinsDropdown(!showPinsDropdown)}
-                                        className="bg-white/90 backdrop-blur px-4 py-2 border-b border-[#f0f2f5] flex items-center gap-2 shadow-sm cursor-pointer hover:bg-white transition-colors animate-in fade-in duration-300"
-                                    >
-                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00a884]/10 text-[#00a884]">
-                                            <Pin size={16} className="fill-current" />
+                                {/* Pinned Messages Banner */}
+                                {pinnedMessages.length > 0 && (
+                                    <div className="relative z-30">
+                                        <div
+                                            onClick={() => setShowPinsDropdown(!showPinsDropdown)}
+                                            className="bg-white/90 backdrop-blur px-4 py-2 border-b border-[#f0f2f5] flex items-center gap-2 shadow-sm cursor-pointer hover:bg-white transition-colors animate-in fade-in duration-300"
+                                        >
+                                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00a884]/10 text-[#00a884]">
+                                                <Pin size={16} className="fill-current" />
+                                            </div>
+                                            <div className="flex-1 overflow-hidden">
+                                                <p className="text-[12px] font-bold text-[#00a884]">
+                                                    {pinnedMessages.length === 1 ? 'Pinned Message' : `${pinnedMessages.length} Pinned Messages`}
+                                                </p>
+                                                <p className="text-[13px] text-[#54656f] truncate">
+                                                    {pinnedMessages[pinnedMessages.length - 1].message}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div className="flex-1 overflow-hidden">
-                                            <p className="text-[12px] font-bold text-[#00a884]">
-                                                {pinnedMessages.length === 1 ? 'Pinned Message' : `${pinnedMessages.length} Pinned Messages`}
-                                            </p>
-                                            <p className="text-[13px] text-[#54656f] truncate">
-                                                {pinnedMessages[pinnedMessages.length - 1].message}
-                                            </p>
-                                        </div>
-                                        <ChevronDown size={18} className={`text-[#667781] transition-transform ${showPinsDropdown ? 'rotate-180' : ''}`} />
                                     </div>
+                                )}
 
-                                    {/* Pins Dropdown */}
-                                    {showPinsDropdown && (
-                                        <div className="absolute top-full left-0 right-0 bg-white shadow-xl border-b border-[#f0f2f5] max-h-[300px] overflow-y-auto animate-in slide-in-from-top-2 duration-200">
-                                            {pinnedMessages.slice().reverse().map((msg) => (
-                                                <div
-                                                    key={msg.id}
-                                                    className="p-3 border-b border-[#f0f2f5] hover:bg-[#f8f9fa] cursor-pointer"
-                                                    onClick={() => {
-                                                        setHighlightedMessageId(msg.id || '');
-                                                        setShowPinsDropdown(false);
-                                                    }}
-                                                >
-                                                    <div className="flex items-start gap-2">
-                                                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#00a884]/10 text-[#00a884] mt-1">
-                                                            <Pin size={12} className="fill-current" />
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-[13px] font-medium text-[#111b21]">{msg.from}</p>
-                                                            <p className="text-[14px] text-[#3b4a54] break-words">{msg.message}</p>
-                                                            <p className="text-[11px] text-[#8696a0] mt-1">
-                                                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
+                                <MessageList
+                                    messages={messages}
+                                    username={username}
+                                    onRetry={handleRetry}
+                                    onReply={setReplyingTo}
+                                    onEdit={setEditingMessage}
+                                    onDelete={handleDeleteMessage}
+                                    onPin={handlePinMessage}
+                                    highlightedMessageId={highlightedMessageId}
+                                />
 
-                            <MessageList
-                                messages={currentChatMessages}
-                                username={username}
-                                onRetry={handleRetry}
-                                onReply={(msg: Message) => setReplyingTo(msg)}
-                                onDelete={handleDeleteMessage}
-                                onPin={handlePinMessage}
-                                onEdit={handleEditMessage}
-                                onHide={handleHideMessage}
-                                onUnhide={handleUnhideMessage}
-                                highlightedMessageId={highlightedMessageId}
-                            />
+                                <ChatFooter
+                                    inputMessage={inputMessage}
+                                    setInputMessage={setInputMessage}
+                                    onSendMessage={handleSendMessage}
+                                    onSendVoice={handleSendVoice}
+                                    onUpdateMessage={handleUpdateMessage}
+                                    // onEditMessage={() => { }}
+                                    replyingTo={replyingTo}
+                                    editingMessage={editingMessage}
+                                    onCancelReply={() => setReplyingTo(null)}
+                                    onCancelEdit={() => {
+                                        setEditingMessage(null);
+                                        setInputMessage('');
+                                    }}
+                                />
+                            </Fragment>
+                        ) : (
+                            <EmptyChatState />
+                        )}
+                    </main>
 
-                            <ChatFooter
-                                inputMessage={inputMessage}
-                                setInputMessage={setInputMessage}
-                                onSendMessage={handleSendMessage}
-                                onSendVoice={handleSendVoice}
-                                onUpdateMessage={handleUpdateMessage}
-                                replyingTo={replyingTo}
-                                editingMessage={editingMessage}
-                                onCancelReply={() => setReplyingTo(null)}
-                                onCancelEdit={handleCancelEdit}
-                            />
-                        </Fragment>
-                    ) : (
-                        <EmptyChatState />
+                    <CallOverlay
+                        username={username}
+                        remoteUser={callParticipant}
+                        isCallActive={isCallActive}
+                        onEndCall={handleEndCallRequest}
+                        callNotification={callNotification}
+                        remoteStream={remoteStream}
+                        remoteVideoRef={remoteVideoRef}
+                        isAudioOnly={isAudioOnly}
+                        localStream={localStream}
+                        callTimer={callTimer}
+                        connectionState={connectionState}
+                        isMuted={isMuted}
+                        setIsMuted={setIsMuted}
+                        onClearData={handleClearData}
+                    />
+
+                    {incomingCall && (
+                        <IncomingCallModal
+                            from={incomingCall.from}
+                            isAudioOnly={incomingCall.isAudioOnly}
+                            onAccept={handleAcceptCall}
+                            onReject={handleRejectCall}
+                        />
                     )}
-                </main>
-            </div>
 
-            <CallOverlay
-                username={username}
-                remoteUser={callParticipant}
-                isCallActive={isCallActive}
-                onEndCall={handleEndCallRequest}
-                callNotification={callNotification}
-                remoteStream={remoteStream}
-                remoteVideoRef={remoteVideoRef}
-                isAudioOnly={isAudioOnly}
-                localStream={localStream}
-                callTimer={callTimer}
-                connectionState={connectionState}
-                isMuted={isMuted}
-                setIsMuted={setIsMuted}
-                onClearData={handleClearData}
-            />
+                    {callNotification && (
+                        <CallNotification
+                            message={callNotification.message}
+                            type={callNotification.type === 'start' ? 'start' : 'end'}
+                            onClose={() => setCallNotification(null)}
+                        />
+                    )}
 
-            {incomingCall && (
-                <IncomingCallModal
-                    from={incomingCall.from}
-                    isAudioOnly={incomingCall.isAudioOnly}
-                    onAccept={handleAcceptCall}
-                    onReject={handleRejectCall}
-                />
+                    <AuthOverlay
+                        username={username}
+                        onUsernameCreated={(u, userId) => {
+                            console.log('Login successful, setting up user session...');
+                            setUsername(u);
+
+                            // Wait a moment for cookies to be set, then load data
+                            setTimeout(async () => {
+                                const cookies = getClientCookies();
+                                const userData = SecureSession.getUser();
+                                const finalUserId = userId || (cookies['user-id'] as string) || userData.userId;
+
+                                if (finalUserId) {
+                                    try {
+                                        await loadConversations(finalUserId);
+                                        console.log('✅ Conversations API loaded successfully');
+                                    } catch (error) {
+                                        console.error('❌ Failed to load conversations:', error);
+                                    }
+
+                                    const failed = storageHelpers.getFailedMessages() || [];
+                                    if (failed.length > 0) {
+                                        console.log('🔄 Restoring failed messages:', failed.length);
+                                        setMessages(prev => {
+                                            const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
+                                            return [...prev, ...newMessages];
+                                        });
+                                    }
+                                } else {
+                                    console.error('❌ No user ID found after login');
+                                }
+                            }, 100);
+
+                            socketRef.current?.emit('join-user', u);
+                        }}
+                        onClearData={() => {
+                            SecureSession.clearSession();
+                            setUsername('');
+                        }}
+                    />
+
+                    <EditProfileModal
+                        isOpen={showEditProfile}
+                        onClose={() => setShowEditProfile(false)}
+                        onSuccess={handleProfileUpdated}
+                    />
+                </div>
             )}
-
-            {callNotification && (
-                <CallNotification
-                    message={callNotification.message}
-                    type={callNotification.type === 'start' ? 'start' : 'end'}
-                    onClose={() => setCallNotification(null)}
-                />
-            )}
-
-            <AuthOverlay
-                username={username}
-                onUsernameCreated={(u, userId) => {
-                    console.log('Login successful, setting up user session...');
-                    setUsername(u);
-
-                    // Wait a moment for cookies to be set, then load data
-                    setTimeout(async () => {
-                        const cookies = getClientCookies();
-                        const userData = SecureSession.getUser();
-                        const finalUserId = userId || (cookies['user-id'] as string) || userData.userId;
-
-                        if (finalUserId) {
-                            try {
-                                await loadConversations(finalUserId);
-                                console.log('✅ Conversations API loaded successfully');
-                            } catch (error) {
-                                console.error('❌ Failed to load conversations:', error);
-                            }
-
-                            const failed = storageHelpers.getFailedMessages() || [];
-                            if (failed.length > 0) {
-                                console.log('🔄 Restoring failed messages:', failed.length);
-                                setMessages(prev => {
-                                    const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
-                                    return [...prev, ...newMessages];
-                                });
-                            }
-                        } else {
-                            console.error('❌ No user ID found after login');
-                        }
-                    }, 100);
-
-                    socketRef.current?.emit('join-user', u);
-                }}
-                onClearData={() => {
-                    SecureSession.clearSession();
-                    setUsername('');
-                }}
-            />
-
-            <EditProfileModal
-                isOpen={showEditProfile}
-                onClose={() => setShowEditProfile(false)}
-                onSuccess={handleProfileUpdated}
-            />
         </div>
     );
 }

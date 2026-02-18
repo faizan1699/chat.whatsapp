@@ -14,9 +14,7 @@ export interface ClientSession {
     };
 }
 
-// Get session from cookies first, fallback to localStorage
 export const getClientSession = (): ClientSession | null => {
-    // Try cookies first (server-side set cookies)
     const cookies = getClientCookies();
     const cookieUserId = cookies['user-id'];
     const cookieUsername = cookies['username'];
@@ -33,7 +31,6 @@ export const getClientSession = (): ClientSession | null => {
         };
     }
     
-    // Fallback to localStorage (client-side storage)
     const localStorageSession = frontendAuth.getSession();
     if (localStorageSession) {
         console.log('💾 Using localStorage session');
@@ -71,8 +68,24 @@ export const getAuthHeaders = (): { [key: string]: string } => {
     };
 };
 
-// Legacy exports for backward compatibility
-export const authenticatedFetch = frontendAuth.authenticatedFetch;
-export const isAuthenticated = frontendAuth.isAuthenticated;
-export const getCurrentUser = frontendAuth.getUser;
-export const logout = frontendAuth.clearSession;
+// Handle 401 errors and redirect to login
+export const handleAuthError = (error: any, defaultMessage: string = 'Authentication failed') => {
+    if (error?.status === 401 || error?.message?.includes('Unauthorized') || error?.message?.includes('401')) {
+        console.error('🔐 Authentication failed - redirecting to login');
+        
+        // Clear invalid session data
+        if (typeof window !== 'undefined') {
+            localStorage.removeItem('session_token');
+            localStorage.removeItem('refresh_token');
+            localStorage.removeItem('user_id');
+            localStorage.removeItem('username');
+        }
+        
+        // Redirect to login page
+        if (typeof window !== 'undefined') {
+            window.location.href = '/login';
+        }
+        
+        throw new Error(defaultMessage);
+    }
+};

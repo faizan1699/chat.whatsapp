@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { debounce } from '../../utils/debounce';
-import { Plus, X, Search as SearchIcon, LogOut, User } from 'lucide-react';
+import { Plus, X, Search as SearchIcon, LogOut, User, Users } from 'lucide-react';
 import UserSearch from '../chat/UserSearch';
 import { apiService } from '@/services/apiService';
 
@@ -113,53 +113,56 @@ export default function Sidebar({
         }
     };
 
-    const conversationPartners = useMemo(() => {
-        const partners = new Set<string>();
-        if (Array.isArray(conversations)) {
-            conversations.forEach(conv => {
-                if (conv && conv.participants && Array.isArray(conv.participants)) {
-                    conv.participants.forEach((p: any) => {
-                        if (p && p.user && p.user.username && p.user.username !== username) {
-                            partners.add(p.user.username);
-                        }
-                    });
-                }
-            });
-        }
+    const conversationData = useMemo(() => {
+        if (!Array.isArray(conversations)) return [];
+        
+        return conversations.map(conv => {
+            const otherParticipants = conv.participants?.filter((p: any) => 
+                p && p.user && p.user.username && p.user.username !== username
+            ) || [];
+            
+            const lastMsg = getLastMessageFromConversation(conv);
+            const unreadCount = getUnreadCountForConversation(conv);
+            
+            return {
+                id: conv.id,
+                name: conv.name,
+                isGroup: conv.is_group,
+                participants: otherParticipants,
+                lastMessage: lastMsg,
+                unreadCount: unreadCount,
+                allParticipants: conv.participants || []
+            };
+        });
+    }, [conversations, username, messages, unreadCounts]);
 
+    const filteredConversations = conversationData
+        .filter(conv => 
+            conv.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            conv.participants.some((p: any) => p.user.username.toLowerCase().includes(searchQuery.toLowerCase()))
+        );
+
+    const getLastMessageFromConversation = (conv: any) => {
+        if (conv.messages?.length > 0) {
+            return conv.messages[0];
+        }
+        
+        // Fallback to messages array
+        const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
         if (Array.isArray(messages)) {
-            messages.forEach(msg => {
-                if (msg.from === username && msg.to && msg.to !== username) {
-                    partners.add(msg.to);
-                } else if (msg.to === username && msg.from && msg.from !== username) {
-                    partners.add(msg.from);
-                }
-            });
+            return messages.filter(m => 
+                participantUsernames.includes(m.from) || participantUsernames.includes(m.to)
+            ).pop();
         }
-
-        return Array.from(partners);
-    }, [conversations, messages, username]);
-
-    const filteredUsers = conversationPartners
-        .filter(u => u.toLowerCase().includes(searchQuery.toLowerCase()));
-
-    const getLastMessage = (user: string) => {
-        if (Array.isArray(conversations)) {
-            const userConversation = conversations.find(conv =>
-                conv && conv.participants && Array.isArray(conv.participants) &&
-                conv.participants.some((p: any) => p && p.user && p.user.username === user)
-            );
-
-            if (userConversation?.messages?.length > 0) {
-                return userConversation.messages[0];
-            }
-        }
-
-        if (Array.isArray(messages)) {
-            return messages.filter(m => (m.from === user && m.to === username) || (m.from === username && m.to === user)).pop();
-        }
-
+        
         return null;
+    };
+
+    const getUnreadCountForConversation = (conv: any) => {
+        const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
+        return participantUsernames.reduce((total: number, username: string) => {
+            return total + (unreadCounts[username] || 0);
+        }, 0);
     };
 
     return (
@@ -262,44 +265,98 @@ export default function Sidebar({
                         <UserSkeleton />
                         <UserSkeleton />
                     </>
-                ) : filteredUsers.length === 0 ? (
+                ) : filteredConversations.length === 0 ? (
                     <div className="flex h-full flex-col items-center justify-center p-8 text-center text-[#667781]">
                         <p className="text-sm">No chats found</p>
                     </div>
                 ) : (
-                    filteredUsers.map((user) => {
-                        const lastMsg = getLastMessage(user);
-                        const unreadCount = unreadCounts[user] || 0;
+                    filteredConversations.map((conversation) => {
+                        const { id, name, isGroup, participants, lastMessage, unreadCount } = conversation;
+                        
+                        // Determine conversation title
+                        const getConversationTitle = () => {
+                            if (name) return name;
+                            if (isGroup) {
+                                return participants.map((p: any) => p.user.username).join(', ');
+                            }
+                            return participants.length > 0 ? participants[0].user.username : 'Unknown';
+                        };
+
+                        const conversationTitle = getConversationTitle();
+                        const isSelected = selectedUser === conversationTitle || 
+                                         (participants.some((p: any) => p.user.username === selectedUser));
 
                         return (
                             <button
-                                key={user}
-                                onClick={() => setSelectedUser(user)}
-                                className={`group relative flex w-full items-center gap-3 border-b border-[#f0f2f5] px-3 py-4 transition-colors ${selectedUser === user ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'}`}
+                                key={id}
+                                onClick={() => {
+                                    // For individual chats, select the user
+                                    // For group chats, you might want to handle differently
+                                    if (!isGroup && participants.length === 1) {
+                                        setSelectedUser(participants[0].user.username);
+                                    } else {
+                                        // For group chats, you could open a group view
+                                        // For now, select the first participant
+                                        setSelectedUser(participants[0]?.user.username || '');
+                                    }
+                                }}
+                                className={`group relative flex w-full items-center gap-3 border-b border-[#f0f2f5] px-3 py-4 transition-colors ${isSelected ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'}`}
                             >
-                                {selectedUser === user && (
+                                {isSelected && (
                                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#00a884]"></div>
                                 )}
-                                <div className="relative h-12 w-12 flex-shrink-0">
-                                    <div className="h-full w-full overflow-hidden rounded-full bg-slate-200">
-                                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user}`} alt={user} className="h-full w-full object-cover" />
-                                    </div>
-                                    <div className="absolute right-0 bottom-0 h-3 w-3 rounded-full border-2 border-white bg-[#25d366]"></div>
+                                
+                                {/* Avatar section */}
+                                <div className="relative flex-shrink-0">
+                                    {isGroup ? (
+                                        // Group chat avatar
+                                        <div className="flex">
+                                            <div className="h-8 w-8 overflow-hidden rounded-full bg-slate-200 border-2 border-white -mr-2">
+                                                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${participants[0]?.user.username || 'group1'}`} alt="participant" className="h-full w-full object-cover" />
+                                            </div>
+                                            {participants.length > 1 && (
+                                                <div className="h-8 w-8 overflow-hidden rounded-full bg-slate-200 border-2 border-white">
+                                                    <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${participants[1]?.user.username || 'group2'}`} alt="participant" className="h-full w-full object-cover" />
+                                                </div>
+                                            )}
+                                            {participants.length > 2 && (
+                                                <div className="h-8 w-8 overflow-hidden rounded-full bg-slate-300 border-2 border-white flex items-center justify-center">
+                                                    <span className="text-xs font-semibold text-slate-600">+{participants.length - 2}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        // Individual chat avatar
+                                        <div className="h-12 w-12 overflow-hidden rounded-full bg-slate-200">
+                                            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${participants[0]?.user.username || conversationTitle}`} alt={conversationTitle} className="h-full w-full object-cover" />
+                                        </div>
+                                    )}
+                                    
+                                    {/* Online indicator for individual chats */}
+                                    {!isGroup && participants.length === 1 && (
+                                        <div className="absolute right-0 bottom-0 h-3 w-3 rounded-full border-2 border-white bg-[#25d366]"></div>
+                                    )}
                                 </div>
+                                
                                 <div className="flex flex-1 flex-col overflow-hidden text-left">
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2 overflow-hidden">
-                                            <span className="truncate font-semibold text-[#111b21]">{user}</span>
+                                            <span className="truncate font-semibold text-[#111b21]">
+                                                {conversationTitle}
+                                            </span>
+                                            {isGroup && (
+                                                <Users size={14} className="text-[#667781] flex-shrink-0" />
+                                            )}
                                         </div>
-                                        {lastMsg && (
+                                        {lastMessage && (
                                             <span className={`text-[12px] ${unreadCount > 0 ? 'text-[#00a884] font-semibold' : 'text-[#667781]'}`}>
-                                                {new Date(lastMsg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                {new Date(lastMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                         )}
                                     </div>
                                     <div className="flex items-center justify-between">
                                         <span className={`truncate text-sm ${unreadCount > 0 ? 'text-[#111b21] font-medium' : 'text-[#667781]'}`}>
-                                            {lastMsg ? (lastMsg.isDeleted ? <span className="italic flex items-center gap-1"><X size={12} /> This message was deleted</span> : lastMsg.message) : 'Start a conversation'}
+                                            {lastMessage ? (lastMessage.isDeleted ? <span className="italic flex items-center gap-1"><X size={12} /> This message was deleted</span> : lastMessage.message) : 'Start a conversation'}
                                         </span>
                                         {unreadCount > 0 && (
                                             <div className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#25d366] px-1.5 text-[11px] font-bold text-white">
@@ -307,6 +364,13 @@ export default function Sidebar({
                                             </div>
                                         )}
                                     </div>
+                                    
+                                    {/* Show participants count for group chats */}
+                                    {isGroup && (
+                                        <div className="text-xs text-[#667781] mt-1">
+                                            {participants.length} {participants.length === 1 ? 'participant' : 'participants'}
+                                        </div>
+                                    )}
                                 </div>
                             </button>
                         );

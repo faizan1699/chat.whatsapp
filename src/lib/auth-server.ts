@@ -21,7 +21,7 @@ export async function createSession(userId: string, username: string, res: any) 
 
   // Set cookies using response object
   const isProduction = process.env.NODE_ENV === 'production';
-  
+
   res.setHeader('Set-Cookie', [
     serialize('access_token', accessToken, {
       httpOnly: true,
@@ -65,7 +65,7 @@ export async function createSession(userId: string, username: string, res: any) 
 // Server-side session clearing for API routes
 export function clearSession(res: any) {
   const isProduction = process.env.NODE_ENV === 'production';
-  
+
   res.setHeader('Set-Cookie', [
     serialize('access_token', '', {
       httpOnly: true,
@@ -103,18 +103,18 @@ export function parseCookies(req: { headers?: { cookie?: string } } | { headers:
   if (!req || !req.headers) {
     return {};
   }
-  
+
   let cookieHeader: string | undefined;
-  
+
   // Handle NextRequest (Headers object)
   if ('get' in req.headers) {
     cookieHeader = req.headers.get('cookie') || undefined;
-  } 
+  }
   // Handle plain request object
   else {
     cookieHeader = req.headers.cookie;
   }
-  
+
   if (!cookieHeader) return {};
 
   return cookieHeader.split('; ').reduce((acc: { [key: string]: string }, cookie) => {
@@ -124,11 +124,18 @@ export function parseCookies(req: { headers?: { cookie?: string } } | { headers:
   }, {});
 }
 
-// Get session from request (for API routes)
-export async function getSession(req: { headers?: { cookie?: string } } | { headers: Headers }): Promise<SessionPayload | null> {
+export async function getSession(req:
+  {
+    headers?: { cookie?: string }
+  } | {
+    headers: Headers
+  }): Promise<SessionPayload | null> {
   const cookies = parseCookies(req);
-  const accessToken = cookies['access_token'];
-  
+
+  const accessToken = cookies['access_token'] || cookies['auth_token'] || cookies['refresh_token'];
+  const userId = cookies['user-id'];
+  const username = cookies['username'];
+
   if (!accessToken) {
     return null;
   }
@@ -145,14 +152,14 @@ export async function getSession(req: { headers?: { cookie?: string } } | { head
 export async function refreshSession(req: { headers?: { cookie?: string } } | { headers: Headers }, res: any): Promise<SessionPayload | null> {
   const cookies = parseCookies(req);
   const refreshToken = cookies['refresh_token'];
-  
+
   if (!refreshToken) {
     return null;
   }
 
   try {
     const payload = await verifyRefreshToken(refreshToken);
-    
+
     // Create new access token
     const newAccessToken = await createAccessToken(payload.userId, payload.username);
 
@@ -172,7 +179,7 @@ export async function refreshSession(req: { headers?: { cookie?: string } } | { 
       username: payload.username,
       type: 'access'
     } as SessionPayload;
-    
+
   } catch (error) {
     console.error('Invalid refresh token:', error);
     // Clear all cookies if refresh token is invalid
