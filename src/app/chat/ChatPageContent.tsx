@@ -132,15 +132,12 @@ export default function ChatPage() {
 
         socketRef.current = socket;
 
-        // Socket event listeners
         socket.on('connect', () => {
-            console.log('✅ Socket connected');
             setIsConnected(true);
             socket.emit('join-user', username);
         });
 
         socket.on('disconnect', () => {
-            console.log('❌ Socket disconnected');
             setIsConnected(false);
         });
 
@@ -153,10 +150,8 @@ export default function ChatPage() {
             setMessages(prev => {
                 const exists = prev.some(m => m.id === data.id);
                 if (!exists) {
-                    console.log('✅ Adding new message to list');
                     return [...prev, data];
                 } else {
-                    console.log('⚠️ Message already exists, skipping');
                     return prev;
                 }
             });
@@ -167,16 +162,13 @@ export default function ChatPage() {
                     [data.from]: (prev[data.from] || 0) + 1
                 }));
 
-                // Show notification if window is not focused
                 if (!isWindowFocusedRef.current) {
                     showNotification(data);
                 }
             }
 
-            // If we receive a message for the current conversation, reload messages to ensure sync
             if ((data.from === selectedUser && data.to === username) ||
                 (data.from === username && data.to === selectedUser)) {
-                console.log('🔄 Message for current conversation, reloading...');
                 setTimeout(() => loadMessages(selectedUser!), 1000);
             }
         });
@@ -213,7 +205,6 @@ export default function ChatPage() {
             }
         });
 
-        // WebRTC event listeners
         socket.on('offer', (payload) => {
             call.setIncomingCall({ from: payload.from, to: payload.to, offer: payload.offer, isAudioOnly: payload.isAudioOnly });
             call.playRingtone();
@@ -255,7 +246,6 @@ export default function ChatPage() {
         };
     }, [socket, username, call]);
 
-    // Request Notification Permission
     useEffect(() => {
         if ('Notification' in window && Notification.permission === 'default') {
             Notification.requestPermission();
@@ -292,26 +282,21 @@ export default function ChatPage() {
     }, [selectedUser, isWindowFocused, messages.length]);
 
 
-    // Add no-scroll class to body for chat page
-    useEffect(() => {
+=    useEffect(() => {
         document.body.classList.add('no-scroll');
 
         return () => {
-            // Remove no-scroll class when component unmounts
             document.body.classList.remove('no-scroll');
         };
     }, []);
 
-    // Periodic check for stuck sending messages
     useEffect(() => {
         const interval = setInterval(() => {
             const now = new Date();
             setMessages(prev => prev.map(m => {
-                // Check if message has been stuck in sending for more than 15 seconds
                 if (m.status === 'sending' && m.timestamp) {
                     const timeDiff = now.getTime() - new Date(m.timestamp).getTime();
-                    if (timeDiff > 15000) { // 15 seconds
-                        console.warn('Message stuck in sending state, marking as failed:', m.id);
+                    if (timeDiff > 15000) {
                         return {
                             ...m,
                             status: 'failed',
@@ -322,40 +307,28 @@ export default function ChatPage() {
                 }
                 return m;
             }));
-        }, 5000); // Check every 5 seconds
+        }, 5000);
 
         return () => clearInterval(interval);
     }, []);
 
-    // Mark messages as read function removed - using WebSocket instead
-
     const loadMessages = async (selectedUsername: string) => {
         try {
-            console.log('🔄 Loading messages for:', selectedUsername);
-            console.log('🔄 Current conversations:', conversations.length);
 
-            // Find conversation for this user
             let currentConversation = conversations.find(c =>
                 c.participants.some((p: any) => p.user.username === selectedUsername)
             );
 
-            console.log('Found conversation:', currentConversation);
-
-            // If not found, try to get/create conversation directly
             if (!currentConversation) {
-                console.log('🔄 Conversation not found, trying to create...');
                 const cookies = getClientCookies();
                 const userId = cookies['user-id'] || SecureSession.getUserId();
 
                 if (userId) {
-                    // Try to find conversation by participants
                     const { data: selectedUserData } = await supabaseAdmin
                         .from('users')
                         .select('id')
                         .eq('username', selectedUsername)
                         .maybeSingle();
-
-                    console.log('Selected user data:', selectedUserData);
 
                     if (selectedUserData) {
                         const response = await fetch('/api/conversations', {
@@ -378,37 +351,28 @@ export default function ChatPage() {
             }
 
             if (currentConversation) {
-                console.log('🔄 Fetching messages API for conversation:', currentConversation.id);
                 const response = await fetch(`/api/conversations/${currentConversation.id}/messages`);
                 if (response.ok) {
                     const messagesData = await response.json();
-                    console.log('✅ Messages API loaded successfully:', messagesData.length, 'messages');
 
-                    // Format messages for frontend and calculate unread counts
                     const formattedMessages = messagesData.map((msg: any) => {
-                        // Ensure timestamp is a valid Date object
                         let timestamp = msg.timestamp;
                         if (timestamp) {
                             try {
-                                // If it's a string, convert to Date
                                 if (typeof timestamp === 'string') {
                                     timestamp = new Date(timestamp);
                                 }
-                                // If it's not a Date object, convert it
                                 if (!(timestamp instanceof Date)) {
                                     timestamp = new Date(timestamp);
                                 }
-                                // Check if date is invalid
                                 if (isNaN(timestamp.getTime())) {
-                                    console.warn('Invalid timestamp for message:', msg.id, msg.timestamp);
-                                    timestamp = new Date(); // Use current date as fallback
+                                    timestamp = new Date();
                                 }
                             } catch (error) {
-                                console.error('Error parsing timestamp for message:', msg.id, error);
-                                timestamp = new Date(); // Use current date as fallback
+                                timestamp = new Date();
                             }
                         } else {
-                            timestamp = new Date(); // Use current date if no timestamp
+                            timestamp = new Date();
                         }
 
                         return {
@@ -433,34 +397,19 @@ export default function ChatPage() {
                         };
                     });
 
-                    // Calculate unread messages for this conversation
                     const unreadCount = formattedMessages.filter((msg: any) =>
                         msg.from === selectedUsername &&
                         msg.status !== 'read' &&
                         msg.status !== 'delivered'
                     ).length;
 
-                    // Update unread counts
                     setUnreadCounts(prev => ({
                         ...prev,
                         [selectedUsername]: unreadCount
                     }));
 
-                    console.log('📊 Unread count for', selectedUsername, ':', unreadCount);
-
                     setMessages(formattedMessages);
-                    console.log('✅ Loaded messages for', selectedUsername, ':', formattedMessages.length, 'messages');
-                    console.log('📋 All loaded messages:', formattedMessages.map((m: any) => ({
-                        id: m.id,
-                        from: m.from,
-                        to: m.to,
-                        message: m.message?.substring(0, 20) + '...',
-                        status: m.status,
-                        isHidden: m.isHidden
-                    })));
-
                     if (currentConversation && unreadCounts[selectedUsername] > 0) {
-                        // Use WebSocket instead of HTTP API
                         const unreadMsgs = messages.filter(m =>
                             m.from === selectedUsername && m.status !== 'read' && m.to === username
                         );
@@ -497,10 +446,7 @@ export default function ChatPage() {
                 const result = await response.json();
                 const conversationsData = result.data || [];
                 setConversations(conversationsData);
-                console.log('✅ Conversations loaded successfully:', conversationsData.length, 'conversations');
-            } else {
-                console.error('❌ Failed to load conversations:', response.statusText);
-            }
+            } else {}
         } catch (error) {
             throw error;
         }
@@ -523,28 +469,23 @@ export default function ChatPage() {
                     setIsConversationsLoading(true);
 
                     loadConversations(storedSession?.user?.id || '').then(() => {
-                        console.log('✅ Conversations loaded');
                         setIsConversationsLoading(false);
                     }).catch((error: any) => {
-                        console.error('❌ Failed to load conversations:', error);
                         setIsConversationsLoading(false);
                     });
 
                     const failed = storageHelpers.getFailedMessages() || [];
                     if (failed.length > 0) {
-                        console.log('🔄 Restoring failed messages:', failed.length);
                         setMessages(prev => {
                             const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
                             return [...prev, ...newMessages];
                         });
                     }
                 } else {
-                    console.log('❌ No session found, showing login');
                     setIsLoading(false);
                     setIsConversationsLoading(false);
                 }
             } catch (error) {
-                console.error('Error checking authentication:', error);
                 setIsLoading(false);
                 setIsConversationsLoading(false);
             }
@@ -561,7 +502,6 @@ export default function ChatPage() {
 
                 if (currentUsername !== username) {
                     if (currentUsername && storedSession) {
-                        console.log('🔄 Session changed, updating username:', currentUsername);
                         setUsername(currentUsername);
                         if (storedSession?.user?.id) {
                             loadConversations(storedSession.user.id);
@@ -570,9 +510,7 @@ export default function ChatPage() {
                         router.push('/login');
                     }
                 }
-            } catch (error) {
-                console.error('Error checking session:', error);
-            }
+            } catch (error) {}
         };
 
         const handleStorageChange = (e: StorageEvent) => {
@@ -601,9 +539,7 @@ export default function ChatPage() {
                 lastRetryTime: new Date(),
                 status: 'failed'
             });
-        } catch (error) {
-            console.error('Error saving failed message:', error);
-        }
+        } catch (error) {}
     };
 
     const retryFailedMessages = () => {
@@ -675,12 +611,8 @@ export default function ChatPage() {
                                 setMessages(prev => prev.map(m =>
                                     m.id === msg.id ? { ...m, status: 'sent' } : m
                                 ));
-                            } else {
-                                throw new Error('Failed to send message');
-                            }
-                        } else {
-                            console.error('No conversation or user ID found for retry');
-                        }
+                            } else {}
+                        } else { }
                     } catch (error) {
                         msg.retryCount = (msg.retryCount || 0) + 1;
                         msg.lastRetryTime = new Date();
@@ -689,7 +621,6 @@ export default function ChatPage() {
                 }
             });
         } catch (error) {
-            console.error('Failed to retry messages:', error);
         }
     };
 
@@ -717,7 +648,6 @@ export default function ChatPage() {
             const newFailed = failed.filter((m: Message) => m.id !== id);
             chatStorage.setItem('failed-messages', newFailed);
         } catch (error) {
-            console.error('Error removing failed message:', error);
         }
     };
 
@@ -743,7 +673,6 @@ export default function ChatPage() {
                 if (failed.length === 0) return;
 
                 isProcessing = true;
-                console.log(`Auto-retrying ${failed.length} failed messages...`);
 
                 for (const msg of failed) {
                     setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'pending' } : m));
@@ -765,7 +694,6 @@ export default function ChatPage() {
                         });
                         await new Promise(r => setTimeout(r, 200));
                     } catch (err) {
-                        console.error('Error retrying message:', msg.id, err);
                     }
                 }
                 isProcessing = false;
@@ -903,7 +831,6 @@ export default function ChatPage() {
             }
 
         } catch (error) {
-            console.error('Failed to send message:', error);
             clearTimeout(timeoutId);
             setMessages(prev => prev.map(m =>
                 m.id === tempMessage.id ? {
@@ -1022,7 +949,6 @@ export default function ChatPage() {
             }
 
         } catch (error) {
-            console.error('Failed to send voice message:', error);
             alert('Failed to send voice message');
         }
     };
@@ -1042,12 +968,10 @@ export default function ChatPage() {
         const failedMessages = messages.filter(m => m.status === 'failed');
 
         if (failedMessages.length >= 2 && isConnected && socketRef.current) {
-            console.log(`🔄 Auto-retrying ${failedMessages.length} failed messages`);
 
             failedMessages.forEach((msg, index) => {
                 setTimeout(() => {
                     if (msg.id) {
-                        console.log(`🔄 Auto-retrying message ${index + 1}/${failedMessages.length}:`, msg.id);
                         setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'pending' } : m));
 
                         if (isConnected && socketRef.current) {
@@ -1065,7 +989,6 @@ export default function ChatPage() {
                 setMessages(prev => prev.map(m =>
                     m.id === id ? { ...m, isHidden: true } : m
                 ));
-                console.log('� Hidden message for current user:', id);
             } else {
                 setMessages(prev => prev.map(m =>
                     m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m
@@ -1075,7 +998,6 @@ export default function ChatPage() {
                 }
             }
         } catch (error) {
-            console.error('❌ Failed to delete message:', error);
         }
     };
 
@@ -1097,18 +1019,15 @@ export default function ChatPage() {
     };
 
     const handleHideMessage = (id: string) => {
-        console.log('🙈 Hiding message:', id);
         setMessages(prev => prev.map(m => m.id === id ? { ...m, isHidden: true } : m));
     };
 
     const handleUnhideMessage = (id: string) => {
-        console.log('👁️ Unhiding message:', id);
         setMessages(prev => prev.map(m => m.id === id ? { ...m, isHidden: false } : m));
     };
 
     const handleRefreshMessages = () => {
         if (selectedUser) {
-            console.log('🔄 Manual refresh triggered for:', selectedUser);
             loadMessages(selectedUser);
         }
     };
@@ -1192,7 +1111,6 @@ export default function ChatPage() {
                 }
             }
         } catch (error) {
-            console.error('Failed to clear all messages:', error);
         }
     };
 
@@ -1201,7 +1119,6 @@ export default function ChatPage() {
             const response = await api.post('/auth/logout');
             if (response) handleClearData();
         } catch (error: any) {
-            console.log("logout error", error?.message);
         }
     };
 
@@ -1215,17 +1132,6 @@ export default function ChatPage() {
         (msg: Message) => {
             const shouldInclude = (msg.from === username && msg.to === selectedUser) ||
                 (msg.from === selectedUser && msg.to === username);
-            console.log('🔍 Message filter:', {
-                messageId: msg.id,
-                from: msg.from,
-                to: msg.to,
-                username,
-                selectedUser,
-                shouldInclude,
-                isSentMessage: msg.from === username,
-                isReceivedMessage: msg.from === selectedUser,
-                message: msg.message?.substring(0, 20) + '...'
-            });
             return shouldInclude;
         }
     );
@@ -1363,7 +1269,6 @@ export default function ChatPage() {
                     <AuthOverlay
                         username={username}
                         onUsernameCreated={(u, userId) => {
-                            console.log('Login successful, setting up user session...');
                             setUsername(u);
 
                             setTimeout(async () => {
@@ -1374,21 +1279,16 @@ export default function ChatPage() {
                                 if (finalUserId) {
                                     try {
                                         await loadConversations(finalUserId);
-                                        console.log('✅ Conversations API loaded successfully');
                                     } catch (error) {
-                                        console.error('❌ Failed to load conversations:', error);
                                     }
 
                                     const failed = storageHelpers.getFailedMessages() || [];
                                     if (failed.length > 0) {
-                                        console.log('🔄 Restoring failed messages:', failed.length);
                                         setMessages(prev => {
                                             const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
                                             return [...prev, ...newMessages];
                                         });
                                     }
-                                } else {
-                                    console.error('❌ No user ID found after login');
                                 }
                             }, 100);
 
