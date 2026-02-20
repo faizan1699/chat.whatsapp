@@ -65,7 +65,7 @@ export async function GET(
       id: msg.id,
       conversationId: msg.conversation_id,
       senderId: msg.sender_id,
-      from: 'Unknown', // Will be updated later
+      from: msg.sender?.username || 'Unknown',
       to: session.username, // Current user is recipient
       message: msg.content,
       timestamp: msg.timestamp,
@@ -77,7 +77,7 @@ export async function GET(
       isEdited: msg.is_edited,
       isPinned: msg.is_pinned,
       replyTo: undefined, // Simplified for now
-      sender: { username: 'Unknown' } // Simplified for now
+      sender: msg.sender || { username: 'Unknown' }
     }));
 
     return NextResponse.json(transformedMessages);

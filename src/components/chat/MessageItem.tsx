@@ -43,7 +43,7 @@ export default function MessageItem({
     const [duration, setDuration] = useState(0);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
-    const words = message.message.trim().split(/\s+/);
+    const words = (message.message || '').trim().split(/\s+/);
     const isLongMessage = words.length > 30;
     const hasMore = words.length > visibleWords;
 
@@ -123,7 +123,7 @@ export default function MessageItem({
 
     const displayedMessage = hasMore
         ? words.slice(0, visibleWords).join(' ') + '...'
-        : message.message;
+        : (message.message || '');
 
     const handleSeeMore = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -308,7 +308,6 @@ export default function MessageItem({
                     )}
                 </div>
 
-                {/* Message Content */}
                 <div className="flex flex-col pr-2">
                     {message.isVoiceMessage ? (
                         <div className="flex items-center gap-3 py-2 min-w-[200px]">

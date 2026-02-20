@@ -74,13 +74,13 @@ export default function ChatPage() {
     const [callNotification, setCallNotification] = useState<{ message: string; type: 'start' | 'end' } | null>(null);
 
     const call = useWebRTCCall({
-      socket,
-      username,
-      selectedUser,
-      onCallRejected: from => {
-        setCallNotification({ message: `${from} rejected your call`, type: 'end' });
-        setTimeout(() => setCallNotification(null), 3000);
-      }
+        socket,
+        username,
+        selectedUser,
+        onCallRejected: from => {
+            setCallNotification({ message: `${from} rejected your call`, type: 'end' });
+            setTimeout(() => setCallNotification(null), 3000);
+        }
     });
     const [unreadCounts, setUnreadCounts] = useState<{ [key: string]: number }>({});
     const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
@@ -91,7 +91,7 @@ export default function ChatPage() {
         if (highlightedMessageId) {
             const timer = setTimeout(() => {
                 setHighlightedMessageId(null);
-            }, 2500); // 2.5 seconds to match animation duration
+            }, 2500);
 
             return () => clearTimeout(timer);
         }
@@ -100,7 +100,6 @@ export default function ChatPage() {
     const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
     const chunkBufferRef = useRef<Record<string, Message[]>>({});
 
-    // Sync refs with state
     useEffect(() => {
         selectedUserRef.current = selectedUser;
     }, [selectedUser]);
@@ -109,7 +108,6 @@ export default function ChatPage() {
         isWindowFocusedRef.current = isWindowFocused;
     }, [isWindowFocused]);
 
-    // Extract unique users from conversations
     const conversationUsers = (conversations || []).reduce((acc: { [key: string]: string }, conv) => {
         conv.participants?.forEach((p: any) => {
             if (p.user.username !== username) {
@@ -119,7 +117,6 @@ export default function ChatPage() {
         return acc;
     }, {});
 
-    // Merge online users with conversation users
     const allUsers = { ...conversationUsers, ...users };
     useEffect(() => {
         if (selectedUser) {
@@ -282,10 +279,8 @@ export default function ChatPage() {
         };
     }, []);
 
-    // Mark messages as read when focusing or changing user
     useEffect(() => {
         if (selectedUser && isWindowFocused && socketRef.current) {
-            // Find messages from this user that are not read
             const unreadMsgs = messages.filter(m => m.from === selectedUser && m.status !== 'read' && m.to === username);
 
             if (unreadMsgs.length > 0) {
@@ -295,7 +290,6 @@ export default function ChatPage() {
                     }
                 });
 
-                // Optimistically update local state
                 setMessages(prev => prev.map(m =>
                     (m.from === selectedUser && m.to === username && m.status !== 'read') ? { ...m, status: 'read' as const } : m
                 ));
@@ -1269,10 +1263,10 @@ export default function ChatPage() {
 
     const handleLogout = async () => {
         try {
-          const response =  await api.post('/auth/logout');
-           if(response) handleClearData();
-        } catch(error: any) {
-            console.log("logout error" , error?.message);
+            const response = await api.post('/auth/logout');
+            if (response) handleClearData();
+        } catch (error: any) {
+            console.log("logout error", error?.message);
         }
     };
 
