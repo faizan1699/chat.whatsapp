@@ -491,6 +491,13 @@ export default function ChatPage() {
         };
 
         checkAuth();
+
+        // Fallback: Hide loader after 3 seconds regardless of auth state
+        const fallbackTimer = setTimeout(() => {
+            setIsLoading(false);
+        }, 3000);
+
+        return () => clearTimeout(fallbackTimer);
     }, []);
 
     useEffect(() => {

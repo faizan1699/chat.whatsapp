@@ -127,12 +127,12 @@ export default function MessageItem({
 
     const handleSeeMore = (e: React.MouseEvent) => {
         e.preventDefault();
-        setVisibleWords(prev => prev + 30);
+        setVisibleWords(prev => prev + 350);
     };
 
     const handleSeeLess = (e: React.MouseEvent) => {
         e.preventDefault();
-        setVisibleWords(30);
+        setVisibleWords(350);
     };
 
     useEffect(() => {
