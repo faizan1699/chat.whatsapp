@@ -45,10 +45,20 @@ export default function ChatHeader({ selectedUser, onBack, onStartVideoCall, onS
                 </div>
             </div>
             <div className="flex items-center gap-2 text-[#54656f]">
-                <button onClick={onStartVideoCall} className="hover:bg-black/5 p-2 rounded-full transition-colors" title="Video Call">
+                <button
+                    onClick={onStartVideoCall}
+                    disabled={!selectedUser}
+                    className="hover:bg-black/5 p-2 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Video Call"
+                >
                     <Video size={20} />
                 </button>
-                <button onClick={onStartAudioCall} className="hover:bg-black/5 p-2 rounded-full transition-colors" title="Audio Call">
+                <button
+                    onClick={onStartAudioCall}
+                    disabled={!selectedUser}
+                    className="hover:bg-black/5 p-2 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Audio Call"
+                >
                     <Phone size={20} />
                 </button>
                 <button className="max-[768px]:hidden hover:bg-black/5 p-1 rounded-full transition-colors group relative" title="Close Chat" onClick={onBack}>

@@ -2,19 +2,20 @@
 
 import { useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { socketConfig } from '@/config/socketConfig';
 
 export const useSocket = () => {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    // Try to connect to Socket.IO server with fallback handling
     try {
-      socketRef.current = io({
-        path: '/api/socket',
-        transports: ['polling'], // Use polling as fallback
-        timeout: 5000,
+      const opts: Parameters<typeof io>[1] = {
+        path: socketConfig.path,
+        transports: socketConfig.transports,
+        timeout: socketConfig.timeout,
         forceNew: true,
-      });
+      };
+      socketRef.current = socketConfig.url ? io(socketConfig.url, opts) : io(opts);
 
       socketRef.current.on('connect', () => {
         console.log('Connected to Socket.IO server');

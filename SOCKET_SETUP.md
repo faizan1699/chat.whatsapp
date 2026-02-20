@@ -2,28 +2,24 @@
 
 ## Current Status
 ✅ Socket.IO endpoint is accessible at `/api/socket`
-✅ Client-side socket connection is configured with fallback handling
-✅ 404 errors are resolved
+✅ Standalone server at `server/socket-server.js`
+✅ Client connects to standalone server when `NEXT_PUBLIC_SOCKET_URL` is set
 
-## How It Works
-1. **Client Connection**: The `useSocket` hook attempts to connect to Socket.IO server
-2. **Fallback Handling**: If Socket.IO server isn't fully configured, it provides fallback functionality
-3. **Error Prevention**: Prevents 404 errors that were occurring with socket polling
+## Production
 
-## For Production
-To implement full Socket.IO functionality in production:
-
-1. **Option 1**: Use a separate Socket.IO server
+1. **Run standalone server**:
    ```bash
-   node socket-server.js
+   npm run socket
+   # or: node server/socket-server.js
    ```
 
-2. **Option 2**: Use Next.js custom server
+2. **Horizontal scaling** (Redis adapter):
    ```bash
-   node server.js
+   npm install @socket.io/redis-adapter redis
+   REDIS_URL=redis://localhost:6379 npm run socket
    ```
 
-3. **Option 3**: Use WebSocket API instead of Socket.IO
+3. **Client**: Set `NEXT_PUBLIC_SOCKET_URL=http://your-socket-host:3001` so the client connects to the standalone server.
 
 ## Current Features
 - ✅ Basic socket connection

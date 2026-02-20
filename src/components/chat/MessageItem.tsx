@@ -47,34 +47,74 @@ export default function MessageItem({
     const isLongMessage = words.length > 30;
     const hasMore = words.length > visibleWords;
 
-    const formatTimestamp = (date: Date) => {
+    const formatTimestamp = (timestamp: any) => {
+        if (!timestamp) return '';
+        let date: Date;
+        try {
+            if (typeof timestamp === 'string') {
+                date = new Date(timestamp);
+            } else if (timestamp instanceof Date) {
+                date = timestamp;
+            } else {
+                date = new Date(timestamp);
+            }
+            
+            if (isNaN(date.getTime())) {
+                console.warn('Invalid timestamp:', timestamp);
+                return '';
+            }
+        } catch (error) {
+            return '';
+        }
+        
         const now = new Date();
-        const messageDate = new Date(date);
-        const isToday = messageDate.toDateString() === now.toDateString();
+        const isToday = date.toDateString() === now.toDateString();
         
         if (isToday) {
-            return messageDate.toLocaleTimeString([], {
+            return date.toLocaleTimeString([], {
                 hour: '2-digit',
                 minute: '2-digit',
                 hour12: true
             });
         } else {
-            return messageDate.toLocaleDateString([], {
+            return date.toLocaleDateString([], {
                 month: 'short',
                 day: 'numeric'
             });
         }
     };
 
-    const formatDateLabel = (date: Date) => {
+    const formatDateLabel = (timestamp: any) => {
+        if (!timestamp) return '';
+        
+        let date: Date;
+        try {
+            // Handle different timestamp formats
+            if (typeof timestamp === 'string') {
+                date = new Date(timestamp);
+            } else if (timestamp instanceof Date) {
+                date = timestamp;
+            } else {
+                date = new Date(timestamp);
+            }
+            
+            // Check if date is valid
+            if (isNaN(date.getTime())) {
+                console.warn('Invalid timestamp:', timestamp);
+                return '';
+            }
+        } catch (error) {
+            console.warn('Error parsing timestamp:', timestamp, error);
+            return '';
+        }
+        
         const now = new Date();
-        const messageDate = new Date(date);
-        const isToday = messageDate.toDateString() === now.toDateString();
-        const isYesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toDateString() === messageDate.toDateString();
+        const isToday = date.toDateString() === now.toDateString();
+        const isYesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toDateString() === date.toDateString();
         
         if (isToday) return 'Today';
         if (isYesterday) return 'Yesterday';
-        return messageDate.toLocaleDateString([], {
+        return date.toLocaleDateString([], {
             weekday: 'long',
             month: 'short',
             day: 'numeric'

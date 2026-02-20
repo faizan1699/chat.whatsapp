@@ -28,14 +28,10 @@ import EmptyChatState from '@/components/chat/EmptyChatState';
 import CallOverlay from '@/components/video/CallOverlay';
 import MessageList from '@/components/chat/MessageList';
 import ChatHeader from '@/components/chat/ChatHeader';
+import { useWebRTCCall } from '@/hooks/useWebRTCCall';
 
 interface User {
     [key: string]: string;
-}
-
-interface PeerConnectionManager {
-    getInstance: (stream: MediaStream) => RTCPeerConnection;
-    reset: () => void;
 }
 
 export default function ChatPage() {
@@ -74,19 +70,18 @@ export default function ChatPage() {
         error: messageError
     } = useMessageApi();
 
-    // Call States
-    const [isCallActive, setIsCallActive] = useState<boolean>(false);
-    const [incomingCall, setIncomingCall] = useState<{ from: string; to: string; offer: RTCSessionDescriptionInit; isAudioOnly?: boolean } | null>(null);
-    const [showEndCallButton, setShowEndCallButton] = useState<boolean>(false);
-    const [showRemoteVideo, setShowRemoteVideo] = useState<boolean>(false);
-    const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-    const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-    const [callTimer, setCallTimer] = useState(0);
-    const [isMuted, setIsMuted] = useState<boolean>(false);
-    const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
+    const socket = useSocket();
     const [callNotification, setCallNotification] = useState<{ message: string; type: 'start' | 'end' } | null>(null);
-    const [isAudioOnly, setIsAudioOnly] = useState<boolean>(false);
-    const [callParticipant, setCallParticipant] = useState<string>('');
+
+    const call = useWebRTCCall({
+      socket,
+      username,
+      selectedUser,
+      onCallRejected: from => {
+        setCallNotification({ message: `${from} rejected your call`, type: 'end' });
+        setTimeout(() => setCallNotification(null), 3000);
+      }
+    });
     const [unreadCounts, setUnreadCounts] = useState<{ [key: string]: number }>({});
     const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
     const [showEditProfile, setShowEditProfile] = useState(false);
@@ -102,13 +97,7 @@ export default function ChatPage() {
         }
     }, [highlightedMessageId]);
 
-    // Refs
-    const localStreamRef = useRef<MediaStream | null>(null);
-    const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
     const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
-    const ringtoneRef = useRef<HTMLAudioElement | null>(null);
-    const iceCandidatesBuffer = useRef<RTCIceCandidateInit[]>([]);
-    const callerRef = useRef<string[]>([]);
     const chunkBufferRef = useRef<Record<string, Message[]>>({});
 
     // Sync refs with state
@@ -121,7 +110,7 @@ export default function ChatPage() {
     }, [isWindowFocused]);
 
     // Extract unique users from conversations
-    const conversationUsers = conversations.reduce((acc: { [key: string]: string }, conv) => {
+    const conversationUsers = (conversations || []).reduce((acc: { [key: string]: string }, conv) => {
         conv.participants?.forEach((p: any) => {
             if (p.user.username !== username) {
                 acc[p.user.username] = p.user.id;
@@ -140,9 +129,6 @@ export default function ChatPage() {
             }));
         }
     }, [selectedUser]);
-
-    // Socket connection setup
-    const socket = useSocket();
 
     useEffect(() => {
         if (!socket) return;
@@ -238,31 +224,24 @@ export default function ChatPage() {
 
         // WebRTC event listeners
         socket.on('offer', (payload) => {
-            setIncomingCall({
-                from: payload.from,
-                to: payload.to,
-                offer: payload.offer,
-                isAudioOnly: payload.isAudioOnly
-            });
-            playRingtone();
+            call.setIncomingCall({ from: payload.from, to: payload.to, offer: payload.offer, isAudioOnly: payload.isAudioOnly });
+            call.playRingtone();
         });
 
         socket.on('answer', (payload) => {
-            // TODO: Implement handleAnswer
-            console.log('Received answer:', payload);
+            call.handleAnswer(payload.answer);
         });
 
-        socket.on('icecandidate', (candidate) => {
-            // TODO: Implement handleIceCandidate
-            console.log('Received ICE candidate:', candidate);
+        socket.on('icecandidate', (payload) => {
+            const c = typeof payload === 'object' && payload?.candidate ? payload.candidate : payload;
+            call.handleIceCandidate(c);
         });
 
         socket.on('call-ended', () => {
-            handleEndCallInternal();
+            call.handleRemoteEndCall();
         });
 
         socket.on('call-rejected', (payload) => {
-            stopRingtone();
             setCallNotification({ message: `${payload.from} rejected your call`, type: 'end' });
             setTimeout(() => setCallNotification(null), 3000);
         });
@@ -283,7 +262,7 @@ export default function ChatPage() {
             socket.off('call-ended');
             socket.off('call-rejected');
         };
-    }, [socket, username]);
+    }, [socket, username, call]);
 
     // Request Notification Permission
     useEffect(() => {
@@ -402,7 +381,8 @@ export default function ChatPage() {
                         });
 
                         if (response.ok) {
-                            currentConversation = await response.json();
+                            const result = await response.json();
+                            currentConversation = result.data;
                             setConversations(prev => [...prev, currentConversation]);
                         }
                     }
@@ -502,7 +482,8 @@ export default function ChatPage() {
         try {
             const response = await fetch(`/api/conversations?userId=${userId}`);
             if (response.ok) {
-                const conversationsData = await response.json();
+                const result = await response.json();
+                const conversationsData = result.data || [];
                 setConversations(conversationsData);
                 console.log('✅ Conversations loaded successfully:', conversationsData.length, 'conversations');
             } else {
@@ -687,7 +668,8 @@ export default function ChatPage() {
                                 });
 
                                 if (response.ok) {
-                                    currentConversation = await response.json();
+                                    const result = await response.json();
+                                    currentConversation = result.data;
                                     setConversations(prev => [...prev, currentConversation]);
                                 }
                             }
@@ -830,31 +812,6 @@ export default function ChatPage() {
         };
     }, [isConnected]);
 
-    // Timer Effect
-    useEffect(() => {
-        let interval: NodeJS.Timeout;
-        if (isCallActive) {
-            interval = setInterval(() => setCallTimer(prev => prev + 1), 1000);
-        }
-        return () => clearInterval(interval);
-    }, [isCallActive]);
-
-    // Ringtone Logic
-    const playRingtone = () => {
-        if (!ringtoneRef.current) {
-            ringtoneRef.current = new Audio('/assets/ringtones/ringtone.mp3');
-            ringtoneRef.current.loop = true;
-        }
-        ringtoneRef.current.play().catch(e => console.log('Audio play error:', e));
-    };
-
-    const stopRingtone = () => {
-        if (ringtoneRef.current) {
-            ringtoneRef.current.pause();
-            ringtoneRef.current.currentTime = 0;
-        }
-    };
-
     const sendMessageInternal = (msg: Message) => {
         if (!socketRef.current) return;
         socketRef.current.emit('send-message', msg, (ack: any) => {
@@ -866,171 +823,6 @@ export default function ChatPage() {
                 saveFailedMessageLocal({ ...msg, status: 'failed' });
             }
         });
-    };
-
-    const PeerConnection: PeerConnectionManager = useMemo(() => ({
-        getInstance: (stream: MediaStream) => {
-            if (peerConnectionRef.current) peerConnectionRef.current.close();
-
-            const pc = new RTCPeerConnection({
-                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-            });
-
-            stream.getTracks().forEach(track => {
-                console.log(`Adding local track: ${track.kind}, enabled: ${track.enabled}`);
-                pc.addTrack(track, stream);
-            });
-
-            pc.onicecandidate = (e) => {
-                if (e.candidate) {
-                    socketRef.current?.emit('icecandidate', e.candidate);
-                }
-            };
-
-            pc.ontrack = (e) => {
-                console.log('Received remote stream:', e.streams[0]);
-                console.log('Track kinds:', e.streams[0]?.getTracks().map(t => t.kind));
-
-                if (e.streams[0]) {
-                    // Set remote video stream state
-                    setRemoteStream(e.streams[0]);
-
-                    // Show remote video
-                    setShowRemoteVideo(true);
-
-                    // Log for debugging
-                    e.streams[0].getTracks().forEach(track => {
-                        console.log(`Remote track: ${track.kind}, enabled: ${track.enabled}, state: ${track.readyState}`);
-                    });
-                }
-            };
-
-            pc.onconnectionstatechange = () => {
-                if (pc.connectionState === 'connected') setConnectionState('connected');
-            };
-
-            peerConnectionRef.current = pc;
-            return pc;
-        },
-        reset: () => {
-            if (peerConnectionRef.current) {
-                peerConnectionRef.current.close();
-                peerConnectionRef.current = null;
-            }
-        }
-    }), []);
-
-    const startCall = async (isAudio: boolean) => {
-        if (!selectedUser) return;
-        setIsAudioOnly(isAudio);
-        setCallParticipant(selectedUser);
-
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: isAudio ? false : true,
-                audio: true
-            });
-            localStreamRef.current = stream;
-            setLocalStream(stream);
-
-            const pc = PeerConnection.getInstance(stream);
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-
-            socketRef.current?.emit('offer', {
-                from: username,
-                to: selectedUser,
-                offer,
-                isAudioOnly: isAudio
-            });
-
-            callerRef.current = [username, selectedUser];
-            setShowEndCallButton(true);
-            setIsCallActive(true);
-            setConnectionState('connecting');
-        } catch (e) {
-            console.error('Media error:', e);
-            alert('Could not access camera/mic');
-        }
-    };
-
-    const handleAcceptCall = async () => {
-        if (!incomingCall) return;
-        stopRingtone();
-
-        const isAudioCall = incomingCall.isAudioOnly === true;
-
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: !isAudioCall,
-                audio: true
-            });
-            localStreamRef.current = stream;
-            setLocalStream(stream);
-
-            const pc = PeerConnection.getInstance(stream);
-            await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
-            processBufferedIceCandidates(pc);
-
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-
-            socketRef.current?.emit('answer', {
-                from: username,
-                to: incomingCall.from,
-                answer
-            });
-
-            setIsAudioOnly(isAudioCall);
-            setIsCallActive(true);
-            setShowRemoteVideo(!isAudioCall);
-            setShowEndCallButton(true);
-            setIncomingCall(null);
-            setCallParticipant(incomingCall.from);
-            setConnectionState('connected');
-        } catch (e) {
-            console.error('Accept call error:', e);
-            alert('Could not accept call: ' + (e as Error).message);
-        }
-    };
-
-    const handleRejectCall = () => {
-        if (!incomingCall) return;
-        stopRingtone();
-        socketRef.current?.emit('call-rejected', { from: username, to: incomingCall.from });
-        setIncomingCall(null);
-    };
-
-    const handleEndCallRequest = () => {
-        const otherUser = callerRef.current.find(u => u !== username) || selectedUser || callParticipant;
-        if (otherUser) {
-            socketRef.current?.emit('call-ended', { from: username, to: otherUser });
-        }
-        handleEndCallInternal();
-    };
-
-    const handleEndCallInternal = () => {
-        PeerConnection.reset();
-        if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach(t => t.stop());
-            localStreamRef.current = null;
-        }
-        setLocalStream(null);
-        setRemoteStream(null);
-        setIsCallActive(false);
-        setShowEndCallButton(false);
-        setShowRemoteVideo(false);
-        setCallTimer(0);
-        setCallParticipant('');
-        setConnectionState('disconnected');
-        stopRingtone();
-    };
-
-    const processBufferedIceCandidates = async (pc: RTCPeerConnection) => {
-        while (iceCandidatesBuffer.current.length > 0) {
-            const candidate = iceCandidatesBuffer.current.shift();
-            if (candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        }
     };
 
     const showNotification = (data: Message) => {
@@ -1453,7 +1245,8 @@ export default function ChatPage() {
                         });
 
                         if (response.ok) {
-                            currentConversation = await response.json();
+                            const result = await response.json();
+                            currentConversation = result.data;
                         }
                     }
                 }
@@ -1557,8 +1350,12 @@ export default function ChatPage() {
                                 <ChatHeader
                                     selectedUser={selectedUser}
                                     onBack={() => setSelectedUser(null)}
-                                    onStartVideoCall={() => startCall(false)}
-                                    onStartAudioCall={() => startCall(true)}
+                                    onStartVideoCall={async () => {
+                                        try { await call.startCall(false); } catch { alert('Could not access camera/mic'); }
+                                    }}
+                                    onStartAudioCall={async () => {
+                                        try { await call.startCall(true); } catch { alert('Could not access camera/mic'); }
+                                    }}
                                     onClearChat={handleClearChat}
                                     onClearAllMessages={handleClearAllMessages}
                                     onRefreshMessages={handleRefreshMessages}
@@ -1620,27 +1417,27 @@ export default function ChatPage() {
 
                     <CallOverlay
                         username={username}
-                        remoteUser={callParticipant}
-                        isCallActive={isCallActive}
-                        onEndCall={handleEndCallRequest}
+                        remoteUser={call.callParticipant}
+                        isCallActive={call.isCallActive}
+                        onEndCall={call.endCall}
                         callNotification={callNotification}
-                        remoteStream={remoteStream}
+                        remoteStream={call.remoteStream}
                         remoteVideoRef={remoteVideoRef}
-                        isAudioOnly={isAudioOnly}
-                        localStream={localStream}
-                        callTimer={callTimer}
-                        connectionState={connectionState}
-                        isMuted={isMuted}
-                        setIsMuted={setIsMuted}
+                        isAudioOnly={call.isAudioOnly}
+                        localStream={call.localStream}
+                        callTimer={call.callTimer}
+                        connectionState={call.connectionState}
+                        isMuted={call.isMuted}
+                        setIsMuted={call.setIsMuted}
                         onClearData={handleClearData}
                     />
 
-                    {incomingCall && (
+                    {call.incomingCall && (
                         <IncomingCallModal
-                            from={incomingCall.from}
-                            isAudioOnly={incomingCall.isAudioOnly}
-                            onAccept={handleAcceptCall}
-                            onReject={handleRejectCall}
+                            from={call.incomingCall.from}
+                            isAudioOnly={call.incomingCall.isAudioOnly}
+                            onAccept={call.acceptCall}
+                            onReject={call.rejectCall}
                         />
                     )}
 

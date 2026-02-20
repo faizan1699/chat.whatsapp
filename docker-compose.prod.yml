@@ -1,0 +1,53 @@
+# Production: Next.js + Socket.IO + Redis (horizontal scaling)
+# Usage: docker-compose -f docker-compose.prod.yml up -d
+
+version: '3.8'
+
+services:
+  nextjs:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file: .env.production
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  socket:
+    build: .
+    command: node server/socket-server.js
+    ports:
+      - "3001:3001"
+    env_file: .env.production
+    environment:
+      - SOCKET_PORT=3001
+      - REDIS_URL=redis://redis:6379
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.prod.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - nextjs
+      - socket
+    restart: unless-stopped
+
+volumes:
+  redis_data:

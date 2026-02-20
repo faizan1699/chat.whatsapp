@@ -5,6 +5,7 @@ import { uploadAudio } from '@/utils/supabase';
 import { getClientCookies } from '@/utils/cookies';
 import { Message } from '@/types/message';
 import { frontendAuth } from '@/utils/frontendAuth';
+import { validateMessageContent } from '@/lib/messageValidation';
 
 interface Conversation {
   id: string;
@@ -130,6 +131,9 @@ export const useMessageApi = () => {
     setError(null);
 
     try {
+      const { valid, error } = validateMessageContent(content);
+      if (!valid) throw new Error(error ?? 'Invalid message');
+
       const userId = getCurrentUserId();
       console.log('📋 User ID:', userId);
       if (!userId) throw new Error('User not authenticated');

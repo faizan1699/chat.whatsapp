@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, Fragment } from 'react';
 import { debounce } from '../../utils/debounce';
 import { Plus, X, Search as SearchIcon, LogOut, User, Users } from 'lucide-react';
 import UserSearch from '../chat/UserSearch';
@@ -38,8 +38,8 @@ interface SidebarProps {
     unreadCounts?: { [key: string]: number };
     onLogout?: () => void;
     onEditProfile?: () => void;
-    onConversationCreated?: () => void; // Add callback for when conversation is created
-    isLoading?: boolean; // Add loading prop
+    onConversationCreated?: () => void;
+    isLoading?: boolean;
 }
 
 export default function Sidebar({
@@ -55,7 +55,7 @@ export default function Sidebar({
     onLogout,
     onEditProfile,
     onConversationCreated,
-    isLoading = false, // Default to false
+    isLoading = false,
 }: SidebarProps) {
     const [showGlobalSearch, setShowGlobalSearch] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
@@ -84,7 +84,6 @@ export default function Sidebar({
     };
 
     const handleSelectGlobalUser = async (user: any) => {
-        // Here we initiate a conversation via API
         try {
             const userDataStr = localStorage.getItem('user_data') || '';
             const userData = userDataStr ? JSON.parse(userDataStr) : null;
@@ -104,7 +103,6 @@ export default function Sidebar({
             setSelectedUser(user.username);
             setShowGlobalSearch(false);
 
-            // Call callback to refresh conversations list
             if (onConversationCreated) {
                 onConversationCreated();
             }
@@ -113,17 +111,53 @@ export default function Sidebar({
         }
     };
 
+    const getLastMessageFromConversation = (conv: any) => {
+        if (conv.messages?.length > 0) {
+            return conv.messages[0];
+        }
+
+        const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
+        if (Array.isArray(messages)) {
+            return messages.filter(m =>
+                participantUsernames.includes(m.from) || participantUsernames.includes(m.to)
+            ).pop();
+        }
+
+        return null;
+    };
+
+    const formatMessageTime = (timestamp: any) => {
+        if (!timestamp) return '';
+
+        try {
+            const date = new Date(timestamp);
+            if (isNaN(date.getTime())) {
+                return '';
+            }
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } catch (error) {
+            return '';
+        }
+    };
+
+    const getUnreadCountForConversation = (conv: any) => {
+        const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
+        return participantUsernames.reduce((total: number, username: string) => {
+            return total + (unreadCounts[username] || 0);
+        }, 0);
+    };
+
     const conversationData = useMemo(() => {
         if (!Array.isArray(conversations)) return [];
-        
+
         return conversations.map(conv => {
-            const otherParticipants = conv.participants?.filter((p: any) => 
+            const otherParticipants = conv.participants?.filter((p: any) =>
                 p && p.user && p.user.username && p.user.username !== username
             ) || [];
-            
+
             const lastMsg = getLastMessageFromConversation(conv);
             const unreadCount = getUnreadCountForConversation(conv);
-            
+
             return {
                 id: conv.id,
                 name: conv.name,
@@ -137,33 +171,10 @@ export default function Sidebar({
     }, [conversations, username, messages, unreadCounts]);
 
     const filteredConversations = conversationData
-        .filter(conv => 
+        .filter(conv =>
             conv.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             conv.participants.some((p: any) => p.user.username.toLowerCase().includes(searchQuery.toLowerCase()))
         );
-
-    const getLastMessageFromConversation = (conv: any) => {
-        if (conv.messages?.length > 0) {
-            return conv.messages[0];
-        }
-        
-        // Fallback to messages array
-        const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
-        if (Array.isArray(messages)) {
-            return messages.filter(m => 
-                participantUsernames.includes(m.from) || participantUsernames.includes(m.to)
-            ).pop();
-        }
-        
-        return null;
-    };
-
-    const getUnreadCountForConversation = (conv: any) => {
-        const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
-        return participantUsernames.reduce((total: number, username: string) => {
-            return total + (unreadCounts[username] || 0);
-        }, 0);
-    };
 
     return (
         <div className="flex h-full w-full flex-col bg-white overflow-hidden">
@@ -216,7 +227,6 @@ export default function Sidebar({
                 </div>
             </header>
 
-            {/* Global Search Drawer */}
             {showGlobalSearch && (
                 <div className="absolute inset-0 z-50 flex flex-col bg-white animate-in slide-in-from-left duration-300">
                     <header className="flex h-[110px] items-end bg-[#008069] px-4 pb-4 text-white">
@@ -233,7 +243,6 @@ export default function Sidebar({
                 </div>
             )}
 
-            {/* Search Bar */}
             <div className="bg-white px-3 py-2">
                 <div className="flex items-center gap-4 rounded-lg bg-[#f0f2f5] px-3 py-1.5 shadow-sm">
                     <span className="text-[#54656f]">
@@ -250,21 +259,18 @@ export default function Sidebar({
                 </div>
             </div>
 
-            {/* Chat List */}
             <div className="flex-1 overflow-y-auto">
                 <div className="px-4 py-2 text-[13px] font-bold text-[#00a884] uppercase tracking-wider">
                     Recent Chats
                 </div>
-
-                {/* Show skeleton loaders when loading */}
                 {isLoading ? (
-                    <>
-                        <UserSkeleton />
-                        <UserSkeleton />
-                        <UserSkeleton />
-                        <UserSkeleton />
-                        <UserSkeleton />
-                    </>
+                    <Fragment>
+                        {
+                            Array.from({ length: 8 }).map((_, index) => (
+                                <UserSkeleton key={index} />
+                            ))
+                        }
+                    </Fragment>
                 ) : filteredConversations.length === 0 ? (
                     <div className="flex h-full flex-col items-center justify-center p-8 text-center text-[#667781]">
                         <p className="text-sm">No chats found</p>
@@ -272,8 +278,6 @@ export default function Sidebar({
                 ) : (
                     filteredConversations.map((conversation) => {
                         const { id, name, isGroup, participants, lastMessage, unreadCount } = conversation;
-                        
-                        // Determine conversation title
                         const getConversationTitle = () => {
                             if (name) return name;
                             if (isGroup) {
@@ -283,20 +287,16 @@ export default function Sidebar({
                         };
 
                         const conversationTitle = getConversationTitle();
-                        const isSelected = selectedUser === conversationTitle || 
-                                         (participants.some((p: any) => p.user.username === selectedUser));
+                        const isSelected = selectedUser === conversationTitle ||
+                            (participants.some((p: any) => p.user.username === selectedUser));
 
                         return (
                             <button
                                 key={id}
                                 onClick={() => {
-                                    // For individual chats, select the user
-                                    // For group chats, you might want to handle differently
                                     if (!isGroup && participants.length === 1) {
                                         setSelectedUser(participants[0].user.username);
                                     } else {
-                                        // For group chats, you could open a group view
-                                        // For now, select the first participant
                                         setSelectedUser(participants[0]?.user.username || '');
                                     }
                                 }}
@@ -305,11 +305,9 @@ export default function Sidebar({
                                 {isSelected && (
                                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#00a884]"></div>
                                 )}
-                                
-                                {/* Avatar section */}
+
                                 <div className="relative flex-shrink-0">
                                     {isGroup ? (
-                                        // Group chat avatar
                                         <div className="flex">
                                             <div className="h-8 w-8 overflow-hidden rounded-full bg-slate-200 border-2 border-white -mr-2">
                                                 <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${participants[0]?.user.username || 'group1'}`} alt="participant" className="h-full w-full object-cover" />
@@ -326,18 +324,16 @@ export default function Sidebar({
                                             )}
                                         </div>
                                     ) : (
-                                        // Individual chat avatar
                                         <div className="h-12 w-12 overflow-hidden rounded-full bg-slate-200">
                                             <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${participants[0]?.user.username || conversationTitle}`} alt={conversationTitle} className="h-full w-full object-cover" />
                                         </div>
                                     )}
-                                    
-                                    {/* Online indicator for individual chats */}
+
                                     {!isGroup && participants.length === 1 && (
                                         <div className="absolute right-0 bottom-0 h-3 w-3 rounded-full border-2 border-white bg-[#25d366]"></div>
                                     )}
                                 </div>
-                                
+
                                 <div className="flex flex-1 flex-col overflow-hidden text-left">
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2 overflow-hidden">
@@ -350,7 +346,7 @@ export default function Sidebar({
                                         </div>
                                         {lastMessage && (
                                             <span className={`text-[12px] ${unreadCount > 0 ? 'text-[#00a884] font-semibold' : 'text-[#667781]'}`}>
-                                                {new Date(lastMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                {formatMessageTime(lastMessage.timestamp)}
                                             </span>
                                         )}
                                     </div>
@@ -364,8 +360,7 @@ export default function Sidebar({
                                             </div>
                                         )}
                                     </div>
-                                    
-                                    {/* Show participants count for group chats */}
+
                                     {isGroup && (
                                         <div className="text-xs text-[#667781] mt-1">
                                             {participants.length} {participants.length === 1 ? 'participant' : 'participants'}

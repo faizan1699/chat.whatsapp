@@ -1,22 +1,24 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { getSession, parseCookies } from './lib/auth-server';
-import { verifyRefreshToken, createAccessToken } from './lib/jwt';
+import { getSession, parseCookies } from './src/lib/auth-server';
+import { verifyRefreshToken, createAccessToken } from './src/lib/jwt';
 import { serialize } from 'cookie';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const publicRoutes = ['/login', '/register', '/api/auth/login', '/api/auth/register', '/api/auth/verify-email', '/legal'];
+  // Public routes - no auth required (API routes excluded by matcher)
+  const publicRoutes = ['/login', '/register', '/auth', '/legal', '/pricing', '/faq'];
+  const staticRoutes = ['/_next', '/favicon.ico', '/images', '/assets'];
 
-  const staticRoutes = ['/api/socket', '/_next', '/favicon.ico', '/images', '/css', '/js'];
-
-  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
-  const isStaticRoute = staticRoutes.some(route => pathname.startsWith(route));
+  const isPublicRoute = pathname === '/' || publicRoutes.some(r => pathname.startsWith(r));
+  const isStaticRoute = staticRoutes.some(r => pathname.startsWith(r));
 
   if (isPublicRoute || isStaticRoute) {
     return NextResponse.next();
   }
+
+  // All other routes (e.g. /chat, /chat/clean) require sign-in
 
   let session = await getSession(request);
 
@@ -50,11 +52,9 @@ export async function middleware(request: NextRequest) {
         return response;
       } catch (error) {
         console.error('❌ Middleware: Refresh token invalid:', error);
-        // Clear cookies and redirect to login
         const response = NextResponse.redirect(new URL('/login', request.url));
         const isProduction = process.env.NODE_ENV === 'production';
         
-        // Clear each cookie separately
         response.headers.append('Set-Cookie', serialize('access_token', '', {
           httpOnly: true,
           secure: isProduction,

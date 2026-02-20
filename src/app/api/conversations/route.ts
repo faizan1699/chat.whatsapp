@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       .from('conversation_participants')
       .select(`
         conversation_id,
-        conversations (
+        conversations!conversation_participants_conversation_id_fkey (
           id,
           name,
           is_group,
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
       .select(`
         conversation_id,
         user_id,
-        users (
+        users!conversation_participants_user_id_fkey (
           id,
           username,
           email,
