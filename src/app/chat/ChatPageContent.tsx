@@ -149,13 +149,8 @@ export default function ChatPage() {
         });
 
         socket.on('receive-message', (data: Message) => {
-            console.log('📨 Received message:', data);
-            console.log('📨 Current user:', username);
-            console.log('📨 Selected user:', selectedUser);
-            console.log('📨 Message from:', data.from, 'to:', data.to);
 
             setMessages(prev => {
-                // Check if message already exists to avoid duplicates
                 const exists = prev.some(m => m.id === data.id);
                 if (!exists) {
                     console.log('✅ Adding new message to list');
@@ -166,7 +161,6 @@ export default function ChatPage() {
                 }
             });
 
-            // Update unread count if message is not from current user
             if (data.from !== username && data.to === username) {
                 setUnreadCounts(prev => ({
                     ...prev,
@@ -391,26 +385,53 @@ export default function ChatPage() {
                     console.log('✅ Messages API loaded successfully:', messagesData.length, 'messages');
 
                     // Format messages for frontend and calculate unread counts
-                    const formattedMessages = messagesData.map((msg: any) => ({
-                        id: msg.id,
-                        from: msg.sender?.username || 'Unknown',
-                        to: msg.sender?.username === username ? selectedUsername : username,
-                        message: msg.content,
-                        timestamp: msg.timestamp,
-                        status: msg.status,
-                        isVoiceMessage: msg.is_voice_message,
-                        audioUrl: msg.audio_url,
-                        audioDuration: msg.audio_duration,
-                        isDeleted: msg.is_deleted,
-                        isEdited: msg.is_edited,
-                        isPinned: msg.is_pinned,
-                        replyTo: msg.reply_to ? {
-                            id: msg.reply_to.id,
-                            from: msg.reply_to.sender?.username || 'Unknown',
-                            message: msg.reply_to.content || msg.reply_to.message
-                        } : undefined,
-                        senderId: msg.sender_id
-                    }));
+                    const formattedMessages = messagesData.map((msg: any) => {
+                        // Ensure timestamp is a valid Date object
+                        let timestamp = msg.timestamp;
+                        if (timestamp) {
+                            try {
+                                // If it's a string, convert to Date
+                                if (typeof timestamp === 'string') {
+                                    timestamp = new Date(timestamp);
+                                }
+                                // If it's not a Date object, convert it
+                                if (!(timestamp instanceof Date)) {
+                                    timestamp = new Date(timestamp);
+                                }
+                                // Check if date is invalid
+                                if (isNaN(timestamp.getTime())) {
+                                    console.warn('Invalid timestamp for message:', msg.id, msg.timestamp);
+                                    timestamp = new Date(); // Use current date as fallback
+                                }
+                            } catch (error) {
+                                console.error('Error parsing timestamp for message:', msg.id, error);
+                                timestamp = new Date(); // Use current date as fallback
+                            }
+                        } else {
+                            timestamp = new Date(); // Use current date if no timestamp
+                        }
+
+                        return {
+                            id: msg.id,
+                            from: msg.from || msg.sender?.username || 'Unknown',
+                            to: msg.to || (msg.sender?.username === username ? selectedUsername : username),
+                            message: msg.message,
+                            timestamp: timestamp,
+                            status: msg.status,
+                            isVoiceMessage: msg.isVoiceMessage,
+                            audioUrl: msg.audioUrl,
+                            audioDuration: msg.audioDuration,
+                            isDeleted: msg.isDeleted,
+                            isEdited: msg.isEdited,
+                            isPinned: msg.isPinned,
+                            replyTo: msg.replyTo ? {
+                                id: msg.replyTo.id,
+                                from: msg.replyTo.from || msg.replyTo.sender?.username || 'Unknown',
+                                message: msg.replyTo.message
+                            } : undefined,
+                            senderId: msg.senderId
+                        };
+                    });
 
                     // Calculate unread messages for this conversation
                     const unreadCount = formattedMessages.filter((msg: any) =>
@@ -458,15 +479,12 @@ export default function ChatPage() {
                         }));
                     }
                 } else {
-                    console.error('❌ Failed to load messages API:', response.status, response.statusText);
                     setMessages([]);
                 }
             } else {
-                console.log('ℹ️ No conversation found for', selectedUsername);
                 setMessages([]);
             }
         } catch (error) {
-            console.error('❌ Failed to load messages API:', error);
             setMessages([]);
         }
     };
@@ -484,47 +502,26 @@ export default function ChatPage() {
                 console.error('❌ Failed to load conversations:', response.statusText);
             }
         } catch (error) {
-            console.error('❌ Error loading conversations:', error);
             throw error;
         }
     };
 
-    // Load messages when selected user changes
     useEffect(() => {
         if (selectedUser && username) {
             loadMessages(selectedUser);
         }
     }, [selectedUser, username]);
 
-    // Also reload messages periodically to sync with database
-    useEffect(() => {
-        if (selectedUser && username) {
-            const interval = setInterval(() => {
-                loadMessages(selectedUser);
-            }, 10000); // Reload every 10 seconds
-
-            return () => clearInterval(interval);
-        }
-    }, [selectedUser, username]);
-
     useEffect(() => {
         const checkAuth = async () => {
             try {
-                // Check session using unified auth utility
                 const storedSession = getClientSession();
-                console.log('🔐 Checking authentication:', {
-                    storedSession: storedSession,
-                    hasSession: !!storedSession,
-                    username: storedSession?.user?.username
-                });
 
                 if (storedSession) {
-                    console.log('✅ User authenticated:', storedSession.user?.username);
                     setUsername(storedSession?.user?.username || '');
-                    setIsLoading(false); // Set loading to false when data is available
+                    setIsLoading(false);
                     setIsConversationsLoading(true);
 
-                    // Load user data
                     loadConversations(storedSession?.user?.id || '').then(() => {
                         console.log('✅ Conversations loaded');
                         setIsConversationsLoading(false);
@@ -533,7 +530,6 @@ export default function ChatPage() {
                         setIsConversationsLoading(false);
                     });
 
-                    // Load failed messages
                     const failed = storageHelpers.getFailedMessages() || [];
                     if (failed.length > 0) {
                         console.log('🔄 Restoring failed messages:', failed.length);
@@ -557,7 +553,6 @@ export default function ChatPage() {
         checkAuth();
     }, []);
 
-    // Listen for session changes using localStorage events
     useEffect(() => {
         const checkSessionChange = async () => {
             try {
@@ -572,8 +567,6 @@ export default function ChatPage() {
                             loadConversations(storedSession.user.id);
                         }
                     } else {
-                        // Session was cleared, redirect to login
-                        console.log('❌ Session cleared, redirecting to login');
                         router.push('/login');
                     }
                 }
@@ -582,21 +575,17 @@ export default function ChatPage() {
             }
         };
 
-        // Listen for storage events (for cross-tab changes)
         const handleStorageChange = (e: StorageEvent) => {
             if (e.key === 'user_data' || e.key === 'session_token') {
                 checkSessionChange();
             }
         };
 
-        // Check immediately
         checkSessionChange();
 
-        // Set up storage event listener
         window.addEventListener('storage', handleStorageChange);
 
-        // Also check periodically (less frequently) as fallback
-        const interval = setInterval(checkSessionChange, 30000); // 30 seconds instead of 5
+        const interval = setInterval(checkSessionChange, 30000);
 
         return () => {
             window.removeEventListener('storage', handleStorageChange);
@@ -604,7 +593,6 @@ export default function ChatPage() {
         };
     }, [username, router]);
 
-    // Persistence Helpers
     const saveFailedMessageLocal = (msg: Message) => {
         try {
             storageHelpers.saveFailedMessage({
@@ -624,19 +612,16 @@ export default function ChatPage() {
             const now = new Date();
 
             failed.forEach(async (msg: Message) => {
-                // Only retry if 5 minutes have passed since last retry
                 const timeSinceLastRetry = msg.lastRetryTime ?
                     now.getTime() - new Date(msg.lastRetryTime).getTime() :
                     now.getTime() - new Date(msg.timestamp).getTime();
 
-                if (timeSinceLastRetry > 30 * 1000) { // 30 seconds
+                if (timeSinceLastRetry > 30 * 1000) {
                     try {
-                        // Update status to sending
                         setMessages(prev => prev.map(m =>
                             m.id === msg.id ? { ...m, status: 'sending' } : m
                         ));
 
-                        // Get current user ID and conversation
                         const cookies = getClientCookies();
                         const userId = (cookies['user-id'] as string) || SecureSession.getUserId();
 
@@ -644,7 +629,6 @@ export default function ChatPage() {
                             c.participants.some((p: any) => p.user.username === msg.to)
                         );
 
-                        // If conversation not found, create it
                         if (!currentConversation && userId) {
                             const { data: selectedUserData } = await supabaseAdmin
                                 .from('users')
@@ -685,11 +669,9 @@ export default function ChatPage() {
                             });
 
                             if (response.ok) {
-                                // Remove from failed messages
                                 const updatedFailed = failed.filter((m: Message) => m.id !== msg.id);
                                 chatStorage.setItem('failed-messages', updatedFailed);
 
-                                // Update message status to sent
                                 setMessages(prev => prev.map(m =>
                                     m.id === msg.id ? { ...m, status: 'sent' } : m
                                 ));
@@ -700,8 +682,6 @@ export default function ChatPage() {
                             console.error('No conversation or user ID found for retry');
                         }
                     } catch (error) {
-                        console.error('Failed to retry message:', error);
-                        // Update retry count and last retry time
                         msg.retryCount = (msg.retryCount || 0) + 1;
                         msg.lastRetryTime = new Date();
                         saveFailedMessageLocal(msg);
@@ -713,12 +693,11 @@ export default function ChatPage() {
         }
     };
 
-    // Auto-retry failed messages
     useEffect(() => {
         if (autoRetryEnabled && isConnected) {
             const interval = setInterval(() => {
                 retryFailedMessages();
-            }, 10000); // Retry every 10 seconds
+            }, 10000);
             setRetryInterval(interval);
         } else if (retryInterval) {
             clearInterval(retryInterval);
@@ -742,7 +721,6 @@ export default function ChatPage() {
         }
     };
 
-    // Restore failed messages on mount
     useEffect(() => {
         const failed = storageHelpers.getFailedMessages() || [];
         if (failed.length > 0) {
@@ -753,7 +731,6 @@ export default function ChatPage() {
         }
     }, []);
 
-    // Retry failed messages when connected (every 5 seconds)
     useEffect(() => {
         let interval: NodeJS.Timeout;
         let isProcessing = false;
@@ -769,7 +746,6 @@ export default function ChatPage() {
                 console.log(`Auto-retrying ${failed.length} failed messages...`);
 
                 for (const msg of failed) {
-                    // Update status to pending in UI
                     setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'pending' } : m));
 
                     try {
@@ -787,7 +763,6 @@ export default function ChatPage() {
                                 }
                             });
                         });
-                        // Wait a bit between messages
                         await new Promise(r => setTimeout(r, 200));
                     } catch (err) {
                         console.error('Error retrying message:', msg.id, err);
@@ -795,8 +770,6 @@ export default function ChatPage() {
                 }
                 isProcessing = false;
             };
-
-            // Run immediately and then every 5 seconds
             processQueue();
             interval = setInterval(processQueue, 1000);
         }
@@ -847,7 +820,6 @@ export default function ChatPage() {
         setInputMessage('');
         setReplyingTo(null);
 
-        // Create temporary message with sending status
         const tempMessage: Message = {
             id: `temp-${Date.now()}`,
             from: username,
@@ -863,10 +835,8 @@ export default function ChatPage() {
             } : undefined,
         };
 
-        // Add to UI immediately with sending status
         setMessages(prev => [...prev, tempMessage]);
 
-        // Add timeout to prevent stuck in sending state
         const timeoutId = setTimeout(() => {
             setMessages(prev => prev.map(m =>
                 m.id === tempMessage.id ? {
@@ -877,7 +847,6 @@ export default function ChatPage() {
                 } : m
             ));
 
-            // Save to localStorage for retry
             saveFailedMessageLocal({
                 ...tempMessage,
                 status: 'failed',
@@ -885,13 +854,10 @@ export default function ChatPage() {
                 lastRetryTime: new Date()
             });
 
-            // Restore input message
             setInputMessage(tempContent);
-            console.warn('Message sending timed out, marked as failed');
-        }, 10000); // 10 second timeout
+        }, 10000);
 
         try {
-            // Send message using hook
             const savedMsg = await sendMessage(
                 tempContent,
                 selectedUser,
@@ -900,10 +866,8 @@ export default function ChatPage() {
                 replyingTo
             );
 
-            // Clear timeout on success
             clearTimeout(timeoutId);
 
-            // Update local state with the saved message
             setMessages(prev => prev.map(m =>
                 m.id === tempMessage.id ? {
                     ...savedMsg,
@@ -915,7 +879,6 @@ export default function ChatPage() {
                 } : m
             ));
 
-            // Emit to recipient via socket
             if (socketRef.current?.connected) {
                 socketRef.current.emit('send-message', {
                     id: savedMsg.id,
@@ -941,11 +904,7 @@ export default function ChatPage() {
 
         } catch (error) {
             console.error('Failed to send message:', error);
-
-            // Clear timeout on error
             clearTimeout(timeoutId);
-
-            // Update message status to failed
             setMessages(prev => prev.map(m =>
                 m.id === tempMessage.id ? {
                     ...m,
@@ -955,15 +914,12 @@ export default function ChatPage() {
                 } : m
             ));
 
-            // Save to localStorage for retry
             saveFailedMessageLocal({
                 ...tempMessage,
                 status: 'failed',
                 retryCount: 1,
                 lastRetryTime: new Date()
             });
-
-            // Restore input message so user can retry
             setInputMessage(tempContent);
         }
     };
@@ -977,7 +933,6 @@ export default function ChatPage() {
         setInputMessage('');
 
         try {
-            // Update message in database
             const response = await fetch('/api/messages', {
                 method: 'PUT',
                 headers: {
@@ -997,19 +952,14 @@ export default function ChatPage() {
 
             const updatedMsg = await response.json();
 
-            // Update local state
             setMessages(prev => prev.map(msg =>
                 msg.id === editingMessage.id
                     ? { ...msg, message: tempContent, isEdited: true }
                     : msg
             ));
 
-            // Socket event is handled by the API server
-            // No need to emit from client side
+        } catch (error: any) {
 
-        } catch (error) {
-            console.error('Failed to update message:', error);
-            // Restore editing state if failed
             setEditingMessage(editingMessage);
             setInputMessage(tempContent);
         }
@@ -1030,7 +980,6 @@ export default function ChatPage() {
         if (!selectedUser) return;
 
         try {
-            // Send voice message using hook
             const savedMsg = await sendVoiceMessage(
                 audioBlob,
                 duration,
@@ -1039,7 +988,6 @@ export default function ChatPage() {
                 conversations
             );
 
-            // Update local state
             setMessages(prev => [...prev, {
                 ...savedMsg,
                 from: username,
@@ -1052,7 +1000,6 @@ export default function ChatPage() {
                 audioDuration: savedMsg.audioDuration
             }]);
 
-            // Emit to recipient via socket
             if (socketRef.current?.connected) {
                 socketRef.current.emit('send-message', {
                     id: savedMsg.id,
@@ -1091,14 +1038,12 @@ export default function ChatPage() {
         }
     };
 
-    // Auto retry failed messages when there are 2 or more
     useEffect(() => {
         const failedMessages = messages.filter(m => m.status === 'failed');
 
         if (failedMessages.length >= 2 && isConnected && socketRef.current) {
             console.log(`🔄 Auto-retrying ${failedMessages.length} failed messages`);
 
-            // Retry all failed messages with delay between each
             failedMessages.forEach((msg, index) => {
                 setTimeout(() => {
                     if (msg.id) {
@@ -1109,7 +1054,7 @@ export default function ChatPage() {
                             sendMessageInternal(msg);
                         }
                     }
-                }, index * 1000); // 1 second delay between each retry
+                }, index * 1000);
             });
         }
     }, [messages, isConnected]);
@@ -1117,7 +1062,6 @@ export default function ChatPage() {
     const handleDeleteMessage = async (id: string, type: 'me' | 'everyone') => {
         try {
             if (type === 'me') {
-                // Delete for me - hide message for current user only
                 setMessages(prev => prev.map(m =>
                     m.id === id ? { ...m, isHidden: true } : m
                 ));
@@ -1138,7 +1082,6 @@ export default function ChatPage() {
     const handlePinMessage = (msg: Message) => {
         const isPinned = !msg.isPinned;
 
-        // Count pins for current chat
         const currentPins = messages.filter(m =>
             m.isPinned &&
             ((m.from === username && m.to === selectedUser) || (m.from === selectedUser && m.to === username))
@@ -1171,12 +1114,10 @@ export default function ChatPage() {
     };
 
     const handleRetryMessage = (msg: Message) => {
-        // Update status to sending
         setMessages(prev => prev.map(m =>
             m.id === msg.id ? { ...m, status: 'sending' } : m
         ));
 
-        // Retry immediately
         retryFailedMessages();
     };
 
@@ -1185,7 +1126,6 @@ export default function ChatPage() {
     };
 
     const handleClearData = () => {
-        // Clear secure session (requires server-side)
         SecureSession.clearSession();
         setUsername('');
         setSelectedUser(null);
@@ -1201,7 +1141,6 @@ export default function ChatPage() {
     const handleClearChat = () => {
         if (selectedUser) {
             setMessages([]);
-            // Clear failed messages for this conversation
             const failed = storageHelpers.getFailedMessages() || [];
             const updatedFailed = failed.filter((m: Message) => m.to !== selectedUser);
             chatStorage.setItem('failed-messages', updatedFailed);
@@ -1212,13 +1151,11 @@ export default function ChatPage() {
         if (!selectedUser || !username) return;
 
         try {
-            // Find current conversation
             let currentConversation = conversations.find(c =>
                 c.participants.some((p: any) => p.user.username === selectedUser)
             );
 
             if (!currentConversation) {
-                // Try to get conversation ID
                 const cookies = getClientCookies();
                 const userId = (cookies['user-id'] as string) || SecureSession.getUserId();
 
@@ -1247,12 +1184,10 @@ export default function ChatPage() {
             }
 
             if (currentConversation) {
-                // Delete all messages from database
                 const response = await fetch(`/api/conversations/${currentConversation.id}/messages/delete`, {
                     method: 'DELETE',
                 });
                 if (response.ok) {
-                    // Clear local messages
                     setMessages([]);
                 }
             }
@@ -1297,22 +1232,6 @@ export default function ChatPage() {
 
     const pinnedMessages = currentChatMessages.filter(m => m.isPinned);
 
-    // Debug: Log current state
-    console.log('🔍 Debug Info:', {
-        totalMessages: messages.length,
-        currentChatMessages: currentChatMessages.length,
-        username,
-        selectedUser,
-        allMessages: messages.map(m => ({
-            id: m.id,
-            from: m.from,
-            to: m.to,
-            message: m.message?.substring(0, 20) + '...',
-            isSent: m.from === username,
-            isReceived: m.from === selectedUser
-        }))
-    });
-
     return (
         <div className="min-h-[100dvh] h-[100dvh] flex bg-[#f0f2f5] md:p-4 font-sans">
             {isLoading ? (
@@ -1337,7 +1256,6 @@ export default function ChatPage() {
                         />
                     </ResizableSidebar>
 
-                    {/* Main Chat Area */}
                     <main className={`flex flex-1 flex-col bg-[#efeae2] relative ${!selectedUser ? 'hidden md:flex' : 'flex'}`}>
                         {selectedUser ? (
                             <Fragment>
@@ -1355,7 +1273,6 @@ export default function ChatPage() {
                                     onRefreshMessages={handleRefreshMessages}
                                 />
 
-                                {/* Pinned Messages Banner */}
                                 {pinnedMessages.length > 0 && (
                                     <div className="relative z-30">
                                         <div
@@ -1449,7 +1366,6 @@ export default function ChatPage() {
                             console.log('Login successful, setting up user session...');
                             setUsername(u);
 
-                            // Wait a moment for cookies to be set, then load data
                             setTimeout(async () => {
                                 const cookies = getClientCookies();
                                 const userData = SecureSession.getUser();

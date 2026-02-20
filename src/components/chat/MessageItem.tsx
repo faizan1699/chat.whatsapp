@@ -43,6 +43,9 @@ export default function MessageItem({
     const [duration, setDuration] = useState(0);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
+
+    console.log("message" , message)
+
     const words = (message.message || '').trim().split(/\s+/);
     const isLongMessage = words.length > 30;
     const hasMore = words.length > visibleWords;

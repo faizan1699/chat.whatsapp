@@ -95,7 +95,21 @@ export default function MessageList({
     let lastDate: Date | null = null;
 
     messages?.forEach((msg, idx) => {
-        const msgDate = new Date(msg.timestamp);
+        let msgDate: Date;
+        
+        try {
+            msgDate = new Date(msg.timestamp);
+            
+            // Check if date is invalid
+            if (isNaN(msgDate.getTime())) {
+                console.warn('Invalid timestamp for message:', msg.id, msg.timestamp);
+                // Use current date as fallback
+                msgDate = new Date();
+            }
+        } catch (error) {
+            console.error('Error parsing date for message:', msg.id, error);
+            msgDate = new Date();
+        }
         
         if (!lastDate || msgDate.toDateString() !== lastDate.toDateString()) {
             messagesWithSeparators.push(

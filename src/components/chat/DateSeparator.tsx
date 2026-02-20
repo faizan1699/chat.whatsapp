@@ -8,18 +8,30 @@ interface DateSeparatorProps {
 
 export default function DateSeparator({ date }: DateSeparatorProps) {
     const formatDateLabel = (date: Date) => {
-        const now = new Date();
-        const messageDate = new Date(date);
-        const isToday = messageDate.toDateString() === now.toDateString();
-        const isYesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toDateString() === messageDate.toDateString();
-        
-        if (isToday) return 'Today';
-        if (isYesterday) return 'Yesterday';
-        return messageDate.toLocaleDateString([], {
-            weekday: 'long',
-            month: 'short',
-            day: 'numeric'
-        });
+        try {
+            const now = new Date();
+            const messageDate = new Date(date);
+            
+            // Check if date is invalid
+            if (isNaN(messageDate.getTime())) {
+                console.warn('Invalid date in DateSeparator:', date);
+                return 'Unknown Date';
+            }
+            
+            const isToday = messageDate.toDateString() === now.toDateString();
+            const isYesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toDateString() === messageDate.toDateString();
+            
+            if (isToday) return 'Today';
+            if (isYesterday) return 'Yesterday';
+            return messageDate.toLocaleDateString([], {
+                weekday: 'long',
+                month: 'short',
+                day: 'numeric'
+            });
+        } catch (error) {
+            console.error('Error formatting date:', error);
+            return 'Unknown Date';
+        }
     };
 
     return (
