@@ -282,9 +282,8 @@ export default function ChatPage() {
     }, [selectedUser, isWindowFocused, messages.length]);
 
 
-=    useEffect(() => {
+   useEffect(() => {
         document.body.classList.add('no-scroll');
-
         return () => {
             document.body.classList.remove('no-scroll');
         };
