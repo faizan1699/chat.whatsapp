@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Reply, Trash2, Pin, ChevronDown, Play, Pause, Pencil, Eye, EyeOff } from 'lucide-react';
 import { Message, ReplyTo } from '@/types/message';
 
-interface MessageItemProps {
+interface Props {
     message: Message;
     isMe: boolean;
     onRetry?: (msg: Message) => void;
@@ -32,8 +32,8 @@ export default function MessageItem({
     onUnhide,
     isHighlighted,
     highlightKey,
-    failedMessagesCount
-}: MessageItemProps) {
+    failedMessagesCount,
+}: Props) {
     const [visibleWords, setVisibleWords] = useState(30);
     const [showActions, setShowActions] = useState(false);
     const [showDeleteMenu, setShowDeleteMenu] = useState(false);
