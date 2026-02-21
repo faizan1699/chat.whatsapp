@@ -3,16 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createTypedInstance } from '../../utils/typed';
 
-export default function FullPageLoader() {
-    const [messages, setMessages] = useState<Array<{ id: number, text: string, isMe: boolean, visible: boolean, typedText: string }>>([]);
-    const [showTypingIndicator, setShowTypingIndicator] = useState(true);
-    const [currentTypingMessage, setCurrentTypingMessage] = useState<{ text: string, isMe: boolean, messageId: number } | null>(null);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
-    const typingRefs = useRef<{ [key: number]: HTMLElement | null }>({});
-    const prevMessagesRef = useRef<Array<{ id: number, text: string, isMe: boolean, visible: boolean, typedText: string }>>([]);
-
-    useEffect(() => {
-        const messageTexts = [
+   const messageTexts = [
             { text: "👋 Hey bro! You online?", isMe: true },
             { text: "Yeah! Just came in. What’s up?", isMe: false },
 
@@ -40,6 +31,36 @@ export default function FullPageLoader() {
             { text: "Alright, looks like it’s done loading.", isMe: true },
             { text: "Great! Let’s start chatting properly 🚀", isMe: false },
         ];
+
+export default function FullPageLoader() {
+    const [messages, setMessages] = useState<Array<{
+        id: number,
+        text: string,
+        isMe: boolean,
+        visible: boolean,
+        typedText: string
+    }>>([]);
+    const [showTypingIndicator, setShowTypingIndicator] = useState<boolean>(true);
+    const [currentTypingMessage, setCurrentTypingMessage] = useState<{
+        text: string,
+        isMe: boolean,
+        messageId: number
+    } | null>(null);
+    
+
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const typingRefs = useRef<{ [key: number]: HTMLElement | null }>({});
+    
+    const prevMessagesRef = useRef<Array<{
+         id: number,
+          text: string, 
+          isMe: boolean, 
+          visible: boolean, 
+          typedText: string 
+    }>>([]);
+
+    useEffect(() => {
+     
         let messageIndex = 0;
 
         const startTypingMessage = (messageIndex: number) => {
@@ -84,7 +105,7 @@ export default function FullPageLoader() {
                             setMessages(prev =>
                                 prev.map(msg =>
                                     msg.id === messageIndex
-                                        ? { ...msg, typedText: message.text } 
+                                        ? { ...msg, typedText: message.text }
                                         : msg
                                 )
                             );
@@ -108,7 +129,6 @@ export default function FullPageLoader() {
                 startTypingMessage(messageIndex);
                 messageIndex++;
             } else {
-                // Reset and restart
                 setTimeout(() => {
                     setMessages([]);
                     setShowTypingIndicator(true);
@@ -117,7 +137,7 @@ export default function FullPageLoader() {
                     messageIndex = 0;
                 }, 4000);
             }
-        }, 3500);
+        }, 350);
 
         return () => clearInterval(interval);
     }, []);
