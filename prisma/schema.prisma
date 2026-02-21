@@ -56,25 +56,26 @@ model ConversationParticipant {
 }
 
 model Message {
-  id             String   @id @default(cuid())
-  conversationId String
-  senderId       String
-  content        String?  @default("")
-  timestamp      DateTime @default(now())
-  status         String   @default("sent") // pending, sent, delivered, read
-  isVoiceMessage Boolean  @default(false)
-  audioUrl       String?
-  audioDuration  Float?
-  isEdited       Boolean  @default(false)
-  isDeleted      Boolean  @default(false)
-  isPinned       Boolean  @default(false)
-  replyTo        Json?    // Store partial message for reply
-  groupId        String?  // For chunked messages (UI level)
-  chunkIndex     Int?
-  totalChunks    Int?
+  id               String   @id @default(cuid())
+  conversationId  String
+  senderId         String
+  content          String?  @default("")
+  timestamp        DateTime @default(now())
+  status           String   @default("sent") // pending, sent, delivered, read
+  isVoiceMessage   Boolean  @default(false)
+  audioUrl         String?
+  audioDuration    Float?
+  isEdited         Boolean  @default(false)
+  isDeleted        Boolean  @default(false)
+  isDeletedFromMe  Json?    @default("{}") // Store user IDs who deleted this message for themselves
+  isPinned         Boolean  @default(false)
+  replyTo          Json?    // Store partial message for reply
+  groupId          String?  // For chunked messages (UI level)
+  chunkIndex       Int?
+  totalChunks      Int?
   
-  conversation   Conversation @relation(fields: [conversationId], references: [id])
-  sender         User         @relation(fields: [senderId], references: [id])
+  conversation     Conversation @relation(fields: [conversationId], references: [id])
+  sender           User         @relation(fields: [senderId], references: [id])
 
   @@index([conversationId])
   @@index([senderId])
