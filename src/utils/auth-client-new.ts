@@ -15,34 +15,38 @@ export interface ClientSession {
 }
 
 export const getClientSession = (): ClientSession | null => {
-    const cookies = getClientCookies();
-    const cookieUserId = cookies['user-id'];
-    const cookieUsername = cookies['username'];
-    
-    if (cookieUserId && cookieUsername) {
-        console.log('🍪 Using cookie-based session');
-        return {
-            userId: cookieUserId,
-            username: cookieUsername,
-            user: {
-                id: cookieUserId,
-                username: cookieUsername
-            }
-        };
+    try {
+        // Check cookies first (faster than localStorage)
+        const cookies = getClientCookies();
+        const cookieUserId = cookies['user-id'];
+        const cookieUsername = cookies['username'];
+        
+        if (cookieUserId && cookieUsername) {
+            return {
+                userId: cookieUserId,
+                username: cookieUsername,
+                user: {
+                    id: cookieUserId,
+                    username: cookieUsername
+                }
+            };
+        }
+        
+        // Fallback to localStorage with error handling
+        const localStorageSession = frontendAuth.getSession();
+        if (localStorageSession) {
+            return {
+                userId: localStorageSession.user.id,
+                username: localStorageSession.user.username,
+                user: localStorageSession.user
+            };
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('Session check error:', error);
+        return null;
     }
-    
-    const localStorageSession = frontendAuth.getSession();
-    if (localStorageSession) {
-        console.log('💾 Using localStorage session');
-        return {
-            userId: localStorageSession.user.id,
-            username: localStorageSession.user.username,
-            user: localStorageSession.user
-        };
-    }
-    
-    console.log('❌ No session found');
-    return null;
 };
 
 // Check if user is authenticated

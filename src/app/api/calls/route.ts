@@ -11,8 +11,13 @@ async function resolveUserId(username: string): Promise<string | null> {
 /** Record a completed call (caller or callee). Accepts userIds or usernames. */
 export async function POST(request: NextRequest) {
   try {
+    console.log('📞 Calls API hit');
+    
     const session = await getSession(request);
+    console.log('📞 Session:', session);
+    
     if (!session?.userId) {
+      console.log('📞 No session found');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

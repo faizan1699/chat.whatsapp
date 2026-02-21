@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
 import { Pin, ChevronDown, X } from 'lucide-react';
-import { getClientSession, isClientAuthenticated, handleAuthError } from '@/utils/auth-client-new';
+import { getClientSessionOptimized, invalidateSessionCache } from '@/utils/sessionCache';
 import IncomingCallModal from '@/components/video/IncomingCallModal';
 import MessageItem from '@/components/chat/MessageItem';
 import { Message, ReplyTo } from '@/types/message';
@@ -460,26 +460,30 @@ export default function ChatPage() {
     useEffect(() => {
         const checkAuth = async () => {
             try {
-                const storedSession = getClientSession();
+                const storedSession = getClientSessionOptimized();
 
                 if (storedSession) {
                     setUsername(storedSession?.user?.username || '');
                     setIsLoading(false);
                     setIsConversationsLoading(true);
 
+                    // Load conversations asynchronously to avoid blocking
                     loadConversations(storedSession?.user?.id || '').then(() => {
                         setIsConversationsLoading(false);
                     }).catch((error: any) => {
                         setIsConversationsLoading(false);
                     });
 
-                    const failed = storageHelpers.getFailedMessages() || [];
-                    if (failed.length > 0) {
-                        setMessages(prev => {
-                            const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
-                            return [...prev, ...newMessages];
-                        });
-                    }
+                    // Load failed messages asynchronously
+                    setTimeout(() => {
+                        const failed = storageHelpers.getFailedMessages() || [];
+                        if (failed.length > 0) {
+                            setMessages(prev => {
+                                const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
+                                return [...prev, ...newMessages];
+                            });
+                        }
+                    }, 100);
                 } else {
                     setIsLoading(false);
                     setIsConversationsLoading(false);
@@ -492,10 +496,10 @@ export default function ChatPage() {
 
         checkAuth();
 
-        // Fallback: Hide loader after 3 seconds regardless of auth state
+        // Reduced fallback timeout from 3s to 1.5s for faster UX
         const fallbackTimer = setTimeout(() => {
             setIsLoading(false);
-        }, 3000);
+        }, 1500);
 
         return () => clearTimeout(fallbackTimer);
     }, []);
@@ -503,7 +507,7 @@ export default function ChatPage() {
     useEffect(() => {
         const checkSessionChange = async () => {
             try {
-                const storedSession = getClientSession();
+                const storedSession = getClientSessionOptimized();
                 const currentUsername = storedSession?.username || '';
 
                 if (currentUsername !== username) {
@@ -521,6 +525,7 @@ export default function ChatPage() {
 
         const handleStorageChange = (e: StorageEvent) => {
             if (e.key === 'user_data' || e.key === 'session_token') {
+                invalidateSessionCache(); // Invalidate cache when storage changes
                 checkSessionChange();
             }
         };
@@ -529,7 +534,7 @@ export default function ChatPage() {
 
         window.addEventListener('storage', handleStorageChange);
 
-        const interval = setInterval(checkSessionChange, 30000);
+        const interval = setInterval(checkSessionChange, 60000); // Increased from 30s to 60s
 
         return () => {
             window.removeEventListener('storage', handleStorageChange);
