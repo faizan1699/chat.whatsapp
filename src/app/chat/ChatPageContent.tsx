@@ -59,6 +59,7 @@ export default function ChatPage() {
     const [autoRetryEnabled, setAutoRetryEnabled] = useState<boolean>(true);
     const [retryInterval, setRetryInterval] = useState<NodeJS.Timeout | null>(null);
     const [isConversationsLoading, setIsConversationsLoading] = useState<boolean>(false);
+    const [isMessagesLoading, setIsMessagesLoading] = useState<boolean>(false);
 
     // Message API hook
     const {
@@ -323,6 +324,7 @@ export default function ChatPage() {
 
     const loadMessages = async (selectedUsername: string) => {
         try {
+            setIsMessagesLoading(true);
 
             let currentConversation = conversations.find(c =>
                 c.participants.some((p: any) => p.user.username === selectedUsername)
@@ -444,6 +446,8 @@ export default function ChatPage() {
             }
         } catch (error) {
             setMessages([]);
+        } finally {
+            setIsMessagesLoading(false);
         }
     };
 
@@ -1263,6 +1267,7 @@ export default function ChatPage() {
                                     onDelete={handleDeleteMessage}
                                     onPin={handlePinMessage}
                                     highlightedMessageId={highlightedMessageId}
+                                    loading={isMessagesLoading}
                                 />
 
                                 <ChatFooter
