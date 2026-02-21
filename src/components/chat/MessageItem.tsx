@@ -216,14 +216,12 @@ export default function MessageItem({
             onMouseLeave={() => setShowActions(false)}
         >
             <div className={`flex flex-col max-w-[85%] md:max-w-[65%] ${isMe ? 'items-end' : 'items-start'}`}>
-                {/* Message bubble */}
                 <div
                     className={`flex flex-col px-2 py-1 shadow-sm relative ${isMe
                         ? 'rounded-l-lg rounded-br-lg bg-[#d9fdd3] text-[#111b21] ml-10'
                         : 'rounded-r-lg rounded-bl-lg bg-white text-[#111b21] mr-10'
                         } ${message.status === 'failed' ? 'bg-red-50 border border-red-200' : ''} ${isHighlighted ? 'highlight-message' : ''}`}
                 >
-                    {/* Reply Context */}
                     {message.replyTo && (
                         <div
                             onClick={() => {
