@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../utils/supabase-server';
-import bcrypt from 'bcryptjs';
 import { SignJWT, JWTPayload } from 'jose';
 import { serialize } from 'cookie';
 
@@ -21,32 +20,48 @@ interface RefreshTokenPayload extends JWTPayload {
 
 export async function POST(req: NextRequest) {
     try {
-        const { identifier, password, termsAccepted, cookieConsent } = await req.json();
+        const { email, otp } = await req.json();
 
-        if (!identifier || !password) {
-            return NextResponse.json({ message: 'Missing fields' }, { status: 400 });
+        if (!email || !otp) {
+            return NextResponse.json({ error: 'Email and OTP are required' }, { status: 400 });
         }
 
-        const orFilter = ['username', 'email', 'phone_number']
-            .map((col) => `${col}.eq.${JSON.stringify(identifier)}`)
-            .join(',');
-        const { data: users, error } = await supabaseAdmin
+        // Find user by email
+        const { data: user, error: userError } = await supabaseAdmin
             .from('users')
             .select('*')
-            .or(orFilter)
-            .limit(1);
+            .eq('email', email)
+            .single();
 
-        if (error) throw error;
-
-        const user = users?.[0];
-        if (!user) {
-            return NextResponse.json({ message: 'Invalid credentials' , users : users }, { status: 401 });
+        if (userError || !user) {
+            return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return NextResponse.json({ message: 'Invalid credentials' , users : users }, { status: 401 });
+        // Check if OTP matches and is not expired
+        if (user.emailOtp !== otp || !user.emailOtpExpiry) {
+            return NextResponse.json({ error: 'Invalid or expired OTP' }, { status: 400 });
         }
+
+        const now = new Date();
+        const expiryTime = new Date(user.emailOtpExpiry);
+        
+        if (now > expiryTime) {
+            return NextResponse.json({ error: 'OTP expired' }, { status: 400 });
+        }
+
+        // Mark email as verified and clear OTP
+        const { error: updateError } = await supabaseAdmin
+            .from('users')
+            .update({
+                emailVerified: true,
+                emailVerifiedAt: new Date().toISOString(),
+                emailOtp: null,
+                emailOtpExpiry: null,
+                updatedAt: new Date().toISOString()
+            })
+            .eq('id', user.id);
+
+        if (updateError) throw updateError;
 
         // Create access token (1 hour)
         const accessPayload: SessionPayload = {
@@ -74,38 +89,10 @@ export async function POST(req: NextRequest) {
             .setExpirationTime('30d')
             .sign(refreshSecret);
 
-        // Set cookies using NextResponse
         const isProduction = process.env.NODE_ENV === 'production';
 
-        const updateData: any = {
-            updatedAt: new Date().toISOString()
-        };
-
-        if (termsAccepted !== undefined) {
-            updateData.termsAccepted = termsAccepted;
-            updateData.termsAcceptedAt = termsAccepted ? new Date().toISOString() : null;
-        }
-
-        // Update cookie consent if provided
-        if (cookieConsent !== undefined) {
-            updateData.cookieConsent = cookieConsent;
-            updateData.cookieConsentAt = new Date().toISOString();
-        }
-
-        // Update user record with consent information (skip if columns don't exist)
-        if (Object.keys(updateData).length > 1) {
-            try {
-                await supabaseAdmin
-                    .from('users')
-                    .update(updateData)
-                    .eq('id', user.id);
-            } catch (updateError) {
-                console.error('Error updating user consent (columns might not exist):', updateError);
-            }
-        }
-
         const response = NextResponse.json({
-            message: 'Logged in successfully',
+            message: 'Email verified successfully',
             accessToken,
             refreshToken,
             user: {
@@ -151,7 +138,7 @@ export async function POST(req: NextRequest) {
         return response;
 
     } catch (error: unknown) {
-        console.error('Login error:', error);
-        return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
+        console.error('Email verification error:', error);
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }

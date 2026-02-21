@@ -2,6 +2,8 @@ generator client {
   provider = "prisma-client-js"
 }
 
+
+
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
@@ -23,7 +25,7 @@ model User {
   // Legal and consent fields
   termsAccepted    Boolean        @default(false)
   termsAcceptedAt  DateTime?
-  cookieConsent    Json?          // Store cookie preferences as JSON
+  cookieConsent    Boolean?       @default(false)
   cookieConsentAt  DateTime?
   
   // Conversations where this user is a participant

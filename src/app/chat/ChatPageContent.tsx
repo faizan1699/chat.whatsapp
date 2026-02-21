@@ -23,6 +23,7 @@ import { supabaseAdmin } from '@/utils/supabase-server';
 import { uploadAudio } from '@/utils/supabase';
 import api from '@/utils/api';
 import { conversationsManager } from '@/utils/conversationsManager';
+import { clearAllSessionData, handleAuthFailure } from '@/utils/sessionCleanup';
 import ChatFooter from '@/components/chat/ChatFooter';
 import EmptyChatState from '@/components/chat/EmptyChatState';
 import CallOverlay from '@/components/video/CallOverlay';
@@ -445,7 +446,10 @@ export default function ChatPage() {
                 const result = await response.json();
                 const conversationsData = result.data || [];
                 setConversations(conversationsData);
-            } else {}
+            } else if (response.status === 401) {
+                // 401 Unauthorized - clear session and redirect to login
+                handleAuthFailure(router);
+            }
         } catch (error) {
             throw error;
         }
@@ -468,15 +472,12 @@ export default function ChatPage() {
                     setIsConversationsLoading(true);
 
                     // Load conversations asynchronously to avoid blocking
-                    // Load conversations asynchronously to avoid blocking
                     loadConversations(storedSession?.user?.id || '').then(() => {
                         setIsConversationsLoading(false);
                     }).catch((error: any) => {
                         setIsConversationsLoading(false);
                     });
 
-                    // Load failed messages asynchronously
-                    setTimeout(() => {
                     // Load failed messages asynchronously
                     setTimeout(() => {
                         const failed = storageHelpers.getFailedMessages() || [];
@@ -487,12 +488,15 @@ export default function ChatPage() {
                             });
                         }
                     }, 100);
-                    }, 100);
                 } else {
+                    // No session found - clear cookies and localStorage, then redirect to login
+                    handleAuthFailure(router);
                     setIsLoading(false);
                     setIsConversationsLoading(false);
                 }
             } catch (error) {
+                // Error checking auth - clear everything and redirect to login
+                handleAuthFailure(router);
                 setIsLoading(false);
                 setIsConversationsLoading(false);
             }

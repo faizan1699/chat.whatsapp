@@ -1,6 +1,7 @@
 // Unified client authentication utilities
 import { frontendAuth } from './frontendAuth';
 import { getClientCookies } from './cookies';
+import { clearAllSessionData } from './sessionCleanup';
 
 export interface ClientSession {
     userId: string;
@@ -77,13 +78,8 @@ export const handleAuthError = (error: any, defaultMessage: string = 'Authentica
     if (error?.status === 401 || error?.message?.includes('Unauthorized') || error?.message?.includes('401')) {
         console.error('🔐 Authentication failed - redirecting to login');
         
-        // Clear invalid session data
-        if (typeof window !== 'undefined') {
-            localStorage.removeItem('session_token');
-            localStorage.removeItem('refresh_token');
-            localStorage.removeItem('user_id');
-            localStorage.removeItem('username');
-        }
+        // Clear invalid session data using utility function
+        clearAllSessionData();
         
         // Redirect to login page
         if (typeof window !== 'undefined') {
