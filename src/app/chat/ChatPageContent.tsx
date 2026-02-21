@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo, Fragment } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, Fragment } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
 import { Pin, ChevronDown, X } from 'lucide-react';
@@ -36,14 +36,16 @@ interface User {
 }
 
 export default function ChatPage() {
+    
     const router = useRouter();
     const [username, setUsername] = useState<string>('');
     const [isLoading, setIsLoading] = useState<boolean>(true);
-    const [users, setUsers] = useState<User>({});
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
     const selectedUserRef = useRef<string | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
     const [conversations, setConversations] = useState<any[]>([]);
+    const [users, setUsers] = useState<{ [key: string]: string }>({});
     const [inputMessage, setInputMessage] = useState('');
     const [isConnected, setIsConnected] = useState<boolean>(false);
     const socketRef = useRef<Socket | null>(null);
@@ -117,6 +119,15 @@ export default function ChatPage() {
         });
         return acc;
     }, {});
+
+    // Memoize conversations to prevent unnecessary re-renders
+    const memoizedConversations = useMemo(() => {
+        return conversations.map(conv => ({
+            ...conv,
+            lastMessage: conv.last_message,
+            unreadCount: unreadCounts[conv.other_user_id] || 0
+        }));
+    }, [conversations, unreadCounts]);
 
     const allUsers = { ...conversationUsers, ...users };
     useEffect(() => {
@@ -439,7 +450,7 @@ export default function ChatPage() {
     };
 
     // Load user conversations from API
-    const loadConversations = async (userId: string) => {
+    const loadConversations = useCallback(async (userId: string) => {
         try {
             const response = await fetch(`/api/conversations?userId=${userId}`);
             if (response.ok) {
@@ -453,7 +464,7 @@ export default function ChatPage() {
         } catch (error) {
             throw error;
         }
-    };
+    }, [router]);
 
     useEffect(() => {
         if (selectedUser && username) {
@@ -468,6 +479,7 @@ export default function ChatPage() {
 
                 if (storedSession) {
                     setUsername(storedSession?.user?.username || '');
+                    setCurrentUserId(storedSession?.user?.id || null);
                     setIsLoading(false);
                     setIsConversationsLoading(true);
 
@@ -517,12 +529,15 @@ export default function ChatPage() {
             try {
                 const storedSession = getClientSessionOptimized();
                 const currentUsername = storedSession?.username || '';
+                const newUserId = storedSession?.user?.id || null;
 
                 if (currentUsername !== username) {
                     if (currentUsername && storedSession) {
                         setUsername(currentUsername);
-                        if (storedSession?.user?.id) {
-                            loadConversations(storedSession.user.id);
+                        // Only reload conversations if user ID actually changed
+                        if (newUserId && newUserId !== currentUserId) {
+                            setCurrentUserId(newUserId);
+                            loadConversations(newUserId);
                         }
                     } else {
                         router.push('/login');
@@ -548,7 +563,7 @@ export default function ChatPage() {
             window.removeEventListener('storage', handleStorageChange);
             clearInterval(interval);
         };
-    }, [username, router]);
+    }, [username, router, currentUserId, loadConversations]);
 
     const saveFailedMessageLocal = (msg: Message) => {
         try {
