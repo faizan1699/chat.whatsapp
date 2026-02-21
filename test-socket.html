@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Socket Test</title>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>Socket.IO Connection Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="messages"></div>
+    
+    <script>
+        const socket = io('http://localhost:3000', {
+            path: '/api/socket'
+        });
+        
+        const status = document.getElementById('status');
+        const messages = document.getElementById('messages');
+        
+        socket.on('connect', () => {
+            status.innerHTML = 'Connected: ' + socket.id;
+            console.log('Connected to socket server');
+        });
+        
+        socket.on('disconnect', () => {
+            status.innerHTML = 'Disconnected';
+            console.log('Disconnected from socket server');
+        });
+        
+        socket.on('connect_error', (error) => {
+            status.innerHTML = 'Connection Error: ' + error.message;
+            console.error('Socket connection error:', error);
+        });
+        
+        // Test message receiving
+        socket.on('receive-message', (data) => {
+            const msg = document.createElement('div');
+            msg.textContent = `Message: ${data.message} from ${data.from}`;
+            messages.appendChild(msg);
+        });
+        
+        // Test joining as a user
+        socket.emit('join-user', 'testuser');
+    </script>
+</body>
+</html>
