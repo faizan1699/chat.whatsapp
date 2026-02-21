@@ -28,6 +28,16 @@ model User {
   cookieConsent    Boolean?       @default(false)
   cookieConsentAt  DateTime?
   
+  // Email verification fields
+  emailVerified    Boolean        @default(false)
+  emailVerifiedAt  DateTime?
+  emailOtp        String?
+  emailOtpExpiry  DateTime?
+  
+  // Password reset fields
+  passwordResetOtp        String?
+  passwordResetOtpExpiry  DateTime?
+  
   // Conversations where this user is a participant
   conversations    ConversationParticipant[]
   

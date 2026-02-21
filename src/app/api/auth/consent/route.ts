@@ -13,9 +13,7 @@ export async function POST(req: NextRequest) {
     const { termsAccepted, cookieConsent } = await req.json();
 
     // Update user record with consent information
-    const updateData: any = {
-      updatedAt: new Date().toISOString()
-    };
+    const updateData: any = {};
 
     if (termsAccepted !== undefined) {
       updateData.termsAccepted = termsAccepted;

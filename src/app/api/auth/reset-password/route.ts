@@ -41,8 +41,7 @@ export async function POST(req: NextRequest) {
             .update({
                 password: hashedPassword,
                 password_reset_otp: null,
-                password_reset_otp_expiry: null,
-                updatedAt: new Date().toISOString()
+                password_reset_otp_expiry: null
             })
             .eq('id', user.id);
 

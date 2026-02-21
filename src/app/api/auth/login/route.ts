@@ -86,9 +86,7 @@ export async function POST(req: NextRequest) {
         // Set cookies using NextResponse
         const isProduction = process.env.NODE_ENV === 'production';
 
-        const updateData: any = {
-            updatedAt: new Date().toISOString()
-        };
+        const updateData: any = {};
 
         if (termsAccepted !== undefined) {
             updateData.termsAccepted = termsAccepted;
