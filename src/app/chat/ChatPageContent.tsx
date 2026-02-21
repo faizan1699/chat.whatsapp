@@ -145,7 +145,9 @@ export default function ChatPage() {
 
         socket.on('connect', () => {
             setIsConnected(true);
-            socket.emit('join-user', username);
+            if (username) {
+                socket.emit('join-user', username);
+            }
         });
 
         socket.on('disconnect', () => {
@@ -167,6 +169,27 @@ export default function ChatPage() {
                 }
             });
 
+            // Update conversation's last message in real-time
+            setConversations(prev => prev.map(conv => {
+                const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
+                const hasBothParticipants = participantUsernames.includes(data.from) && participantUsernames.includes(data.to);
+                
+                if (hasBothParticipants) {
+                    return {
+                        ...conv,
+                        lastMessage: {
+                            id: data.id,
+                            message: data.message,
+                            from: data.from,
+                            timestamp: data.timestamp,
+                            isDeleted: data.isDeleted,
+                            status: data.status
+                        }
+                    };
+                }
+                return conv;
+            }));
+
             if (data.from !== username && data.to === username) {
                 setUnreadCounts(prev => ({
                     ...prev,
@@ -180,7 +203,7 @@ export default function ChatPage() {
 
             if ((data.from === selectedUser && data.to === username) ||
                 (data.from === username && data.to === selectedUser)) {
-                setTimeout(() => loadMessages(selectedUser!), 1000);
+                // Message is for current conversation - it's already added above
             }
         });
 
@@ -194,12 +217,44 @@ export default function ChatPage() {
             setMessages(prev => prev.map(m =>
                 m.id === messageId ? { ...m, content, isEdited: true, editedAt } : m
             ));
+            
+            // Update conversation's last message if it was the edited message
+            setConversations(prev => prev.map(conv => {
+                if (conv.lastMessage?.id === messageId) {
+                    return {
+                        ...conv,
+                        lastMessage: {
+                            ...conv.lastMessage,
+                            message: content,
+                            isEdited: true,
+                            editedAt
+                        }
+                    };
+                }
+                return conv;
+            }));
         });
 
         socket.on('delete-message', ({ id }: { id: string }) => {
             setMessages(prev => prev.map(m =>
                 m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m
             ));
+            
+            // Update conversation's last message if it was the deleted message
+            setConversations(prev => prev.map(conv => {
+                if (conv.lastMessage?.id === id) {
+                    return {
+                        ...conv,
+                        lastMessage: {
+                            ...conv.lastMessage,
+                            isDeleted: true,
+                            message: '',
+                            audioUrl: undefined
+                        }
+                    };
+                }
+                return conv;
+            }));
         });
 
         socket.on('pin-message', ({ id, isPinned }: { id: string; isPinned: boolean }) => {
@@ -256,6 +311,13 @@ export default function ChatPage() {
             socket.off('call-rejected');
         };
     }, [socket, username, call]);
+
+    // Handle username changes after socket is already connected
+    useEffect(() => {
+        if (socketRef.current && socketRef.current.connected && username) {
+            socketRef.current.emit('join-user', username);
+        }
+    }, [username]);
 
     useEffect(() => {
         if ('Notification' in window && Notification.permission === 'default') {
@@ -721,6 +783,28 @@ export default function ChatPage() {
                                 if (ack && ack.status === 'ok') {
                                     setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'sent' } : m));
                                     removeFailedMessage(msg.id!);
+                                    
+                                    // Update conversation's last message
+                                    setConversations(prev => prev.map(conv => {
+                                        const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
+                                        const hasBothParticipants = participantUsernames.includes(msg.to) && participantUsernames.includes(msg.from);
+                                        
+                                        if (hasBothParticipants) {
+                                            return {
+                                                ...conv,
+                                                lastMessage: {
+                                                    id: msg.id,
+                                                    message: msg.message,
+                                                    from: msg.from,
+                                                    timestamp: msg.timestamp,
+                                                    isDeleted: msg.isDeleted,
+                                                    status: 'sent'
+                                                }
+                                            };
+                                        }
+                                        return conv;
+                                    }));
+                                    
                                     resolve(true);
                                 } else {
                                     setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'failed' } : m));
@@ -749,6 +833,27 @@ export default function ChatPage() {
             if (ack && ack.status === 'ok') {
                 setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'sent' } : m));
                 removeFailedMessage(msg.id!);
+                
+                // Update conversation's last message
+                setConversations(prev => prev.map(conv => {
+                    const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
+                    const hasBothParticipants = participantUsernames.includes(msg.to) && participantUsernames.includes(msg.from);
+                    
+                    if (hasBothParticipants) {
+                        return {
+                            ...conv,
+                            lastMessage: {
+                                id: msg.id,
+                                message: msg.message,
+                                from: msg.from,
+                                timestamp: msg.timestamp,
+                                isDeleted: msg.isDeleted,
+                                status: 'sent'
+                            }
+                        };
+                    }
+                    return conv;
+                }));
             } else {
                 setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'failed' } : m));
                 saveFailedMessageLocal({ ...msg, status: 'failed' });
@@ -801,6 +906,27 @@ export default function ChatPage() {
 
         setMessages(prev => [...prev, tempMessage]);
 
+        // Update conversation's last message immediately
+        setConversations(prev => prev.map(conv => {
+            const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
+            const hasBothParticipants = participantUsernames.includes(selectedUser) && participantUsernames.includes(username);
+            
+            if (hasBothParticipants) {
+                return {
+                    ...conv,
+                    lastMessage: {
+                        id: tempMessage.id,
+                        message: tempContent,
+                        from: username,
+                        timestamp: tempMessage.timestamp,
+                        isDeleted: false,
+                        status: 'pending'
+                    }
+                };
+            }
+            return conv;
+        }));
+
         const timeoutId = setTimeout(() => {
             setMessages(prev => prev.map(m =>
                 m.id === tempMessage.id ? {
@@ -810,6 +936,22 @@ export default function ChatPage() {
                     lastRetryTime: new Date()
                 } : m
             ));
+
+            // Update conversation's last message status to 'failed'
+            setConversations(prev => prev.map(conv => {
+                if (conv.lastMessage?.id === tempMessage.id) {
+                    return {
+                        ...conv,
+                        lastMessage: {
+                            ...conv.lastMessage,
+                            status: 'failed',
+                            retryCount: 1,
+                            lastRetryTime: new Date()
+                        }
+                    };
+                }
+                return conv;
+            }));
 
             saveFailedMessageLocal({
                 ...tempMessage,
@@ -842,6 +984,22 @@ export default function ChatPage() {
                     status: 'sent'
                 } : m
             ));
+
+            // Update conversation's last message status to 'sent'
+            setConversations(prev => prev.map(conv => {
+                if (conv.lastMessage?.id === tempMessage.id) {
+                    return {
+                        ...conv,
+                        lastMessage: {
+                            ...conv.lastMessage,
+                            id: savedMsg.id,
+                            status: 'sent',
+                            timestamp: new Date(savedMsg.timestamp)
+                        }
+                    };
+                }
+                return conv;
+            }));
 
             if (socketRef.current?.connected) {
                 socketRef.current.emit('send-message', {
@@ -876,6 +1034,22 @@ export default function ChatPage() {
                     lastRetryTime: new Date()
                 } : m
             ));
+
+            // Update conversation's last message status to 'failed'
+            setConversations(prev => prev.map(conv => {
+                if (conv.lastMessage?.id === tempMessage.id) {
+                    return {
+                        ...conv,
+                        lastMessage: {
+                            ...conv.lastMessage,
+                            status: 'failed',
+                            retryCount: 1,
+                            lastRetryTime: new Date()
+                        }
+                    };
+                }
+                return conv;
+            }));
 
             saveFailedMessageLocal({
                 ...tempMessage,
@@ -1211,9 +1385,7 @@ export default function ChatPage() {
                             setSelectedUser={setSelectedUser}
                             searchQuery={searchQuery}
                             setSearchQuery={setSearchQuery}
-                            messages={messages}
                             conversations={conversations}
-                            unreadCounts={unreadCounts}
                             onLogout={handleLogout}
                             onEditProfile={() => setShowEditProfile(true)}
                             isLoading={isConversationsLoading}

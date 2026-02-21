@@ -46,8 +46,56 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get all conversation IDs to fetch participants
+    // Get all conversation IDs to fetch participants and last messages
     const conversationIds = conversations?.map(item => item.conversation_id) || [];
+
+    // Fetch last message for each conversation
+    const { data: lastMessages, error: messagesError } = await supabaseAdmin
+      .from('messages')
+      .select(`
+        id,
+        content,
+        sender_id,
+        timestamp,
+        conversation_id,
+        is_deleted,
+        status
+      `)
+      .in('conversation_id', conversationIds)
+      .order('timestamp', { ascending: false });
+
+    if (messagesError) {
+      console.error('Database error fetching last messages:', messagesError);
+    }
+
+    // Create a map of conversation ID to last message
+    const lastMessageMap = new Map();
+    lastMessages?.forEach((message: any) => {
+      if (!lastMessageMap.has(message.conversation_id)) {
+        lastMessageMap.set(message.conversation_id, {
+          id: message.id,
+          message: message.content,
+          from: message.sender_id,
+          timestamp: message.timestamp,
+          isDeleted: message.is_deleted,
+          status: message.status
+        });
+      }
+    });
+
+    // Fetch unread message counts for each conversation
+    const { data: unreadMessages, error: unreadError } = await supabaseAdmin
+      .from('messages')
+      .select('conversation_id, sender_id')
+      .in('conversation_id', conversationIds)
+      .neq('sender_id', userId)
+      .in('status', ['sent', 'delivered']);
+
+    const unreadCountMap = new Map();
+    unreadMessages?.forEach((message: any) => {
+      const currentCount = unreadCountMap.get(message.conversation_id) || 0;
+      unreadCountMap.set(message.conversation_id, currentCount + 1);
+    });
 
     // Fetch all participants for these conversations with user details
     const { data: participants, error: participantsError } = await supabaseAdmin
@@ -85,6 +133,8 @@ export async function GET(request: NextRequest) {
         created_at: item.conversations?.created_at,
         updated_at: item.conversations?.updated_at,
         conversation_id: item.conversation_id,
+        lastMessage: lastMessageMap.get(item.conversation_id) || null,
+        unreadCount: unreadCountMap.get(item.conversation_id) || 0,
         participants: conversationParticipants.map((p: any) => ({
           user: p.users
         }))

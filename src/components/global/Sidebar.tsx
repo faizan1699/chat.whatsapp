@@ -33,9 +33,7 @@ interface SidebarProps {
     setSelectedUser: (user: string) => void;
     searchQuery: string;
     setSearchQuery: (query: string) => void;
-    messages: any[];
     conversations: any[];
-    unreadCounts?: { [key: string]: number };
     onLogout?: () => void;
     onEditProfile?: () => void;
     onConversationCreated?: () => void;
@@ -49,9 +47,7 @@ export default function Sidebar({
     setSelectedUser,
     searchQuery,
     setSearchQuery,
-    messages,
     conversations,
-    unreadCounts = {},
     onLogout,
     onEditProfile,
     onConversationCreated,
@@ -111,21 +107,6 @@ export default function Sidebar({
         }
     };
 
-    const getLastMessageFromConversation = (conv: any) => {
-        if (conv.messages?.length > 0) {
-            return conv.messages[0];
-        }
-
-        const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
-        if (Array.isArray(messages)) {
-            return messages.filter(m =>
-                participantUsernames.includes(m.from) || participantUsernames.includes(m.to)
-            ).pop();
-        }
-
-        return null;
-    };
-
     const formatMessageTime = (timestamp: any) => {
         if (!timestamp) return '';
 
@@ -140,13 +121,6 @@ export default function Sidebar({
         }
     };
 
-    const getUnreadCountForConversation = (conv: any) => {
-        const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
-        return participantUsernames.reduce((total: number, username: string) => {
-            return total + (unreadCounts[username] || 0);
-        }, 0);
-    };
-
     const conversationData = useMemo(() => {
         if (!Array.isArray(conversations)) return [];
 
@@ -155,26 +129,36 @@ export default function Sidebar({
                 p && p.user && p.user.username && p.user.username !== username
             ) || [];
 
-            const lastMsg = getLastMessageFromConversation(conv);
-            const unreadCount = getUnreadCountForConversation(conv);
-
             return {
                 id: conv.id,
                 name: conv.name,
                 isGroup: conv.is_group,
                 participants: otherParticipants,
-                lastMessage: lastMsg,
-                unreadCount: unreadCount,
+                lastMessage: conv.lastMessage,
+                unreadCount: conv.unreadCount,
+                updated_at: conv.updated_at,
                 allParticipants: conv.participants || []
             };
         });
-    }, [conversations, username, messages, unreadCounts]);
+    }, [conversations, username]);;
 
     const filteredConversations = conversationData
         .filter(conv =>
             conv.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             conv.participants.some((p: any) => p.user.username.toLowerCase().includes(searchQuery.toLowerCase()))
-        );
+        )
+        .sort((a, b) => {
+            // Sort by latest message timestamp
+            const aTime = a.lastMessage?.timestamp || a.updated_at || 0;
+            const bTime = b.lastMessage?.timestamp || b.updated_at || 0;
+            
+            // Convert to Date objects for comparison
+            const aDate = new Date(aTime).getTime();
+            const bDate = new Date(bTime).getTime();
+            
+            // Sort in descending order (newest first)
+            return bDate - aDate;
+        });
 
     return (
         <div className="flex h-full w-full flex-col bg-white overflow-hidden">
