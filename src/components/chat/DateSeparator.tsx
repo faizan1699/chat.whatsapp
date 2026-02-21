@@ -29,15 +29,14 @@ export default function DateSeparator({ date }: DateSeparatorProps) {
                 day: 'numeric'
             });
         } catch (error) {
-            console.error('Error formatting date:', error);
             return 'Unknown Date';
         }
     };
 
     return (
         <div className="flex items-center justify-center my-4 sticky top-0 z-20">
-            <div className="bg-[#e9edef] px-3 py-1 rounded-full shadow-sm">
-                <span className="text-[12px] font-medium text-[#667781]">
+            <div className="bg-gray-100 px-3 py-1 rounded-full shadow-soft">
+                <span className="text-[12px] font-medium text-gray-600">
                     {formatDateLabel(date)}
                 </span>
             </div>

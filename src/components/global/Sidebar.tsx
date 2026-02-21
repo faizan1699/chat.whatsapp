@@ -140,30 +140,32 @@ export default function Sidebar({
                 allParticipants: conv.participants || []
             };
         });
-    }, [conversations, username]);;
+    }, [conversations, username]);
 
-    const filteredConversations = conversationData
+    const filteredConversations = useMemo(() => {
+        return conversationData
         .filter(conv =>
             conv.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             conv.participants.some((p: any) => p.user.username.toLowerCase().includes(searchQuery.toLowerCase()))
         )
         .sort((a, b) => {
-            // Sort by latest message timestamp
+            // Sort by latest message timestamp (WhatsApp-style)
             const aTime = a.lastMessage?.timestamp || a.updated_at || 0;
             const bTime = b.lastMessage?.timestamp || b.updated_at || 0;
             
-            // Handle invalid timestamps
-            // if (!aTime && !bTime) return 0;
-            // if (!aTime) return 1; // Put conversations without messages at bottom
-            // if (!bTime) return -1; // Put conversations without messages at bottom
+            // Handle invalid timestamps - put conversations without messages at bottom
+            if (!aTime && !bTime) return 0;
+            if (!aTime) return 1; // Put conversations without messages at bottom
+            if (!bTime) return -1; // Put conversations without messages at bottom
             
             // Convert to Date objects for comparison
             const aDate = new Date(aTime).getTime();
             const bDate = new Date(bTime).getTime();
             
-            // Sort in descending order (newest first)
+            // Sort in descending order (newest first) - WhatsApp behavior
             return bDate - aDate;
         });
+    }, [conversationData, searchQuery]);
 
     return (
         <div className="flex h-full w-full flex-col bg-white overflow-hidden">

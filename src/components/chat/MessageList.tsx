@@ -5,6 +5,7 @@ import MessageItem from './MessageItem';
 import DateSeparator from './DateSeparator';
 import MessageSkeleton from './MessageSkeleton';
 import { Message, ReplyTo } from '@/types/message';
+import { scrollToTop, scrollToBottom } from '@/utils/scrollUtils';
 
 interface MessageListProps {
     messages: Message[];
@@ -39,10 +40,13 @@ export default function MessageList({
     const messageListRef = useRef<HTMLDivElement>(null);
     const [highlightKey, setHighlightKey] = useState<number>(0);
     const [autoScroll, setAutoScroll] = useState<boolean>(true);
+    const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
+
+    // Global scroll functions are already available from scrollUtils
 
     const scrollToMessage = (messageId: string) => {
         const messageElement = document.getElementById(`msg-${messageId}`);
@@ -72,10 +76,15 @@ export default function MessageList({
     };
 
     useEffect(() => {
-        if (autoScroll) {
+        if (isInitialLoad && messages.length > 0) {
+            // Scroll to top on initial load
+            scrollToTop();
+            setIsInitialLoad(false);
+        } else if (!isInitialLoad && autoScroll) {
+            // Scroll to bottom for subsequent updates
             scrollToBottom();
         }
-    }, [messages, autoScroll]);
+    }, [messages, autoScroll, isInitialLoad]);
 
     useEffect(() => {
         if (highlightedMessageId) {
