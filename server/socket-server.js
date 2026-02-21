@@ -9,9 +9,15 @@
 
 const http = require('http');
 const { Server } = require('socket.io');
+const { createClient } = require('@supabase/supabase-js');
 
 const PORT = process.env.SOCKET_PORT || 3001;
 const NEXT_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 const server = http.createServer();
 const io = new Server(server, {
@@ -53,10 +59,48 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('send-message', (msg, ack) => {
-    const targetId = userSockets.get(msg.to);
-    if (targetId) io.to(targetId).emit('receive-message', msg);
-    if (typeof ack === 'function') ack({ status: 'ok' });
+  socket.on('send-message', async (msg, ack) => {
+    try {
+      // Store message in database
+      const { data: message, error } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: msg.conversationId,
+          sender_id: msg.from,
+          content: msg.message,
+          timestamp: new Date().toISOString(),
+          status: 'sent',
+          is_edited: msg.isEdited || false,
+          is_voice_message: msg.isVoiceMessage || false,
+          audio_url: msg.audioUrl || null,
+          audio_duration: msg.audioDuration || null,
+          reply_to: msg.replyTo ? JSON.stringify(msg.replyTo) : null,
+          is_pinned: msg.isPinned || false
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error saving message:', error);
+        if (typeof ack === 'function') ack({ status: 'error', error: error.message });
+        return;
+      }
+
+      // Broadcast to all connected clients
+      const targetId = userSockets.get(msg.to);
+      if (targetId) {
+        io.to(targetId).emit('receive-message', {
+          ...message,
+          id: message.id,
+          status: 'delivered'
+        });
+      }
+
+      if (typeof ack === 'function') ack({ status: 'ok', messageId: message.id });
+    } catch (error) {
+      console.error('Socket send-message error:', error);
+      if (typeof ack === 'function') ack({ status: 'error', error: error.message });
+    }
   });
 
   socket.on('mark-read', ({ messageId, to }) => {
@@ -64,17 +108,38 @@ io.on('connection', (socket) => {
     if (targetId) io.to(targetId).emit('message-status-update', { messageId, status: 'read' });
   });
 
-  socket.on('message-edited', (data) => {
+  socket.on('message-edited', async (data) => {
     const { messageId, content, to, from } = data;
-    const targetId = userSockets.get(to);
-    if (targetId) {
-      io.to(targetId).emit('message-edited', {
-        messageId,
-        content,
-        from,
-        to,
-        editedAt: new Date().toISOString()
-      });
+    try {
+      // Update message in database
+      const { error } = await supabase
+        .from('messages')
+        .update({
+          content: content,
+          is_edited: true,
+          edited_at: new Date().toISOString()
+        })
+        .eq('id', messageId)
+        .eq('sender_id', from); // Only sender can edit their messages
+
+      if (error) {
+        console.error('Error updating edited message:', error);
+        return;
+      }
+
+      // Broadcast to all connected clients
+      const targetId = userSockets.get(to);
+      if (targetId) {
+        io.to(targetId).emit('message-edited', {
+          messageId,
+          content,
+          from,
+          to,
+          editedAt: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error('Socket message-edited error:', error);
     }
   });
 
