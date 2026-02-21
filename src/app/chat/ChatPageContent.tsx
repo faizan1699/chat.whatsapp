@@ -120,7 +120,6 @@ export default function ChatPage() {
         return acc;
     }, {});
 
-    // Memoize conversations to prevent unnecessary re-renders
     const memoizedConversations = useMemo(() => {
         return conversations.map(conv => ({
             ...conv,

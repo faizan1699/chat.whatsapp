@@ -16,7 +16,7 @@ export const testToasts = () => {
     setTimeout(() => authToast.loginSuccess('testuser'), 1000);
     setTimeout(() => authToast.loginError('Invalid credentials'), 2000);
     setTimeout(() => authToast.registerSuccess(), 3000);
-    setTimeout(() => authToast.registerError('Email already exists'), 4000);
+    setTimeout(() => authToast.registerError('Email Not Available'), 4000);
     setTimeout(() => authToast.logoutSuccess(), 5000);
     setTimeout(() => authToast.sessionExpired(), 6000);
 

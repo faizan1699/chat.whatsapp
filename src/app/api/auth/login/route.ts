@@ -48,6 +48,15 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: 'Invalid credentials' , users : users }, { status: 401 });
         }
 
+        // Check if email is verified (only if user has email)
+        if (user.email && !user.email_verified) {
+            return NextResponse.json({ 
+                message: 'Please verify your email before logging in',
+                requiresEmailVerification: true,
+                email: user.email
+            }, { status: 403 });
+        }
+
         // Create access token (1 hour)
         const accessPayload: SessionPayload = {
             userId: user.id,
