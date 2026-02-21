@@ -152,6 +152,11 @@ export default function Sidebar({
             const aTime = a.lastMessage?.timestamp || a.updated_at || 0;
             const bTime = b.lastMessage?.timestamp || b.updated_at || 0;
             
+            // Handle invalid timestamps
+            // if (!aTime && !bTime) return 0;
+            // if (!aTime) return 1; // Put conversations without messages at bottom
+            // if (!bTime) return -1; // Put conversations without messages at bottom
+            
             // Convert to Date objects for comparison
             const aDate = new Date(aTime).getTime();
             const bDate = new Date(bTime).getTime();
