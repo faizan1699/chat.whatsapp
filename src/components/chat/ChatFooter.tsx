@@ -27,6 +27,7 @@ interface ChatFooterProps {
     editingMessage?: Message | null;
     onCancelReply?: () => void;
     onCancelEdit?: () => void;
+    autoFocus?: boolean;
 }
 
 export default function ChatFooter({
@@ -38,7 +39,8 @@ export default function ChatFooter({
     replyingTo,
     editingMessage,
     onCancelReply,
-    onCancelEdit
+    onCancelEdit,
+    autoFocus = false
 }: ChatFooterProps) {
 
     const [isVoiceRecording, setIsVoiceRecording] = useState(false);
@@ -46,12 +48,12 @@ export default function ChatFooter({
     const emojiPickerRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-    // Auto-focus on mount and when editing/replying state changes
+    // Auto-focus on mount, when editing/replying state changes, or when autoFocus is true
     useEffect(() => {
         if (!isVoiceRecording && textareaRef.current) {
             textareaRef.current.focus();
         }
-    }, [editingMessage, replyingTo, isVoiceRecording]);
+    }, [editingMessage, replyingTo, isVoiceRecording, autoFocus]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {

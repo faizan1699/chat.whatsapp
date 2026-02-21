@@ -53,6 +53,7 @@ export default function ChatPage() {
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
     const [editingMessage, setEditingMessage] = useState<Message | null>(null);
     const [showPinsDropdown, setShowPinsDropdown] = useState<boolean>(false);
+    const [autoFocusInput, setAutoFocusInput] = useState<boolean>(false);
 
     const [isWindowFocused, setIsWindowFocused] = useState<boolean>(true);
     const isWindowFocusedRef = useRef(true);
@@ -159,12 +160,16 @@ export default function ChatPage() {
         });
 
         socket.on('receive-message', (data: Message) => {
+            console.log('📨 Received message:', data);
+            console.log('Current user:', username, 'Selected user:', selectedUser);
 
             setMessages(prev => {
                 const exists = prev.some(m => m.id === data.id);
                 if (!exists) {
+                    console.log('✅ Adding new message to state');
                     return [...prev, data];
                 } else {
+                    console.log('⚠️ Message already exists, skipping');
                     return prev;
                 }
             });
@@ -173,7 +178,7 @@ export default function ChatPage() {
             setConversations(prev => prev.map(conv => {
                 const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
                 const hasBothParticipants = participantUsernames.includes(data.from) && participantUsernames.includes(data.to);
-                
+
                 if (hasBothParticipants) {
                     return {
                         ...conv,
@@ -217,7 +222,7 @@ export default function ChatPage() {
             setMessages(prev => prev.map(m =>
                 m.id === messageId ? { ...m, content, isEdited: true, editedAt } : m
             ));
-            
+
             // Update conversation's last message if it was the edited message
             setConversations(prev => prev.map(conv => {
                 if (conv.lastMessage?.id === messageId) {
@@ -239,7 +244,7 @@ export default function ChatPage() {
             setMessages(prev => prev.map(m =>
                 m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m
             ));
-            
+
             // Update conversation's last message if it was the deleted message
             setConversations(prev => prev.map(conv => {
                 if (conv.lastMessage?.id === id) {
@@ -629,6 +634,15 @@ export default function ChatPage() {
         };
     }, [username, router, currentUserId, loadConversations]);
 
+    // Auto-focus input when a user is selected
+    useEffect(() => {
+        if (selectedUser) {
+            setAutoFocusInput(true);
+            // Reset autoFocus after a short delay to trigger the effect
+            setTimeout(() => setAutoFocusInput(false), 100);
+        }
+    }, [selectedUser]);
+
     const saveFailedMessageLocal = (msg: Message) => {
         try {
             storageHelpers.saveFailedMessage({
@@ -783,12 +797,12 @@ export default function ChatPage() {
                                 if (ack && ack.status === 'ok') {
                                     setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'sent' } : m));
                                     removeFailedMessage(msg.id!);
-                                    
+
                                     // Update conversation's last message
                                     setConversations(prev => prev.map(conv => {
                                         const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
                                         const hasBothParticipants = participantUsernames.includes(msg.to) && participantUsernames.includes(msg.from);
-                                        
+
                                         if (hasBothParticipants) {
                                             return {
                                                 ...conv,
@@ -804,7 +818,7 @@ export default function ChatPage() {
                                         }
                                         return conv;
                                     }));
-                                    
+
                                     resolve(true);
                                 } else {
                                     setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'failed' } : m));
@@ -833,12 +847,12 @@ export default function ChatPage() {
             if (ack && ack.status === 'ok') {
                 setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'sent' } : m));
                 removeFailedMessage(msg.id!);
-                
+
                 // Update conversation's last message
                 setConversations(prev => prev.map(conv => {
                     const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
                     const hasBothParticipants = participantUsernames.includes(msg.to) && participantUsernames.includes(msg.from);
-                    
+
                     if (hasBothParticipants) {
                         return {
                             ...conv,
@@ -910,7 +924,7 @@ export default function ChatPage() {
         setConversations(prev => prev.map(conv => {
             const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
             const hasBothParticipants = participantUsernames.includes(selectedUser) && participantUsernames.includes(username);
-            
+
             if (hasBothParticipants) {
                 return {
                     ...conv,
@@ -1067,7 +1081,7 @@ export default function ChatPage() {
 
         const tempContent = inputMessage.trim();
         const originalMessage = editingMessage.message;
-        
+
         // Clear editing state immediately for better UX
         setEditingMessage(null);
         setInputMessage('');
@@ -1448,13 +1462,80 @@ export default function ChatPage() {
                                     onSendMessage={handleSendMessage}
                                     onSendVoice={handleSendVoice}
                                     onUpdateMessage={handleUpdateMessage}
-                                    // onEditMessage={() => { }}
                                     replyingTo={replyingTo}
                                     editingMessage={editingMessage}
                                     onCancelReply={() => setReplyingTo(null)}
                                     onCancelEdit={() => {
                                         setEditingMessage(null);
-                                        setInputMessage('');
+                                    }}
+                                    autoFocus={autoFocusInput}
+                                />
+
+                                <CallOverlay
+                                    username={username}
+                                    remoteUser={call.callParticipant}
+                                    isCallActive={call.isCallActive}
+                                    onEndCall={call.endCall}
+                                    callNotification={callNotification}
+                                    remoteStream={call.remoteStream}
+                                    remoteVideoRef={remoteVideoRef}
+                                    isAudioOnly={call.isAudioOnly}
+                                    localStream={call.localStream}
+                                    callTimer={call.callTimer}
+                                    connectionState={call.connectionState}
+                                    isMuted={call.isMuted}
+                                    setIsMuted={call.setIsMuted}
+                                    onClearData={handleClearData}
+                                />
+
+                                {call.incomingCall && (
+                                    <IncomingCallModal
+                                        from={call.incomingCall.from}
+                                        isAudioOnly={call.incomingCall.isAudioOnly}
+                                        onAccept={call.acceptCall}
+                                        onReject={call.rejectCall}
+                                    />
+                                )}
+
+                                {callNotification && (
+                                    <CallNotification
+                                        message={callNotification.message}
+                                        type={callNotification.type === 'start' ? 'start' : 'end'}
+                                        onClose={() => setCallNotification(null)}
+                                    />
+                                )}
+
+                                <AuthOverlay
+                                    username={username}
+                                    onUsernameCreated={(u, userId) => {
+                                        setUsername(u);
+
+                                        setTimeout(async () => {
+                                            const cookies = getClientCookies();
+                                            const userData = SecureSession.getUser();
+                                            const finalUserId = userId || (cookies['user-id'] as string) || userData.userId;
+
+                                            if (finalUserId) {
+                                                try {
+                                                    await loadConversations(finalUserId);
+                                                } catch (error) {
+                                                }
+
+                                                const failed = storageHelpers.getFailedMessages() || [];
+                                                if (failed.length > 0) {
+                                                    setMessages(prev => {
+                                                        const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
+                                                        return [...prev, ...newMessages];
+                                                    });
+                                                }
+                                            }
+                                        }, 100);
+
+                                        socketRef.current?.emit('join-user', u);
+                                    }}
+                                    onClearData={() => {
+                                        SecureSession.clearSession();
+                                        setUsername('');
                                     }}
                                 />
                             </Fragment>
@@ -1462,82 +1543,8 @@ export default function ChatPage() {
                             <EmptyChatState />
                         )}
                     </main>
-
-                    <CallOverlay
-                        username={username}
-                        remoteUser={call.callParticipant}
-                        isCallActive={call.isCallActive}
-                        onEndCall={call.endCall}
-                        callNotification={callNotification}
-                        remoteStream={call.remoteStream}
-                        remoteVideoRef={remoteVideoRef}
-                        isAudioOnly={call.isAudioOnly}
-                        localStream={call.localStream}
-                        callTimer={call.callTimer}
-                        connectionState={call.connectionState}
-                        isMuted={call.isMuted}
-                        setIsMuted={call.setIsMuted}
-                        onClearData={handleClearData}
-                    />
-
-                    {call.incomingCall && (
-                        <IncomingCallModal
-                            from={call.incomingCall.from}
-                            isAudioOnly={call.incomingCall.isAudioOnly}
-                            onAccept={call.acceptCall}
-                            onReject={call.rejectCall}
-                        />
-                    )}
-
-                    {callNotification && (
-                        <CallNotification
-                            message={callNotification.message}
-                            type={callNotification.type === 'start' ? 'start' : 'end'}
-                            onClose={() => setCallNotification(null)}
-                        />
-                    )}
-
-                    <AuthOverlay
-                        username={username}
-                        onUsernameCreated={(u, userId) => {
-                            setUsername(u);
-
-                            setTimeout(async () => {
-                                const cookies = getClientCookies();
-                                const userData = SecureSession.getUser();
-                                const finalUserId = userId || (cookies['user-id'] as string) || userData.userId;
-
-                                if (finalUserId) {
-                                    try {
-                                        await loadConversations(finalUserId);
-                                    } catch (error) {
-                                    }
-
-                                    const failed = storageHelpers.getFailedMessages() || [];
-                                    if (failed.length > 0) {
-                                        setMessages(prev => {
-                                            const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
-                                            return [...prev, ...newMessages];
-                                        });
-                                    }
-                                }
-                            }, 100);
-
-                            socketRef.current?.emit('join-user', u);
-                        }}
-                        onClearData={() => {
-                            SecureSession.clearSession();
-                            setUsername('');
-                        }}
-                    />
-
-                    <EditProfileModal
-                        isOpen={showEditProfile}
-                        onClose={() => setShowEditProfile(false)}
-                        onSuccess={handleProfileUpdated}
-                    />
                 </div>
             )}
         </div>
-    );
+    )
 }

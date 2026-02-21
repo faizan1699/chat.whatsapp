@@ -40,9 +40,10 @@ function initializeSocketIO(res: any) {
             const online = Object.fromEntries(
               Array.from(userSockets.entries()).map(([u, id]) => [u, id])
             );
-            if (io) {
-              io.emit('joined', online);
-            }
+            io?.emit('joined', online);
+            console.log('User joined:', username, 'Socket ID:', socket.id, 'Total users:', userSockets.size);
+          } else {
+            console.log('Join-user called with empty username');
           }
         });
 
@@ -74,14 +75,33 @@ function initializeSocketIO(res: any) {
               return;
             }
 
+            const senderId = userSockets.get(msg.from);
             const targetId = userSockets.get(msg.to);
+            
+            console.log('Looking for sockets - From:', msg.from, 'To:', msg.to);
+            console.log('Socket IDs - Sender:', senderId, 'Target:', targetId);
+            console.log('All connected users:', Array.from(userSockets.entries()));
+            
             if (targetId && io) {
               io.to(targetId).emit('receive-message', {
                 ...message,
                 id: message.id,
                 status: 'delivered'
               });
-              console.log('Message broadcasted to:', msg.to);
+              console.log('✅ Message broadcasted to recipient:', msg.to);
+            } else {
+              console.log('❌ Could not find socket for recipient:', msg.to);
+            }
+            
+            if (senderId && io) {
+              io.to(senderId).emit('receive-message', {
+                ...message,
+                id: message.id,
+                status: 'sent'
+              });
+              console.log('✅ Message broadcasted to sender:', msg.from);
+            } else {
+              console.log('❌ Could not find socket for sender:', msg.from);
             }
 
             if (typeof ack === 'function') ack({ status: 'ok', messageId: message.id });
