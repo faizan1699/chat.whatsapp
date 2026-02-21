@@ -89,7 +89,6 @@ export default function ChatPage() {
     const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
     const [showEditProfile, setShowEditProfile] = useState(false);
 
-    // Clear highlighted message after animation
     useEffect(() => {
         if (highlightedMessageId) {
             const timer = setTimeout(() => {
