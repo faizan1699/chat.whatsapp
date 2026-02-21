@@ -36,7 +36,7 @@ interface User {
 }
 
 export default function ChatPage() {
-    
+
     const router = useRouter();
     const [username, setUsername] = useState<string>('');
     const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -190,9 +190,9 @@ export default function ChatPage() {
             ));
         });
 
-        socket.on('message-edited', ({ id, message }: { id: string; message: string }) => {
+        socket.on('message-edited', ({ messageId, content, from, editedAt }: { messageId: string; content: string; from: string; to: string; editedAt: string }) => {
             setMessages(prev => prev.map(m =>
-                m.id === id ? { ...m, message, isEdited: true } : m
+                m.id === messageId ? { ...m, content, isEdited: true, editedAt } : m
             ));
         });
 
@@ -293,7 +293,7 @@ export default function ChatPage() {
     }, [selectedUser, isWindowFocused, messages.length]);
 
 
-   useEffect(() => {
+    useEffect(() => {
         document.body.classList.add('no-scroll');
         return () => {
             document.body.classList.remove('no-scroll');
@@ -542,7 +542,7 @@ export default function ChatPage() {
                         router.push('/login');
                     }
                 }
-            } catch (error) {}
+            } catch (error) { }
         };
 
         const handleStorageChange = (e: StorageEvent) => {
@@ -572,7 +572,7 @@ export default function ChatPage() {
                 lastRetryTime: new Date(),
                 status: 'failed'
             });
-        } catch (error) {}
+        } catch (error) { }
     };
 
     const retryFailedMessages = () => {
@@ -644,7 +644,7 @@ export default function ChatPage() {
                                 setMessages(prev => prev.map(m =>
                                     m.id === msg.id ? { ...m, status: 'sent' } : m
                                 ));
-                            } else {}
+                            } else { }
                         } else { }
                     } catch (error) {
                         msg.retryCount = (msg.retryCount || 0) + 1;
@@ -889,37 +889,59 @@ export default function ChatPage() {
         if (!editingMessage || !inputMessage.trim() || !selectedUser) return;
 
         const tempContent = inputMessage.trim();
+        const originalMessage = editingMessage.message;
+        
+        // Clear editing state immediately for better UX
         setEditingMessage(null);
         setInputMessage('');
 
+        // Optimistic update - update UI immediately
+        setMessages(prev => prev.map(msg =>
+            msg.id === editingMessage.id
+                ? { ...msg, message: tempContent, isEdited: true, editedAt: new Date().toISOString() }
+                : msg
+        ));
+
         try {
-            const response = await fetch('/api/messages', {
+            const response = await fetch(`/api/messages/${editingMessage.id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    messageId: editingMessage.id,
                     content: tempContent,
                     from: username,
                     to: selectedUser
                 }),
             });
 
-            if (!response.ok) {
-                throw new Error('Failed to update message');
+            if (response.ok) {
+                const updatedMsg = await response.json();
+                // Update with server response
+                setMessages(prev => prev.map(msg =>
+                    msg.id === editingMessage.id
+                        ? { ...msg, ...updatedMsg.data }
+                        : msg
+                ));
+            } else {
+                // Revert on error
+                setMessages(prev => prev.map(msg =>
+                    msg.id === editingMessage.id
+                        ? { ...msg, message: originalMessage }
+                        : msg
+                ));
+                setEditingMessage(editingMessage);
+                setInputMessage(tempContent);
             }
 
-            const updatedMsg = await response.json();
-
+        } catch (error: any) {
+            console.error('Failed to update message:', error);
+            // Revert on error
             setMessages(prev => prev.map(msg =>
                 msg.id === editingMessage.id
-                    ? { ...msg, message: tempContent, isEdited: true }
+                    ? { ...msg, message: originalMessage }
                     : msg
             ));
-
-        } catch (error: any) {
-
             setEditingMessage(editingMessage);
             setInputMessage(tempContent);
         }

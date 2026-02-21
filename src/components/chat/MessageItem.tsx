@@ -382,7 +382,7 @@ export default function MessageItem({
                         </span>
                         {message.isEdited && (
                             <span className="text-[10px] text-[#667781] italic">
-                                (edited)
+                                {message.editedAt && `Edited at ${formatTimestamp(message.editedAt)}` || '(edited)'}
                             </span>
                         )}
 

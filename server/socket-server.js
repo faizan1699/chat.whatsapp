@@ -65,8 +65,17 @@ io.on('connection', (socket) => {
   });
 
   socket.on('message-edited', (data) => {
-    const targetId = userSockets.get(data.to);
-    if (targetId) io.to(targetId).emit('message-edited', data);
+    const { messageId, content, to, from } = data;
+    const targetId = userSockets.get(to);
+    if (targetId) {
+      io.to(targetId).emit('message-edited', {
+        messageId,
+        content,
+        from,
+        to,
+        editedAt: new Date().toISOString()
+      });
+    }
   });
 
   socket.on('delete-message', (data) => {
