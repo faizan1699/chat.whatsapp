@@ -468,12 +468,15 @@ export default function ChatPage() {
                     setIsConversationsLoading(true);
 
                     // Load conversations asynchronously to avoid blocking
+                    // Load conversations asynchronously to avoid blocking
                     loadConversations(storedSession?.user?.id || '').then(() => {
                         setIsConversationsLoading(false);
                     }).catch((error: any) => {
                         setIsConversationsLoading(false);
                     });
 
+                    // Load failed messages asynchronously
+                    setTimeout(() => {
                     // Load failed messages asynchronously
                     setTimeout(() => {
                         const failed = storageHelpers.getFailedMessages() || [];
@@ -483,6 +486,7 @@ export default function ChatPage() {
                                 return [...prev, ...newMessages];
                             });
                         }
+                    }, 100);
                     }, 100);
                 } else {
                     setIsLoading(false);
