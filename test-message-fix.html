@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Message Fix</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        .error { color: red; }
+        .success { color: green; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Message API Debug Test</h1>
+    
+    <div class="section">
+        <h2>1. Check Authentication Status</h2>
+        <button onclick="checkAuth()">Check Auth</button>
+        <div id="auth-output"></div>
+    </div>
+    
+    <div class="section">
+        <h2>2. Test Messages API</h2>
+        <button onclick="testMessagesAPI()">Send Test Message</button>
+        <div id="messages-output"></div>
+    </div>
+    
+    <div class="section">
+        <h2>3. Manual Login (if needed)</h2>
+        <p>If not authenticated, <a href="/login" target="_blank">login here</a> first</p>
+    </div>
+
+    <script>
+        // Add frontendAuth simulation if not available
+        if (typeof window.frontendAuth === 'undefined') {
+            window.frontendAuth = {
+                getSession: function() {
+                    try {
+                        const accessToken = localStorage.getItem('session_token');
+                        const refreshToken = localStorage.getItem('refresh_token');
+                        const userData = localStorage.getItem('user_data');
+                        
+                        if (!accessToken || !refreshToken || !userData) {
+                            return null;
+                        }
+                        
+                        return {
+                            accessToken,
+                            refreshToken,
+                            user: JSON.parse(userData)
+                        };
+                    } catch (error) {
+                        console.error('Error parsing stored session:', error);
+                        return null;
+                    }
+                },
+                
+                refreshSession: async function() {
+                    const refreshToken = this.getRefreshToken();
+                    if (!refreshToken) return false;
+
+                    try {
+                        const response = await fetch('/api/auth/refresh', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ refreshToken }),
+                        });
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.setSession(data.accessToken, data.refreshToken || refreshToken, data.user);
+                            return true;
+                        }
+                    } catch (error) {
+                        console.error('Session refresh failed:', error);
+                    }
+
+                    return false;
+                },
+                
+                setSession: function(accessToken, refreshToken, user) {
+                    localStorage.setItem('session_token', accessToken);
+                    localStorage.setItem('refresh_token', refreshToken);
+                    localStorage.setItem('user_data', JSON.stringify(user));
+                },
+                
+                getAccessToken: function() {
+                    return localStorage.getItem('session_token');
+                },
+                
+                getRefreshToken: function() {
+                    return localStorage.getItem('refresh_token');
+                }
+            };
+        }
+
+        function checkAuth() {
+            const output = document.getElementById('auth-output');
+            const session = window.frontendAuth.getSession();
+            
+            if (session) {
+                output.innerHTML = `
+                    <div class="success">✅ Authenticated</div>
+                    <p><strong>User ID:</strong> ${session.user.id}</p>
+                    <p><strong>Username:</strong> ${session.user.username}</p>
+                    <p><strong>Email:</strong> ${session.user.email || 'N/A'}</p>
+                    <p><strong>Access Token:</strong> ${session.accessToken ? 'Present' : 'Missing'}</p>
+                    <p><strong>Refresh Token:</strong> ${session.refreshToken ? 'Present' : 'Missing'}</p>
+                `;
+            } else {
+                output.innerHTML = `
+                    <div class="error">❌ Not Authenticated</div>
+                    <p>Please <a href="/login" target="_blank">log in</a> first</p>
+                `;
+            }
+        }
+
+        async function testMessagesAPI() {
+            const output = document.getElementById('messages-output');
+            const session = window.frontendAuth.getSession();
+            
+            if (!session) {
+                output.innerHTML = '<div class="error">❌ Please authenticate first</div>';
+                return;
+            }
+            
+            output.innerHTML = '<p>Testing...</p>';
+            
+            try {
+                const response = await fetch('/api/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.accessToken}`
+                    },
+                    body: JSON.stringify({
+                        conversationId: 'test-' + Date.now(),
+                        senderId: session.user.id,
+                        content: 'Test message at ' + new Date().toLocaleTimeString(),
+                        to: 'test-user',
+                        from: session.user.username
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    output.innerHTML = `
+                        <div class="success">✅ Message sent successfully!</div>
+                        <pre>${JSON.stringify(result, null, 2)}</pre>
+                    `;
+                } else {
+                    // If 401, try refresh
+                    if (response.status === 401) {
+                        output.innerHTML = '<p>Session expired, attempting refresh...</p>';
+                        
+                        const refreshSuccess = await window.frontendAuth.refreshSession();
+                        if (refreshSuccess) {
+                            // Retry with new token
+                            const newSession = window.frontendAuth.getSession();
+                            const retryResponse = await fetch('/api/messages', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${newSession.accessToken}`
+                                },
+                                body: JSON.stringify({
+                                    conversationId: 'test-' + Date.now(),
+                                    senderId: newSession.user.id,
+                                    content: 'Test message after refresh',
+                                    to: 'test-user',
+                                    from: newSession.user.username
+                                })
+                            });
+                            
+                            const retryResult = await retryResponse.json();
+                            
+                            if (retryResponse.ok) {
+                                output.innerHTML = `
+                                    <div class="success">✅ Message sent after refresh!</div>
+                                    <pre>${JSON.stringify(retryResult, null, 2)}</pre>
+                                `;
+                            } else {
+                                output.innerHTML = `
+                                    <div class="error">❌ Still failed after refresh</div>
+                                    <pre>${JSON.stringify(retryResult, null, 2)}</pre>
+                                `;
+                            }
+                        } else {
+                            output.innerHTML = `
+                                <div class="error">❌ Session refresh failed</div>
+                                <p>Please <a href="/login" target="_blank">log in again</a></p>
+                            `;
+                        }
+                    } else {
+                        output.innerHTML = `
+                            <div class="error">❌ Error: ${response.status}</div>
+                            <pre>${JSON.stringify(result, null, 2)}</pre>
+                        `;
+                    }
+                }
+            } catch (error) {
+                output.innerHTML = `
+                    <div class="error">❌ Network Error</div>
+                    <pre>${error.message}</pre>
+                `;
+            }
+        }
+        
+        // Auto-check auth on page load
+        window.onload = function() {
+            checkAuth();
+        };
+    </script>
+</body>
+</html>
