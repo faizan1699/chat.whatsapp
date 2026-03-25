@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
         isVoiceMessage: message.is_voice_message,
         audioUrl: message.audio_url,
         audioDuration: message.audio_duration,
-        sender: { username: 'Unknown' } // Simplified for now
+        sender: { username: 'Unknown' }
       },
       message: 'Message sent successfully'
     });

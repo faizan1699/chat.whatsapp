@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Server as NetServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { createClient } from '@supabase/supabase-js';
+
 interface ExtendedSocket extends Socket {
   username?: string;
 }

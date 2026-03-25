@@ -9,15 +9,12 @@
 
 const http = require('http');
 const { Server } = require('socket.io');
-const { createClient } = require('@supabase/supabase-js');
+const { PrismaClient } = require('@prisma/client');
 
 const PORT = process.env.SOCKET_PORT || 3001;
 const NEXT_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+const prisma = new PrismaClient();
 
 const server = http.createServer();
 const io = new Server(server, {
@@ -61,38 +58,47 @@ io.on('connection', (socket) => {
 
   socket.on('send-message', async (msg, ack) => {
     try {
-      // Store message in database
-      const { data: message, error } = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: msg.conversationId,
-          sender_id: msg.from,
+      // Store message in database using Prisma
+      const message = await prisma.message.create({
+        data: {
+          conversationId: msg.conversationId,
+          senderId: msg.from,
           content: msg.message,
-          timestamp: new Date().toISOString(),
           status: 'sent',
-          is_edited: msg.isEdited || false,
-          is_voice_message: msg.isVoiceMessage || false,
-          audio_url: msg.audioUrl || null,
-          audio_duration: msg.audioDuration || null,
-          reply_to: msg.replyTo ? JSON.stringify(msg.replyTo) : null,
-          is_pinned: msg.isPinned || false
-        })
-        .select()
-        .single();
+          isEdited: msg.isEdited || false,
+          isVoiceMessage: msg.isVoiceMessage || false,
+          audioUrl: msg.audioUrl || null,
+          audioDuration: msg.audioDuration || null,
+          replyTo: msg.replyTo ? JSON.stringify(msg.replyTo) : null,
+          isPinned: msg.isPinned || false
+        },
+        include: {
+          sender: {
+            select: {
+              username: true
+            }
+          }
+        }
+      });
 
-      if (error) {
-        console.error('Error saving message:', error);
-        if (typeof ack === 'function') ack({ status: 'error', error: error.message });
-        return;
-      }
-
-      // Broadcast to all connected clients
+      // Broadcast to target user
       const targetId = userSockets.get(msg.to);
       if (targetId) {
         io.to(targetId).emit('receive-message', {
-          ...message,
           id: message.id,
-          status: 'delivered'
+          conversationId: message.conversationId,
+          senderId: message.senderId,
+          from: message.sender.username,
+          to: msg.to,
+          message: message.content,
+          timestamp: message.timestamp,
+          status: 'delivered',
+          isVoiceMessage: message.isVoiceMessage,
+          audioUrl: message.audioUrl,
+          audioDuration: message.audioDuration,
+          isEdited: message.isEdited,
+          isDeleted: message.isDeleted,
+          isPinned: message.isPinned
         });
       }
 
@@ -111,23 +117,19 @@ io.on('connection', (socket) => {
   socket.on('message-edited', async (data) => {
     const { messageId, content, to, from } = data;
     try {
-      // Update message in database
-      const { error } = await supabase
-        .from('messages')
-        .update({
+      // Update message in database using Prisma
+      await prisma.message.update({
+        where: {
+          id: messageId,
+          senderId: from // Only sender can edit their messages
+        },
+        data: {
           content: content,
-          is_edited: true,
-          edited_at: new Date().toISOString()
-        })
-        .eq('id', messageId)
-        .eq('sender_id', from); // Only sender can edit their messages
+          isEdited: true
+        }
+      });
 
-      if (error) {
-        console.error('Error updating edited message:', error);
-        return;
-      }
-
-      // Broadcast to all connected clients
+      // Broadcast to target user
       const targetId = userSockets.get(to);
       if (targetId) {
         io.to(targetId).emit('message-edited', {

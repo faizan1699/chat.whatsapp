@@ -28,7 +28,7 @@ export default function RootLayout({
         <ReduxProvider>
           {children}
         </ReduxProvider>
-        <CookieConsentBanner />
+        {/* <CookieConsentBanner /> */}
         <CustomToaster />
       </body>
     </html>
