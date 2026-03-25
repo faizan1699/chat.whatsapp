@@ -9,9 +9,12 @@
 
 const http = require('http');
 const { Server } = require('socket.io');
+const { PrismaClient } = require('@prisma/client');
 
 const PORT = process.env.SOCKET_PORT || 3001;
 const NEXT_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+
+const prisma = new PrismaClient();
 
 const server = http.createServer();
 const io = new Server(server, {
@@ -53,10 +56,57 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('send-message', (msg, ack) => {
-    const targetId = userSockets.get(msg.to);
-    if (targetId) io.to(targetId).emit('receive-message', msg);
-    if (typeof ack === 'function') ack({ status: 'ok' });
+  socket.on('send-message', async (msg, ack) => {
+    try {
+      // Store message in database using Prisma
+      const message = await prisma.message.create({
+        data: {
+          conversationId: msg.conversationId,
+          senderId: msg.from,
+          content: msg.message,
+          status: 'sent',
+          isEdited: msg.isEdited || false,
+          isVoiceMessage: msg.isVoiceMessage || false,
+          audioUrl: msg.audioUrl || null,
+          audioDuration: msg.audioDuration || null,
+          replyTo: msg.replyTo ? JSON.stringify(msg.replyTo) : null,
+          isPinned: msg.isPinned || false
+        },
+        include: {
+          sender: {
+            select: {
+              username: true
+            }
+          }
+        }
+      });
+
+      // Broadcast to target user
+      const targetId = userSockets.get(msg.to);
+      if (targetId) {
+        io.to(targetId).emit('receive-message', {
+          id: message.id,
+          conversationId: message.conversationId,
+          senderId: message.senderId,
+          from: message.sender.username,
+          to: msg.to,
+          message: message.content,
+          timestamp: message.timestamp,
+          status: 'delivered',
+          isVoiceMessage: message.isVoiceMessage,
+          audioUrl: message.audioUrl,
+          audioDuration: message.audioDuration,
+          isEdited: message.isEdited,
+          isDeleted: message.isDeleted,
+          isPinned: message.isPinned
+        });
+      }
+
+      if (typeof ack === 'function') ack({ status: 'ok', messageId: message.id });
+    } catch (error) {
+      console.error('Socket send-message error:', error);
+      if (typeof ack === 'function') ack({ status: 'error', error: error.message });
+    }
   });
 
   socket.on('mark-read', ({ messageId, to }) => {
@@ -64,9 +114,35 @@ io.on('connection', (socket) => {
     if (targetId) io.to(targetId).emit('message-status-update', { messageId, status: 'read' });
   });
 
-  socket.on('message-edited', (data) => {
-    const targetId = userSockets.get(data.to);
-    if (targetId) io.to(targetId).emit('message-edited', data);
+  socket.on('message-edited', async (data) => {
+    const { messageId, content, to, from } = data;
+    try {
+      // Update message in database using Prisma
+      await prisma.message.update({
+        where: {
+          id: messageId,
+          senderId: from // Only sender can edit their messages
+        },
+        data: {
+          content: content,
+          isEdited: true
+        }
+      });
+
+      // Broadcast to target user
+      const targetId = userSockets.get(to);
+      if (targetId) {
+        io.to(targetId).emit('message-edited', {
+          messageId,
+          content,
+          from,
+          to,
+          editedAt: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error('Socket message-edited error:', error);
+    }
   });
 
   socket.on('delete-message', (data) => {

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Messages API</title>
+</head>
+<body>
+    <h1>Test Messages API</h1>
+    <button onclick="testAuth()">Test Authentication</button>
+    <button onclick="testMessagesAPI()">Test Messages API</button>
+    <div id="output"></div>
+
+    <script>
+        async function testAuth() {
+            const output = document.getElementById('output');
+            try {
+                // Check if we have session data
+                const accessToken = localStorage.getItem('session_token');
+                const userData = localStorage.getItem('user_data');
+                
+                output.innerHTML = `
+                    <h3>Authentication Status:</h3>
+                    <p>Access Token: ${accessToken ? 'Found' : 'Not found'}</p>
+                    <p>User Data: ${userData ? 'Found' : 'Not found'}</p>
+                    <pre>${userData || 'No user data'}</pre>
+                `;
+            } catch (error) {
+                output.innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+
+        async function testMessagesAPI() {
+            const output = document.getElementById('output');
+            const accessToken = localStorage.getItem('session_token');
+            
+            if (!accessToken) {
+                output.innerHTML = '<p style="color: red;">No access token found. Please authenticate first.</p>';
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:3000/api/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`
+                    },
+                    body: JSON.stringify({
+                        conversationId: 'test-conv',
+                        senderId: 'test-user',
+                        content: 'Test message from API test',
+                        to: 'test-recipient',
+                        from: 'test-sender'
+                    })
+                });
+
+                const result = await response.json();
+                
+                output.innerHTML = `
+                    <h3>Messages API Response:</h3>
+                    <p>Status: ${response.status}</p>
+                    <pre>${JSON.stringify(result, null, 2)}</pre>
+                `;
+            } catch (error) {
+                output.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

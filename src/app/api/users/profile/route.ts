@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth-server';
 import { supabaseAdmin } from '@/utils/supabase-server';
+import { withAuth } from '@/lib/auth-middleware';
 
 export async function GET(request: NextRequest) {
-  try {
-    const session = await getSession(request);
-    
-    if (!session?.userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    // Fetch user profile data
+  const authHandler = await withAuth(async (req: NextRequest, session: any) => {
     const { data: user, error } = await supabaseAdmin
       .from('users')
       .select('id, username, email, phone_number, avatar, created_at, updated_at')
@@ -50,28 +41,13 @@ export async function GET(request: NextRequest) {
       data: transformedUser,
       message: 'User profile fetched successfully'
     });
-
-  } catch (error) {
-    console.error('Error fetching user profile:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
+  });
+  return authHandler(request);
 }
 
 export async function PUT(request: NextRequest) {
-  try {
-    const session = await getSession(request);
-    
-    if (!session?.userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const body = await request.json();
+  const authHandler = await withAuth(async (req: NextRequest, session: any) => {
+    const body = await req.json();
     const { username, email, phoneNumber, avatar } = body;
 
     // Validate required fields
@@ -194,12 +170,6 @@ export async function PUT(request: NextRequest) {
       data: transformedUser,
       message: 'User profile updated successfully'
     });
-
-  } catch (error) {
-    console.error('Error updating user profile:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
+  });
+  return authHandler(request);
 }

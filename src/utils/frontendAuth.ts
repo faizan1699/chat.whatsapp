@@ -1,4 +1,3 @@
-// Frontend authentication utilities for localStorage-based session management
 
 export interface UserData {
     id: string;
@@ -14,7 +13,6 @@ export interface StoredSession {
 }
 
 export const frontendAuth = {
-    // Store session data in localStorage
     setSession(accessToken: string, refreshToken: string, user: UserData) {
         if (typeof window === 'undefined') return;
         
@@ -23,7 +21,6 @@ export const frontendAuth = {
         localStorage.setItem('user_data', JSON.stringify(user));
     },
 
-    // Get stored session data
     getSession(): StoredSession | null {
         if (typeof window === 'undefined') return null;
         
@@ -47,39 +44,30 @@ export const frontendAuth = {
         }
     },
 
-    // Get access token for API calls
     getAccessToken(): string | null {
         if (typeof window === 'undefined') return null;
         return localStorage.getItem('session_token');
     },
 
-    // Get refresh token
     getRefreshToken(): string | null {
         if (typeof window === 'undefined') return null;
         return localStorage.getItem('refresh_token');
     },
 
-    // Get user data
     getUser(): UserData | null {
         const session = this.getSession();
         return session?.user || null;
     },
 
-    // Clear session data (logout)
     clearSession() {
         if (typeof window === 'undefined') return;
-        
-        localStorage.removeItem('session_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user_data');
+        localStorage.clear();
     },
 
-    // Check if user is authenticated
     isAuthenticated(): boolean {
         return this.getSession() !== null;
     },
 
-    // Make authenticated API requests
     async authenticatedFetch(url: string, options: RequestInit = {}): Promise<Response> {
         const token = this.getAccessToken();
         
@@ -95,7 +83,6 @@ export const frontendAuth = {
         });
     },
 
-    // Refresh session using refresh token
     async refreshSession(): Promise<boolean> {
         const refreshToken = this.getRefreshToken();
         if (!refreshToken) return false;
@@ -118,7 +105,6 @@ export const frontendAuth = {
             console.error('Session refresh failed:', error);
         }
 
-        // If refresh fails, clear session
         this.clearSession();
         return false;
     },

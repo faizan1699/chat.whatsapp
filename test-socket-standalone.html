@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Socket Test - Standalone Server</title>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>Socket.IO Connection Test - Port 3001</h1>
+    <div id="status">Connecting...</div>
+    <div id="messages"></div>
+    <input type="text" id="messageInput" placeholder="Type a message">
+    <button onclick="sendMessage()">Send Message</button>
+    
+    <script>
+        const socket = io('http://localhost:3001');
+        
+        const status = document.getElementById('status');
+        const messages = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        
+        socket.on('connect', () => {
+            status.innerHTML = 'Connected: ' + socket.id;
+            console.log('Connected to socket server');
+            socket.emit('join-user', 'testuser');
+        });
+        
+        socket.on('disconnect', () => {
+            status.innerHTML = 'Disconnected';
+            console.log('Disconnected from socket server');
+        });
+        
+        socket.on('connect_error', (error) => {
+            status.innerHTML = 'Connection Error: ' + error.message;
+            console.error('Socket connection error:', error);
+        });
+        
+        socket.on('joined', (users) => {
+            console.log('Online users:', users);
+            const userDiv = document.createElement('div');
+            userDiv.textContent = 'Online users: ' + Object.keys(users).join(', ');
+            messages.appendChild(userDiv);
+        });
+        
+        socket.on('receive-message', (data) => {
+            console.log('Received message:', data);
+            const msg = document.createElement('div');
+            msg.textContent = `Message: ${data.message} from ${data.from} at ${new Date().toLocaleTimeString()}`;
+            messages.appendChild(msg);
+        });
+        
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (message) {
+                socket.emit('send-message', {
+                    from: 'testuser',
+                    to: 'testuser2',
+                    message: message,
+                    conversationId: 'test-conv'
+                });
+                messageInput.value = '';
+            }
+        }
+        
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>

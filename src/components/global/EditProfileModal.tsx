@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { X, User, Loader2, Lock, Mail, Phone } from 'lucide-react';
+import { X, User, Loader2, Lock, Mail, Phone, Eye, EyeOff } from 'lucide-react';
 
 const profileSchema = z.object({
     username: z.string().min(2, 'Username must be at least 2 characters'),
@@ -31,6 +31,11 @@ interface EditProfileModalProps {
 export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditProfileModalProps) {
     const [activeTab, setActiveTab] = useState<'profile' | 'password'>('profile');
     const [profileLoading, setProfileLoading] = useState(false);
+    const [showPasswords, setShowPasswords] = useState({
+        current: false,
+        new: false,
+        confirm: false
+    });
 
     const profileForm = useForm<ProfileFormData>({
         resolver: zodResolver(profileSchema),
@@ -235,9 +240,16 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                                     <Lock className="absolute left-3 top-2.5 text-[#667781]" size={18} />
                                     <input
                                         {...passwordForm.register('currentPassword')}
-                                        type="password"
-                                        className="w-full rounded-lg border border-[#e9edef] px-10 py-2.5 outline-none focus:border-[#00a884]"
+                                        type={showPasswords.current ? "text" : "password"}
+                                        className="w-full rounded-lg border border-[#e9edef] px-10 pr-10 py-2.5 outline-none focus:border-[#00a884]"
                                     />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPasswords(prev => ({ ...prev, current: !prev.current }))}
+                                        className="absolute right-3 top-2.5 text-[#667781] hover:text-[#00a884] transition-colors"
+                                    >
+                                        {showPasswords.current ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    </button>
                                 </div>
                                 {passwordForm.formState.errors.currentPassword && (
                                     <p className="text-xs text-red-500 mt-1">{passwordForm.formState.errors.currentPassword.message}</p>
@@ -249,9 +261,16 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                                     <Lock className="absolute left-3 top-2.5 text-[#667781]" size={18} />
                                     <input
                                         {...passwordForm.register('newPassword')}
-                                        type="password"
-                                        className="w-full rounded-lg border border-[#e9edef] px-10 py-2.5 outline-none focus:border-[#00a884]"
+                                        type={showPasswords.new ? "text" : "password"}
+                                        className="w-full rounded-lg border border-[#e9edef] px-10 pr-10 py-2.5 outline-none focus:border-[#00a884]"
                                     />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPasswords(prev => ({ ...prev, new: !prev.new }))}
+                                        className="absolute right-3 top-2.5 text-[#667781] hover:text-[#00a884] transition-colors"
+                                    >
+                                        {showPasswords.new ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    </button>
                                 </div>
                                 {passwordForm.formState.errors.newPassword && (
                                     <p className="text-xs text-red-500 mt-1">{passwordForm.formState.errors.newPassword.message}</p>
@@ -263,9 +282,16 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                                     <Lock className="absolute left-3 top-2.5 text-[#667781]" size={18} />
                                     <input
                                         {...passwordForm.register('confirmPassword')}
-                                        type="password"
-                                        className="w-full rounded-lg border border-[#e9edef] px-10 py-2.5 outline-none focus:border-[#00a884]"
+                                        type={showPasswords.confirm ? "text" : "password"}
+                                        className="w-full rounded-lg border border-[#e9edef] px-10 pr-10 py-2.5 outline-none focus:border-[#00a884]"
                                     />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPasswords(prev => ({ ...prev, confirm: !prev.confirm }))}
+                                        className="absolute right-3 top-2.5 text-[#667781] hover:text-[#00a884] transition-colors"
+                                    >
+                                        {showPasswords.confirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    </button>
                                 </div>
                                 {passwordForm.formState.errors.confirmPassword && (
                                     <p className="text-xs text-red-500 mt-1">{passwordForm.formState.errors.confirmPassword.message}</p>

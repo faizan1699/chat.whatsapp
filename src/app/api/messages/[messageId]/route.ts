@@ -32,11 +32,12 @@ export async function PUT(
 
     if (content !== undefined) {
       updateData.content = content;
-      updateData.is_edited = true;
+      updateData.isEdited = true;
+      updateData.editedAt = new Date().toISOString();
     }
 
     if (isPinned !== undefined) {
-      updateData.is_pinned = isPinned;
+      updateData.isPinned = isPinned;
     }
 
     const { data: message, error } = await supabaseAdmin
@@ -95,9 +96,9 @@ export async function DELETE(
     // Mark message as deleted (messages table has no updated_at column)
     const { error } = await supabaseAdmin
       .from('messages')
-      .update({ is_deleted: true })
+      .update({ isDeleted: true })
       .eq('id', messageId)
-      .eq('sender_id', session.userId); // Only sender can delete their messages
+      .eq('sender_id', session.userId); // Only sender can delete their Messages
 
     if (error) {
       console.error('Database error deleting message:', error);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth-server';
 import { supabaseAdmin } from '@/utils/supabase-server';
 import { sanitizeText, validateMessageContent } from '@/lib/messageValidation';
+import { io } from 'socket.io-client';
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,7 +32,6 @@ export async function POST(request: NextRequest) {
 
     const safeContent = isVoice ? '' : sanitizeText(content ?? '');
 
-    // Insert message into database (messages table uses 'timestamp', not 'created_at')
     const { data: message, error } = await supabaseAdmin
       .from('messages')
       .insert({
@@ -42,7 +42,6 @@ export async function POST(request: NextRequest) {
         audio_url: audioUrl || null,
         audio_duration: audioDuration || null,
         status: 'sent'
-        // timestamp defaults to NOW() in schema
       })
       .select(`
         id,
@@ -79,7 +78,7 @@ export async function POST(request: NextRequest) {
         isVoiceMessage: message.is_voice_message,
         audioUrl: message.audio_url,
         audioDuration: message.audio_duration,
-        sender: { username: 'Unknown' } // Simplified for now
+        sender: { username: 'Unknown' }
       },
       message: 'Message sent successfully'
     });

@@ -26,10 +26,24 @@ export const useMessageApi = () => {
     console.log('🔐 Getting auth headers...');
     const session = frontendAuth.getSession();
     console.log('📋 Session found:', !!session);
+    
     if (!session?.accessToken) {
       console.error('❌ No access token found in session');
-      throw new Error('No access token found');
+      
+      // Try to get from cookies as fallback
+      const cookies = getClientCookies();
+      const accessToken = cookies['access_token'];
+      if (accessToken) {
+        console.log('✅ Found access token in cookies');
+        return {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        };
+      }
+      
+      throw new Error('No access token found. Please log in again.');
     }
+    
     const headers = {
       'Authorization': `Bearer ${session.accessToken}`,
       'Content-Type': 'application/json'
@@ -136,7 +150,10 @@ export const useMessageApi = () => {
 
       const userId = getCurrentUserId();
       console.log('📋 User ID:', userId);
-      if (!userId) throw new Error('User not authenticated');
+      if (!userId) {
+        console.error('❌ No user ID found - user not authenticated');
+        throw new Error('User not authenticated. Please log in again.');
+      }
 
       const currentConversation = await getOrCreateConversation(
         conversations,
@@ -144,22 +161,54 @@ export const useMessageApi = () => {
         userId
       );
 
-      const response = await axios.post('/api/messages', {
-        conversationId: currentConversation.id,
-        senderId: userId,
-        content,
-        to: selectedUser,
-        from: username,
-        replyTo: replyingTo?.id || null
-      }, {
-        headers: getAuthHeaders()
-      });
+      // Try to send message with auth headers
+      let response;
+      try {
+        response = await axios.post('/api/messages', {
+          conversationId: currentConversation.id,
+          senderId: userId,
+          content,
+          to: selectedUser,
+          from: username,
+          replyTo: replyingTo?.id || null
+        }, {
+          headers: getAuthHeaders()
+        });
+      } catch (err: any) {
+        // If 401, try to refresh session
+        if (err.response?.status === 401) {
+          console.log('🔄 Session expired, attempting refresh...');
+          
+          // Try to refresh using frontendAuth
+          const refreshSuccess = await frontendAuth.refreshSession();
+          if (refreshSuccess) {
+            console.log('✅ Session refreshed, retrying message send...');
+            response = await axios.post('/api/messages', {
+              conversationId: currentConversation.id,
+              senderId: userId,
+              content,
+              to: selectedUser,
+              from: username,
+              replyTo: replyingTo?.id || null
+            }, {
+              headers: getAuthHeaders()
+            });
+          } else {
+            console.error('❌ Session refresh failed');
+            throw new Error('Session expired. Please log in again.');
+          }
+        } else {
+          throw err;
+        }
+      }
 
       setLoading(false);
       return response.data;
     } catch (err: any) {
       setLoading(false);
-      setError(err.message || 'Failed to send message');
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to send message';
+      setError(errorMessage);
+      console.error('❌ Send message error:', errorMessage);
       throw err;
     }
   }, [getCurrentUserId, getOrCreateConversation, getAuthHeaders]);

@@ -33,4 +33,6 @@ export interface Message {
     // Additional properties for MessageList compatibility
     content?: string;
     reactions?: Record<string, string[]>;
+    editedAt?: string;
+    createdAt?: string;
 }

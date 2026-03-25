@@ -191,7 +191,7 @@ export default function UserAgreementPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <Phone className="text-emerald-600" size={20} />
-                    <span className="text-slate-700">+1 (555) 123-4567</span>
+                    <span className="text-slate-700">+92 (303) 8019169</span>
                   </div>
                 </div>
               </div>

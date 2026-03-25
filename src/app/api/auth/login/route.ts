@@ -40,12 +40,21 @@ export async function POST(req: NextRequest) {
 
         const user = users?.[0];
         if (!user) {
-            return NextResponse.json({ message: 'Invalid creden' , users : users }, { status: 401 });
+            return NextResponse.json({ message: 'Invalid credentials' , users : users }, { status: 401 });
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
-            return NextResponse.json({ message: 'Invalid creden' , users : users }, { status: 401 });
+            return NextResponse.json({ message: 'Invalid credentials' , users : users }, { status: 401 });
+        }
+
+        // Check if email is verified (only if user has email)
+        if (user.email && !user.email_verified) {
+            return NextResponse.json({ 
+                message: 'Please verify your email before logging in',
+                requiresEmailVerification: true,
+                email: user.email
+            }, { status: 403 });
         }
 
         // Create access token (1 hour)
@@ -77,9 +86,7 @@ export async function POST(req: NextRequest) {
         // Set cookies using NextResponse
         const isProduction = process.env.NODE_ENV === 'production';
 
-        const updateData: any = {
-            updatedAt: new Date().toISOString()
-        };
+        const updateData: any = {};
 
         if (termsAccepted !== undefined) {
             updateData.termsAccepted = termsAccepted;

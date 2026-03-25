@@ -8,6 +8,10 @@ import { frontendAuth } from '@/utils/frontendAuth';
 import { authToast } from '@/utils/toast';
 import { hasCookieAcceptance } from '@/utils/cookieConsent';
 import { conversationsManager } from '@/utils/conversationsManager';
+import EmailVerificationModal from '@/components/auth/EmailVerificationModal';
+import ForgotPasswordModal from '@/components/auth/ForgotPasswordModal';
+import EmailField from '@/components/auth/EmailField';
+import PasswordField from '@/components/auth/PasswordField';
 
 interface LoginFormData {
     identifier: string;
@@ -18,11 +22,16 @@ function LoginForm() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [showEmailVerification, setShowEmailVerification] = useState(false);
+    const [showForgotPassword, setShowForgotPassword] = useState(false);
+    const [pendingUserEmail, setPendingUserEmail] = useState('');
     const router = useRouter();
 
     const {
         register,
         handleSubmit,
+        watch,
+        setValue,
         formState: { errors },
     } = useForm<LoginFormData>();
 
@@ -64,6 +73,11 @@ function LoginForm() {
                 }
                                 
                 router.push('/chat');
+            } else if (responseData.requiresEmailVerification) {
+                // Handle email verification requirement
+                setPendingUserEmail(responseData.email);
+                setShowEmailVerification(true);
+                setError('');
             } else {
                 setError(responseData.message || 'Login failed');
                 authToast.loginError(responseData.message);
@@ -93,71 +107,28 @@ function LoginForm() {
                         <p className="text-sm text-gray-600">Sign in to continue to your account</p>
                     </div>
 
-                    <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Username or Email
-                            </label>
-                            <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <User className="h-5 w-5 text-gray-400" />
-                                </div>
-                                <input
-                                    id="identifier"
-                                    {...register('identifier', {
-                                        required: 'Username or email is required',
-                                    })}
-                                    type="text"
-                                    className={`block w-full pl-10 pr-3 py-3 border ${
-                                        errors.identifier ? 'border-red-300' : 'border-gray-300'
-                                    } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
-                                    placeholder="Enter your username or email"
-                                />
-                            </div>
-                            {errors.identifier && (
-                                <p className="mt-2 text-sm text-red-600">{errors.identifier.message}</p>
-                            )}
-                        </div>
+                    <form id="login-form" className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
+                        <EmailField
+                            value={watch('identifier') || ''}
+                            onChange={(value) => setValue('identifier', value)}
+                            placeholder="Enter your username or email"
+                            label="Username or Email"
+                            required
+                            disabled={loading}
+                            error={errors.identifier?.message}
+                        />
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Password
-                            </label>
-                            <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <Lock className="h-5 w-5 text-gray-400" />
-                                </div>
-                                <input
-                                    id="password"
-                                    {...register('password', {
-                                        required: 'Password is required',
-                                        minLength: {
-                                            value: 6,
-                                            message: 'Password must be at least 6 characters',
-                                        },
-                                    })}
-                                    type={showPassword ? 'text' : 'password'}
-                                    className={`block w-full pl-10 pr-10 py-3 border ${
-                                        errors.password ? 'border-red-300' : 'border-gray-300'
-                                    } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
-                                    placeholder="Enter your password"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                                >
-                                    {showPassword ? (
-                                        <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                                    ) : (
-                                        <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                                    )}
-                                </button>
-                            </div>
-                            {errors.password && (
-                                <p className="mt-2 text-sm text-red-600">{errors.password.message}</p>
-                            )}
-                        </div>
+                        <PasswordField
+                            value={watch('password') || ''}
+                            onChange={(value) => setValue('password', value)}
+                            placeholder="Enter your password"
+                            label="Password"
+                            required
+                            disabled={loading}
+                            error={errors.password?.message}
+                            showForgotPassword={true}
+                            onForgotPassword={() => setShowForgotPassword(true)}
+                        />
 
                         {error && (
                             <div className="bg-red-50 border border-red-200 rounded-lg p-3">
@@ -196,6 +167,28 @@ function LoginForm() {
                         🔒 Secured with HTTP-only cookies
                     </p>
                 </div>
+
+                {/* Email Verification Modal */}
+                <EmailVerificationModal
+                    isOpen={showEmailVerification}
+                    onClose={() => setShowEmailVerification(false)}
+                    email={pendingUserEmail}
+                    onSuccess={() => {
+                        setShowEmailVerification(false);
+                        // Re-attempt login after successful verification
+                        const form = document.getElementById('login-form') as HTMLFormElement;
+                        if (form) {
+                            form.requestSubmit();
+                        }
+                    }}
+                />
+
+                {/* Forgot Password Modal */}
+                <ForgotPasswordModal
+                    isOpen={showForgotPassword}
+                    onClose={() => setShowForgotPassword(false)}
+                    onBackToLogin={() => setShowForgotPassword(false)}
+                />
             </div>
         </div>
     );

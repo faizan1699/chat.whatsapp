@@ -301,7 +301,7 @@ export default function PrivacyPolicyPage() {
                 </p>
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
                   <p className="text-amber-800 text-sm">
-                    Parents or guardians who believe their child has provided personal information to NexChat should contact us immediately at privacy@nexchat.com.
+                    Parents or guardians who believe their child has provided personal information to NexChat should contact us immediately at faizanrasheed169@gmail.com.
                   </p>
                 </div>
               </div>
@@ -352,11 +352,11 @@ export default function PrivacyPolicyPage() {
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
                     <Mail className="text-emerald-600" size={20} />
-                    <span className="text-slate-700">privacy@nexchat.com</span>
+                    <span className="text-slate-700">faizanrasheed169@gmail.com</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <Phone className="text-emerald-600" size={20} />
-                    <span className="text-slate-700">+1 (555) 123-4567</span>
+                    <span className="text-slate-700">+92 (303) 8019169</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <Shield className="text-emerald-600" size={20} />

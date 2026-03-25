@@ -2,6 +2,7 @@ import './globals.css'
 import { Inter } from 'next/font/google'
 import { ReduxProvider } from '@/store/Provider'
 import CustomToaster from '@/components/global/CustomToast'
+import { CookieConsentBanner } from '@/components/global/CookieConsentBanner'
 
 const inter = Inter({ subsets: ['latin'] })
 
