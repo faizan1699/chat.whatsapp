@@ -10,10 +10,10 @@ interface ExtendedSocket extends Socket {
 let io: SocketIOServer | null = null;
 const userSockets = new Map();
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54321';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'dummy-key';
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 function initializeSocketIO(res: any) {
   if (!io) {
