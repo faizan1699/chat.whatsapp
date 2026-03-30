@@ -3,11 +3,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import MessageItem from './MessageItem';
 import DateSeparator from './DateSeparator';
+import StickyTimestamp from './StickyTimestamp';
+import { ChatSkeleton } from '../skeletons';
 import { Message, ReplyTo } from '@/types/message';
 
 interface MessageListProps {
     messages: Message[];
     username: string;
+    selectedUser: string;
+    isLoading?: boolean;
     onRetry: (msg: Message) => void;
     onReply: (msg: Message) => void;
     onDelete: (id: string, type: 'me' | 'everyone') => void;
@@ -17,11 +21,14 @@ interface MessageListProps {
     onHide?: (id: string) => void;
     onUnhide?: (id: string) => void;
     highlightedMessageId?: string | null;
+    onScrollToMessage?: (messageId: string) => void;
 }
 
 export default function MessageList({
     messages,
     username,
+    selectedUser,
+    isLoading = false,
     onRetry,
     onReply,
     onDelete,
@@ -30,7 +37,8 @@ export default function MessageList({
     onReact,
     onHide,
     onUnhide,
-    highlightedMessageId
+    highlightedMessageId,
+    onScrollToMessage
 }: MessageListProps) {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messageListRef = useRef<HTMLDivElement>(null);
@@ -66,13 +74,11 @@ export default function MessageList({
     };
 
     // Handle scroll events to detect user scrolling
-    const handleScroll = () => {
-        if (!messageListRef.current) return;
-        
-        const { scrollTop, scrollHeight, clientHeight } = messageListRef.current;
+    const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+        const container = e.currentTarget;
+        const { scrollTop, scrollHeight, clientHeight } = container;
         const isAtBottom = scrollHeight - scrollTop <= clientHeight + 50; // 50px threshold
         
-        // Enable auto-scroll if user is at bottom, disable if they scrolled up
         setAutoScroll(isAtBottom);
     };
 
@@ -82,6 +88,16 @@ export default function MessageList({
             scrollToBottom();
         }
     }, [messages, autoScroll]);
+
+    // Scroll to bottom on initial load when container is ready
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (messages.length > 0) {
+                scrollToBottom();
+            }
+        }, 100); // Small delay to ensure container is rendered
+        return () => clearTimeout(timer);
+    }, [messages.length]);
 
     // Scroll to highlighted message when it changes
     useEffect(() => {
@@ -132,20 +148,31 @@ export default function MessageList({
                 onUnhide={onUnhide}
                 isHighlighted={highlightedMessageId === msg.id}
                 highlightKey={highlightKey}
+                onScrollToMessage={onScrollToMessage}
             />
         );
     });
 
     return (
         <div className="relative flex-1 overflow-hidden">
-            <div ref={messageListRef} className="chat-bg-pattern absolute inset-0 z-0 opacity-10"></div>
-            <div 
-                className="relative z-10 flex h-full flex-col overflow-y-auto p-4 space-y-2"
-                onScroll={handleScroll}
-            >
-                {messagesWithSeparators}
-                <div ref={messagesEndRef} />
-            </div>
+            {isLoading && messages.length === 0 ? (
+                <ChatSkeleton />
+            ) : (
+                <>
+                    <StickyTimestamp 
+                        messages={messages}
+                        username={username}
+                        selectedUser={selectedUser}
+                    />
+                    <div 
+                        className="chat-messages-container relative z-10 flex h-full flex-col overflow-y-auto p-4 space-y-2"
+                        onScroll={handleScroll}
+                    >
+                        {messagesWithSeparators}
+                        <div ref={messagesEndRef} />
+                    </div>
+                </>
+            )}
         </div>
     );
 }

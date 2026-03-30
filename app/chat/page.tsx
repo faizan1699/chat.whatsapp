@@ -58,6 +58,7 @@ export default function ChatPage() {
     const [autoRetryEnabled, setAutoRetryEnabled] = useState<boolean>(true);
     const [retryInterval, setRetryInterval] = useState<NodeJS.Timeout | null>(null);
     const [isConversationsLoading, setIsConversationsLoading] = useState<boolean>(false);
+    const [isMessagesLoading, setIsMessagesLoading] = useState<boolean>(false);
 
     // Message API hook
     const {
@@ -374,6 +375,7 @@ export default function ChatPage() {
 
     const loadMessages = async (selectedUsername: string) => {
         try {
+            setIsMessagesLoading(true);
             console.log('🔄 Loading messages for:', selectedUsername);
             console.log('🔄 Current conversations:', conversations.length);
 
@@ -504,6 +506,8 @@ export default function ChatPage() {
         } catch (error) {
             console.error('❌ Failed to load messages API:', error);
             setMessages([]);
+        } finally {
+            setIsMessagesLoading(false);
         }
     };
 
@@ -1543,6 +1547,18 @@ export default function ChatPage() {
         }
     };
 
+    const handleScrollToMessage = (messageId: string) => {
+        const messageElement = document.getElementById(`msg-${messageId}`);
+        if (messageElement) {
+            messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Add highlight effect
+            messageElement.classList.add('highlight-message-reply');
+            setTimeout(() => {
+                messageElement.classList.remove('highlight-message-reply');
+            }, 2000);
+        }
+    };
+
     const currentChatMessages = messages.filter(
         (msg: Message) => {
             const shouldInclude = (msg.from === username && msg.to === selectedUser) ||
@@ -1647,6 +1663,8 @@ export default function ChatPage() {
                             <MessageList
                                 messages={currentChatMessages}
                                 username={username}
+                                selectedUser={selectedUser}
+                                isLoading={isMessagesLoading}
                                 onRetry={handleRetry}
                                 onReply={(msg: Message) => setReplyingTo(msg)}
                                 onDelete={handleDeleteMessage}
@@ -1655,6 +1673,7 @@ export default function ChatPage() {
                                 onHide={handleHideMessage}
                                 onUnhide={handleUnhideMessage}
                                 highlightedMessageId={highlightedMessageId}
+                                onScrollToMessage={handleScrollToMessage}
                             />
 
                             <ChatFooter

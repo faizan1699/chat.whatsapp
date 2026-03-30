@@ -18,6 +18,7 @@ interface MessageItemProps {
     isHighlighted?: boolean;
     highlightKey?: number;
     failedMessagesCount?: number;
+    onScrollToMessage?: (messageId: string) => void;
 }
 
 export default function MessageItem({
@@ -32,7 +33,8 @@ export default function MessageItem({
     onUnhide,
     isHighlighted,
     highlightKey,
-    failedMessagesCount
+    failedMessagesCount,
+    onScrollToMessage
 }: MessageItemProps) {
     const [visibleWords, setVisibleWords] = useState(30);
     const [showActions, setShowActions] = useState(false);
@@ -153,17 +155,23 @@ export default function MessageItem({
     return (
         <div
             id={`msg-${message.id}`}
-            className={`group flex w-full mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}
+            className={`group flex w-full mb-1  ${isMe ? 'justify-end' : 'justify-start'} ${isHighlighted ? 'highlight-message' : ''}`}
             onMouseEnter={() => setShowActions(true)}
             onMouseLeave={() => setShowActions(false)}
         >
             <div className={`flex flex-col max-w-[85%] md:max-w-[65%] lg:max-w-[60%] xl:max-w-[55%] ${isMe ? 'items-end' : 'items-start'}`}>
                 {/* Message bubble */}
                 <div
-                    className={`flex flex-col px-2 py-1 shadow-sm relative w-full min-w-0 ${isMe
-                        ? 'rounded-l-lg rounded-br-lg bg-[#d9fdd3] text-[#111b21] ml-10'
-                        : 'rounded-r-lg rounded-bl-lg bg-white text-[#111b21] mr-10'
+                    className={`flex flex-col px-2 py-1 shadow-sm relative w-full min-w-0 cursor-pointer ${
+                        isMe
+                            ? 'rounded-l-lg rounded-br-lg bg-[#d9fdd3] text-[#111b21] ml-10'
+                            : 'rounded-r-lg rounded-bl-lg bg-white text-[#111b21] mr-10'
                         } ${message.status === 'failed' ? 'bg-red-50 border border-red-200' : ''} ${isHighlighted ? 'highlight-message' : ''}`}
+                    onClick={() => {
+                        if (message.isPinned && message.id) {
+                            onScrollToMessage?.(message.id);
+                        }
+                    }}
                 >
                 {/* Reply Context */}
                 {message.replyTo && (
@@ -191,8 +199,8 @@ export default function MessageItem({
                 {/* Pin Indicator */}
                 {message.isPinned && (
                     <div className="mb-1 flex items-center gap-1 text-[10px] text-[#667781] font-medium italic">
-                        <Pin size={10} className="fill-current" />
-                        <span>Pinned Message</span>
+                        <Pin size={10} className="fill-current mr-1" />
+                        <span>Pinned by {message.pinnedBy}</span>
                     </div>
                 )}
 
