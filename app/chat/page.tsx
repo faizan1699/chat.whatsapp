@@ -110,11 +110,29 @@ export default function ChatPage() {
     const iceCandidatesBuffer = useRef<RTCIceCandidateInit[]>([]);
     const callerRef = useRef<string[]>([]);
     const chunkBufferRef = useRef<Record<string, Message[]>>({});
+    const pinsDropdownRef = useRef<HTMLDivElement>(null);
 
     // Sync refs with state
     useEffect(() => {
         selectedUserRef.current = selectedUser;
     }, [selectedUser]);
+
+    // Handle click outside for pinned dropdown
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (pinsDropdownRef.current && !pinsDropdownRef.current.contains(event.target as Node)) {
+                setShowPinsDropdown(false);
+            }
+        };
+
+        if (showPinsDropdown) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showPinsDropdown]);
 
     useEffect(() => {
         isWindowFocusedRef.current = isWindowFocused;
@@ -1421,7 +1439,7 @@ export default function ChatPage() {
         );
 
         if (isPinned && currentPins.length >= 3) {
-            alert('Aap sirf 3 messages pin kar sakte hain per chat.');
+            alert('Only 3 messages allowed to pin');
             return;
         }
 
@@ -1649,7 +1667,7 @@ export default function ChatPage() {
 
                             {/* Pinned Messages Banner */}
                             {pinnedMessages.length > 0 && (
-                                <div className="relative z-30">
+                                <div className="relative z-30" ref={pinsDropdownRef}>
                                     <div
                                         onClick={() => setShowPinsDropdown(!showPinsDropdown)}
                                         className="bg-white/90 backdrop-blur px-4 py-2 border-b border-[#f0f2f5] flex items-center gap-2 shadow-sm cursor-pointer hover:bg-white transition-colors animate-in fade-in duration-300"
@@ -1678,6 +1696,12 @@ export default function ChatPage() {
                                                     onClick={() => {
                                                         setHighlightedMessageId(msg.id || '');
                                                         setShowPinsDropdown(false);
+                                                        // Auto-scroll to the message
+                                                        if (msg.id) {
+                                                            setTimeout(() => {
+                                                                handleScrollToMessage(msg.id);
+                                                            }, 100);
+                                                        }
                                                     }}
                                                 >
                                                     <div className="flex items-start gap-2">
