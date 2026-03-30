@@ -140,8 +140,11 @@ export default function Sidebar({
         <div className="flex h-full w-full flex-col bg-white overflow-hidden">
             {/* Sidebar Header */}
             <header className="flex h-[60px] items-center justify-between bg-[#f0f2f5] px-4 py-2">
-                <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-300 cursor-pointer">
-                    <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`} alt="avatar" className="h-full w-full object-cover" />
+                <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-300 cursor-pointer">
+                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`} alt="avatar" className="h-full w-full object-cover" />
+                    </div>
+                    <span className="text-[#111b21] font-medium">{username}</span>
                 </div>
                 <div className="flex items-center gap-3 text-[#54656f]">
                     <button
