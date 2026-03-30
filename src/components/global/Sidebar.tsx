@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, Fragment } from 'react';
-import { debounce } from '../../utils/debounce';
+import { debounce } from '../../../utils/debounce';
 import { Plus, X, Search as SearchIcon, LogOut, User, Users } from 'lucide-react';
-import UserSearch from '../chat/UserSearch';
+import UserSearch from '../../../components/chat/UserSearch';
 import { apiService } from '@/services/apiService';
 
 const UserSkeleton = () => (

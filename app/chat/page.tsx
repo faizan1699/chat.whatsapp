@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { Pin, ChevronDown, X } from 'lucide-react';
 import { frontendAuth } from '@/utils/frontendAuth';
 import IncomingCallModal from '@/components/video/IncomingCallModal';
-import MessageItem from '@/components/chat/MessageItem';
 import { Message, ReplyTo } from '@/types/message';
 import CallNotification from '@/components/video/CallNotification';
 import Sidebar from '@/components/global/Sidebar';
@@ -1520,17 +1519,6 @@ export default function ChatPage() {
         (msg: Message) => {
             const shouldInclude = (msg.from === username && msg.to === selectedUser) ||
                 (msg.from === selectedUser && msg.to === username);
-            console.log('🔍 Message filter:', {
-                messageId: msg.id,
-                from: msg.from,
-                to: msg.to,
-                username,
-                selectedUser,
-                shouldInclude,
-                isSentMessage: msg.from === username,
-                isReceivedMessage: msg.from === selectedUser,
-                message: msg.message?.substring(0, 20) + '...'
-            });
             return shouldInclude;
         }
     );
