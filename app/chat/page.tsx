@@ -89,6 +89,7 @@ export default function ChatPage() {
     const [unreadCounts, setUnreadCounts] = useState<{ [key: string]: number }>({});
     const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
     const [showEditProfile, setShowEditProfile] = useState(false);
+    const [lastReceivedMessage, setLastReceivedMessage] = useState<Message | null>(null);
 
     // Clear highlighted message after animation
     useEffect(() => {
@@ -182,6 +183,9 @@ export default function ChatPage() {
                 }
             });
 
+            // Update last received message for notifications
+            setLastReceivedMessage(data);
+
             // Update unread count if message is not from current user
             if (data.from !== username && data.to === username) {
                 setUnreadCounts(prev => ({
@@ -189,7 +193,7 @@ export default function ChatPage() {
                     [data.from]: (prev[data.from] || 0) + 1
                 }));
 
-                // Show notification if window is not focused
+                // Show notification only for the last message if window is not focused
                 if (!isWindowFocusedRef.current) {
                     showNotification(data);
                 }
@@ -1016,6 +1020,11 @@ export default function ChatPage() {
     };
 
     const showNotification = (data: Message) => {
+        // Only show notification if this is the last received message
+        if (!lastReceivedMessage || lastReceivedMessage.id !== data.id) {
+            return;
+        }
+
         if (!('Notification' in window)) return;
 
         if (Notification.permission === 'granted') {
