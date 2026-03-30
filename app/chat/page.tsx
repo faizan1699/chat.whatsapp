@@ -184,14 +184,18 @@ export default function ChatPage() {
 
             // Update unread count if message is not from current user
             if (data.from !== username && data.to === username) {
+                console.log('🔔 Updating unread count for:', data.from);
                 setUnreadCounts(prev => ({
                     ...prev,
                     [data.from]: (prev[data.from] || 0) + 1
                 }));
 
-                // Show notification only for the last message if window is not focused
+                // Show notification only if window is not focused
                 if (!isWindowFocusedRef.current) {
+                    console.log('🔔 Window not focused, showing notification');
                     showNotification(data);
+                } else {
+                    console.log('🔔 Window focused, skipping notification');
                 }
             }
 
@@ -281,12 +285,24 @@ export default function ChatPage() {
 
     // Request Notification Permission
     useEffect(() => {
-        if ('Notification' in window && Notification.permission === 'default') {
-            Notification.requestPermission();
+        if ('Notification' in window) {
+            if (Notification.permission === 'default') {
+                Notification.requestPermission().then(permission => {
+                    console.log('🔔 Notification permission:', permission);
+                });
+            } else {
+                console.log('🔔 Notification permission already set:', Notification.permission);
+            }
         }
 
-        const handleFocus = () => setIsWindowFocused(true);
-        const handleBlur = () => setIsWindowFocused(false);
+        const handleFocus = () => {
+            console.log('🔔 Window focused');
+            setIsWindowFocused(true);
+        };
+        const handleBlur = () => {
+            console.log('🔔 Window blurred');
+            setIsWindowFocused(false);
+        };
 
         window.addEventListener('focus', handleFocus);
         window.addEventListener('blur', handleBlur);
@@ -1002,28 +1018,58 @@ export default function ChatPage() {
     };
 
     const showNotification = (data: Message) => {
+        console.log('🔔 showNotification called:', {
+            message: data.message,
+            from: data.from,
+            to: data.to,
+            isWindowFocused: isWindowFocusedRef.current,
+            notificationPermission: Notification.permission,
+            lastReceivedMessage: lastReceivedMessage?.id
+        });
+
         // Only show notification if this is the last received message
-        if (!lastReceivedMessage || lastReceivedMessage.id !== data.id) {
+        if (lastReceivedMessage && lastReceivedMessage.id !== data.id) {
+            console.log('🔔 Skipping notification - not the last message');
             return;
         }
 
-        if (!('Notification' in window)) return;
-
-        if (Notification.permission === 'granted') {
-            const options: any = {
-                body: data.message,
-                icon: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.from}`,
-                tag: 'chat-msg',
-                renotify: true
-            };
-            const notification = new Notification(`New message from ${data.from}`, options);
-
-            notification.onclick = () => {
-                window.focus();
-                setSelectedUser(data.from);
-                notification.close();
-            };
+        if (!('Notification' in window)) {
+            console.log('🔔 Notifications not supported');
+            return;
         }
+
+        if (Notification.permission !== 'granted') {
+            console.log('🔔 Notification permission not granted:', Notification.permission);
+            return;
+        }
+
+        console.log('🔔 Creating notification...');
+        const options: any = {
+            body: data.message,
+            icon: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.from}`,
+            tag: 'chat-msg',
+            renotify: true,
+            requireInteraction: false
+        };
+        const notification = new Notification(`New message from ${data.from}`, options);
+
+        notification.onclick = () => {
+            console.log('🔔 Notification clicked');
+            window.focus();
+            setSelectedUser(data.from);
+            notification.close();
+        };
+
+        notification.onerror = (error) => {
+            console.error('🔔 Notification error:', error);
+        };
+
+        // Auto-close after 5 seconds
+        setTimeout(() => {
+            if (notification) {
+                notification.close();
+            }
+        }, 5000);
     };
 
     const handleSendMessage = async (e: React.FormEvent) => {
