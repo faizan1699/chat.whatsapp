@@ -198,12 +198,7 @@ export default function ChatPage() {
                 }
             }
 
-            // If we receive a message for the current conversation, reload messages to ensure sync
-            if ((data.from === selectedUser && data.to === username) ||
-                (data.from === username && data.to === selectedUser)) {
-                console.log('🔄 Message for current conversation, reloading...');
-                setTimeout(() => loadMessages(selectedUser!), 1000);
-            }
+            // Real-time messages are handled by socket, no need to reload from API
         });
 
         socket.on('message-status-update', ({ messageId, status }: { messageId: string; status: string }) => {
@@ -506,16 +501,7 @@ export default function ChatPage() {
         }
     }, [selectedUser, username]);
 
-    // Also reload messages periodically to sync with database
-    useEffect(() => {
-        if (selectedUser && username) {
-            const interval = setInterval(() => {
-                loadMessages(selectedUser);
-            }, 10000); // Reload every 10 seconds
-
-            return () => clearInterval(interval);
-        }
-    }, [selectedUser, username]);
+    // Messages will only load on page load, user selection change, or manual refresh
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -1504,7 +1490,6 @@ export default function ChatPage() {
         try {
             await api.post('/auth/logout');
         } catch {
-            /* ignore */
         }
         handleClearData();
     };
@@ -1524,22 +1509,6 @@ export default function ChatPage() {
     );
 
     const pinnedMessages = currentChatMessages.filter(m => m.isPinned);
-
-    // Debug: Log current state
-    console.log('🔍 Debug Info:', {
-        totalMessages: messages.length,
-        currentChatMessages: currentChatMessages.length,
-        username,
-        selectedUser,
-        allMessages: messages.map(m => ({
-            id: m.id,
-            from: m.from,
-            to: m.to,
-            message: m.message?.substring(0, 20) + '...',
-            isSent: m.from === username,
-            isReceived: m.from === selectedUser
-        }))
-    });
 
     if (isLoading) {
         return <FullPageLoader />;
