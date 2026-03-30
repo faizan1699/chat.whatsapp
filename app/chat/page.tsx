@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { Pin, ChevronDown, X } from 'lucide-react';
 import { frontendAuth } from '@/utils/frontendAuth';
 import IncomingCallModal from '@/components/video/IncomingCallModal';
-import MessageItem from '@/components/chat/MessageItem';
 import { Message, ReplyTo } from '@/types/message';
 import CallNotification from '@/components/video/CallNotification';
 import Sidebar from '@/components/global/Sidebar';
@@ -89,6 +88,7 @@ export default function ChatPage() {
     const [unreadCounts, setUnreadCounts] = useState<{ [key: string]: number }>({});
     const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
     const [showEditProfile, setShowEditProfile] = useState(false);
+    const [lastReceivedMessage, setLastReceivedMessage] = useState<Message | null>(null);
 
     // Clear highlighted message after animation
     useEffect(() => {
@@ -182,6 +182,9 @@ export default function ChatPage() {
                 }
             });
 
+            // Update last received message for notifications
+            setLastReceivedMessage(data);
+
             // Update unread count if message is not from current user
             if (data.from !== username && data.to === username) {
                 setUnreadCounts(prev => ({
@@ -189,18 +192,13 @@ export default function ChatPage() {
                     [data.from]: (prev[data.from] || 0) + 1
                 }));
 
-                // Show notification if window is not focused
+                // Show notification only for the last message if window is not focused
                 if (!isWindowFocusedRef.current) {
                     showNotification(data);
                 }
             }
 
-            // If we receive a message for the current conversation, reload messages to ensure sync
-            if ((data.from === selectedUser && data.to === username) ||
-                (data.from === username && data.to === selectedUser)) {
-                console.log('🔄 Message for current conversation, reloading...');
-                setTimeout(() => loadMessages(selectedUser!), 1000);
-            }
+            // Real-time messages are handled by socket, no need to reload from API
         });
 
         socket.on('message-status-update', ({ messageId, status }: { messageId: string; status: string }) => {
@@ -503,16 +501,7 @@ export default function ChatPage() {
         }
     }, [selectedUser, username]);
 
-    // Also reload messages periodically to sync with database
-    useEffect(() => {
-        if (selectedUser && username) {
-            const interval = setInterval(() => {
-                loadMessages(selectedUser);
-            }, 10000); // Reload every 10 seconds
-
-            return () => clearInterval(interval);
-        }
-    }, [selectedUser, username]);
+    // Messages will only load on page load, user selection change, or manual refresh
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -1016,6 +1005,11 @@ export default function ChatPage() {
     };
 
     const showNotification = (data: Message) => {
+        // Only show notification if this is the last received message
+        if (!lastReceivedMessage || lastReceivedMessage.id !== data.id) {
+            return;
+        }
+
         if (!('Notification' in window)) return;
 
         if (Notification.permission === 'granted') {
@@ -1496,7 +1490,6 @@ export default function ChatPage() {
         try {
             await api.post('/auth/logout');
         } catch {
-            /* ignore */
         }
         handleClearData();
     };
@@ -1511,38 +1504,11 @@ export default function ChatPage() {
         (msg: Message) => {
             const shouldInclude = (msg.from === username && msg.to === selectedUser) ||
                 (msg.from === selectedUser && msg.to === username);
-            console.log('🔍 Message filter:', {
-                messageId: msg.id,
-                from: msg.from,
-                to: msg.to,
-                username,
-                selectedUser,
-                shouldInclude,
-                isSentMessage: msg.from === username,
-                isReceivedMessage: msg.from === selectedUser,
-                message: msg.message?.substring(0, 20) + '...'
-            });
             return shouldInclude;
         }
     );
 
     const pinnedMessages = currentChatMessages.filter(m => m.isPinned);
-
-    // Debug: Log current state
-    console.log('🔍 Debug Info:', {
-        totalMessages: messages.length,
-        currentChatMessages: currentChatMessages.length,
-        username,
-        selectedUser,
-        allMessages: messages.map(m => ({
-            id: m.id,
-            from: m.from,
-            to: m.to,
-            message: m.message?.substring(0, 20) + '...',
-            isSent: m.from === username,
-            isReceived: m.from === selectedUser
-        }))
-    });
 
     if (isLoading) {
         return <FullPageLoader />;
