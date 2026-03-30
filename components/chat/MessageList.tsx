@@ -11,6 +11,7 @@ interface MessageListProps {
     messages: Message[];
     username: string;
     selectedUser: string;
+    recipientOnline?: boolean;
     isLoading?: boolean;
     onRetry: (msg: Message) => void;
     onReply: (msg: Message) => void;
@@ -28,6 +29,7 @@ export default function MessageList({
     messages,
     username,
     selectedUser,
+    recipientOnline = false,
     isLoading = false,
     onRetry,
     onReply,
@@ -122,13 +124,18 @@ export default function MessageList({
     const messagesWithSeparators: React.ReactNode[] = [];
     let lastDate: Date | null = null;
 
-    messages?.forEach((msg, idx) => {
+    // Sort messages by timestamp to ensure proper order
+    const sortedMessages = [...(messages || [])].sort((a, b) => 
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+
+    sortedMessages?.forEach((msg, idx) => {
         const msgDate = new Date(msg.timestamp);
         
         // Add date separator if date changed
         if (!lastDate || msgDate.toDateString() !== lastDate.toDateString()) {
             messagesWithSeparators.push(
-                <DateSeparator key={`date-${msgDate.toDateString()}`} date={msgDate} />
+                <DateSeparator key={`date-${msgDate.toDateString()}-${msg.id || idx}`} date={msgDate} />
             );
             lastDate = msgDate;
         }
@@ -139,6 +146,7 @@ export default function MessageList({
                 key={msg.id || idx}
                 message={msg}
                 isMe={msg.from === username}
+                recipientOnline={recipientOnline}
                 onRetry={onRetry}
                 onReply={onReply}
                 onDelete={(id: string) => onDelete?.(id, 'me')}

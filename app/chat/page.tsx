@@ -148,13 +148,11 @@ export default function ChatPage() {
 
         socketRef.current = socket;
         socket.on('connect', () => {
-            console.log('✅ Socket connected');
             setIsConnected(true);
             socket.emit('join-user', username);
         });
 
         socket.on('disconnect', () => {
-            console.log('❌ Socket disconnected');
             setIsConnected(false);
         });
 
@@ -180,6 +178,26 @@ export default function ChatPage() {
                 }
             });
 
+            // Update conversations state to keep sidebar last message in sync
+            setConversations(prev => {
+                return prev.map(conv => {
+                    // Check if this conversation involves the message sender/receiver
+                    const involvesSender = conv.participants.some((p: any) => 
+                        p.user.username === data.from || p.user.username === data.to
+                    );
+                    
+                    if (involvesSender) {
+                        // Update the last message in this conversation
+                        return {
+                            ...conv,
+                            messages: [data], // Replace with new latest message
+                            updatedAt: new Date().toISOString()
+                        };
+                    }
+                    return conv;
+                });
+            });
+
             // Update last received message for notifications
             setLastReceivedMessage(data);
 
@@ -191,12 +209,12 @@ export default function ChatPage() {
                     [data.from]: (prev[data.from] || 0) + 1
                 }));
 
-                // Show notification only if window is not focused
-                if (!isWindowFocusedRef.current) {
-                    console.log('🔔 Window not focused, showing notification');
+                // Show notification if user is not currently in chat with sender
+                if (selectedUser !== data.from) {
+                    console.log('🔔 User not in chat with sender, showing notification');
                     showNotification(data);
                 } else {
-                    console.log('🔔 Window focused, skipping notification');
+                    console.log('🔔 User is in chat with sender, skipping notification');
                 }
             }
 
@@ -286,15 +304,31 @@ export default function ChatPage() {
 
     // Request Notification Permission
     useEffect(() => {
-        if ('Notification' in window) {
-            if (Notification.permission === 'default') {
-                Notification.requestPermission().then(permission => {
-                    console.log('🔔 Notification permission:', permission);
-                });
+        const requestNotificationPermission = async () => {
+            if ('Notification' in window) {
+                if (Notification.permission === 'default') {
+                    console.log('🔔 Requesting notification permission...');
+                    try {
+                        const permission = await Notification.requestPermission();
+                        console.log('🔔 Notification permission:', permission);
+                        if (permission === 'granted') {
+                            console.log('✅ Notifications enabled!');
+                        } else if (permission === 'denied') {
+                            console.log('❌ Notifications denied by user');
+                        }
+                    } catch (error) {
+                        console.error('🔔 Error requesting notification permission:', error);
+                    }
+                } else {
+                    console.log('🔔 Notification permission already set:', Notification.permission);
+                }
             } else {
-                console.log('🔔 Notification permission already set:', Notification.permission);
+                console.log('🔔 Notifications not supported in this browser');
             }
-        }
+        };
+
+        // Request permission on page load
+        requestNotificationPermission();
 
         const handleFocus = () => {
             console.log('🔔 Window focused');
@@ -1028,14 +1062,8 @@ export default function ChatPage() {
             to: data.to,
             isWindowFocused: isWindowFocusedRef.current,
             notificationPermission: Notification.permission,
-            lastReceivedMessage: lastReceivedMessage?.id
+            isMobile: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
         });
-
-        // Only show notification if this is the last received message
-        if (lastReceivedMessage && lastReceivedMessage.id !== data.id) {
-            console.log('🔔 Skipping notification - not the last message');
-            return;
-        }
 
         if (!('Notification' in window)) {
             console.log('🔔 Notifications not supported');
@@ -1048,13 +1076,23 @@ export default function ChatPage() {
         }
 
         console.log('🔔 Creating notification...');
-        const options: any = {
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        const options: NotificationOptions = {
             body: data.message,
             icon: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.from}`,
             tag: 'chat-msg',
-            renotify: true,
-            requireInteraction: false
+            requireInteraction: isMobile, // Require interaction on mobile
+            silent: false,
+            // Mobile-specific options
+            badge: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.from}`
         };
+
+        // Trigger vibration separately for mobile devices
+        if (isMobile && 'vibrate' in navigator) {
+            navigator.vibrate([200, 100, 200]);
+        }
+
         const notification = new Notification(`New message from ${data.from}`, options);
 
         notification.onclick = () => {
@@ -1068,12 +1106,13 @@ export default function ChatPage() {
             console.error('🔔 Notification error:', error);
         };
 
-        // Auto-close after 5 seconds
+        // Auto-close after longer time on mobile (8 seconds vs 5 seconds)
+        const autoCloseTime = isMobile ? 8000 : 5000;
         setTimeout(() => {
             if (notification) {
                 notification.close();
             }
-        }, 5000);
+        }, autoCloseTime);
     };
 
     const handleSendMessage = async (e: React.FormEvent) => {
@@ -1635,7 +1674,7 @@ export default function ChatPage() {
                                             {pinnedMessages.slice().reverse().map((msg) => (
                                                 <div
                                                     key={msg.id}
-                                                    className="p-3 border-b border-[#f0f2f5] hover:bg-[#f8f9fa] cursor-pointer"
+                                                    className="p-3 border-b border-[#f0f2f5] hover:bg-[#f8f9fa] cursor-pointer relative group"
                                                     onClick={() => {
                                                         setHighlightedMessageId(msg.id || '');
                                                         setShowPinsDropdown(false);
@@ -1652,6 +1691,16 @@ export default function ChatPage() {
                                                                 {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                             </p>
                                                         </div>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handlePinMessage(msg);
+                                                            }}
+                                                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-red-50 rounded-full text-red-500 transition-colors absolute right-2 top-2"
+                                                            title="Unpin message"
+                                                        >
+                                                            <X size={14} />
+                                                        </button>
                                                     </div>
                                                 </div>
                                             ))}
@@ -1664,6 +1713,7 @@ export default function ChatPage() {
                                 messages={currentChatMessages}
                                 username={username}
                                 selectedUser={selectedUser}
+                                recipientOnline={!!users[selectedUser]}
                                 isLoading={isMessagesLoading}
                                 onRetry={handleRetry}
                                 onReply={(msg: Message) => setReplyingTo(msg)}

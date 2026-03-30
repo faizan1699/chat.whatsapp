@@ -65,6 +65,7 @@ export default function StickyTimestamp({ messages, username, selectedUser }: St
 
         let visibleDateKey = '';
         let foundAny = false;
+        let firstVisibleFromTop: { dateKey: string; top: number } | null = null;
 
         dateElementsRef.current.forEach((element, dateKey) => {
             if (!element) return;
@@ -78,12 +79,20 @@ export default function StickyTimestamp({ messages, username, selectedUser }: St
 
             if (isVisible) {
                 foundAny = true;
-                // If this is the first visible date from top, use it
-                if (!visibleDateKey || elementTop < containerTop + 100) {
-                    visibleDateKey = dateKey;
+                
+                // Track the first visible element from top
+                if (firstVisibleFromTop === null || elementTop < firstVisibleFromTop.top) {
+                    firstVisibleFromTop = { dateKey, top: elementTop };
                 }
             }
         });
+
+        // If the first date separator is visible at the top, don't show sticky timestamp
+        if (firstVisibleFromTop && firstVisibleFromTop.top <= containerTop + 50) {
+            setVisibleDate('');
+            setIsSticky(false);
+            return;
+        }
 
         // If no date separators are visible, show the most recent one
         if (!foundAny) {
@@ -91,12 +100,17 @@ export default function StickyTimestamp({ messages, username, selectedUser }: St
             if (dates.length > 0) {
                 visibleDateKey = dates[dates.length - 1];
             }
+        } else if (firstVisibleFromTop) {
+            visibleDateKey = firstVisibleFromTop.dateKey;
         }
 
         if (visibleDateKey) {
             const date = new Date(visibleDateKey);
             setVisibleDate(formatDateLabel(date));
             setIsSticky(foundAny);
+        } else {
+            setVisibleDate('');
+            setIsSticky(false);
         }
     };
 

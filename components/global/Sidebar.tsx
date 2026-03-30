@@ -87,12 +87,12 @@ export default function Sidebar({
             const userDataStr = localStorage.getItem('user_data') || '';
             const userData = userDataStr ? JSON.parse(userDataStr) : null;
             const userId = userData?.id;
-            
+
             if (!userId) {
                 alert('Session expired. Please log in again.');
                 return;
             }
-            
+
             if (user.id === userId) {
                 alert('Cannot start a chat with yourself.');
                 return;
@@ -123,22 +123,24 @@ export default function Sidebar({
         .filter(u => u.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const getLastMessage = (user: string) => {
-        // First try to get last message from conversations data
-        const userConversation = conversations.find(conv => 
+        const userConversation = conversations.find(conv =>
             conv.participants.some((p: any) => p.user.username === user)
         );
-        
+
         if (userConversation?.messages?.length > 0) {
-            return userConversation.messages[0];
+            const lastMsg = userConversation.messages[0];
+            return {
+                ...lastMsg,
+                message: lastMsg.content || lastMsg.message,
+                from: lastMsg.sender?.username || lastMsg.from,
+                to: lastMsg.sender?.username === username ? user : username
+            };
         }
-        
-        // Fallback to messages array
         return messages.filter(m => (m.from === user && m.to === username) || (m.from === username && m.to === user)).pop();
     };
 
     return (
         <div className="flex h-full w-full flex-col bg-white overflow-hidden">
-            {/* Sidebar Header */}
             <header className="flex h-[60px] items-center justify-between bg-[#f0f2f5] px-4 py-2">
                 <div className="flex items-center gap-3">
                     <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-300 cursor-pointer">
@@ -229,7 +231,7 @@ export default function Sidebar({
                 <div className="px-4 py-2 text-[13px] font-bold text-[#00a884] uppercase tracking-wider">
                     Recent Chats
                 </div>
-                
+
                 {/* Show skeleton loaders when loading */}
                 {isLoading ? (
                     <>

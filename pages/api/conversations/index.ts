@@ -39,7 +39,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
                     const { data: lastMsg } = await supabaseAdmin
                         .from('messages')
-                        .select('*')
+                        .select(`
+                            *,
+                            sender:users(id, username, avatar)
+                        `)
                         .eq('conversation_id', conv.id)
                         .order('timestamp', { ascending: false })
                         .limit(1)

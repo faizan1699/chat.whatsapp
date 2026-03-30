@@ -7,6 +7,7 @@ import { Message, ReplyTo } from '@/types/message';
 interface MessageItemProps {
     message: Message;
     isMe: boolean;
+    recipientOnline?: boolean;
     onRetry?: (msg: Message) => void;
     onReply?: (msg: Message) => void;
     onDelete?: (id: string, type: 'me' | 'everyone') => void;
@@ -24,6 +25,7 @@ interface MessageItemProps {
 export default function MessageItem({
     message,
     isMe,
+    recipientOnline = false,
     onRetry,
     onReply,
     onDelete,
@@ -408,7 +410,11 @@ export default function MessageItem({
 
                         {isMe && message.status && (
                             <span className={`flex items-center text-[12px] transition-colors
-                             ${message.status === 'read' ? 'text-[#53bdeb]'
+                             ${message.status === 'read' && recipientOnline ? 'text-[#53bdeb]'
+                                    : message.status === 'delivered' && recipientOnline ? 'text-[#667781]'
+                                    : message.status === 'sent' && recipientOnline ? 'text-[#667781]'
+                                    : message.status === 'sent' && !recipientOnline ? 'text-[#667781]'
+                                    : message.status === 'delivered' && !recipientOnline ? 'text-[#667781]'
                                     : message.status === 'failed' ? 'text-red-500'
                                         : message.status === 'pending'
                                             ? 'text-gray-400'
@@ -419,12 +425,40 @@ export default function MessageItem({
                                 {message.status === 'pending' ? (
                                     <div className="w-[12px] h-[12px] border-2 border-[#667781]/20 border-t-[#667781] rounded-full animate-spin"></div>
                                 ) : (
-                                    {
-                                        failed: '!',
-                                        sent: '✓',
-                                        delivered: '✓✓',
-                                        read: '✓✓'
-                                    }[message.status as 'failed' | 'sent' | 'delivered' | 'read']
+                                    <span className="flex items-center">
+                                        {message.status === 'read' && recipientOnline ? (
+                                            <>
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-[#53bdeb]">
+                                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                                </svg>
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-[#53bdeb] ml-0.5">
+                                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                                </svg>
+                                            </>
+                                        ) : message.status === 'delivered' && recipientOnline ? (
+                                            <>
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-[#667781]">
+                                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                                </svg>
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-[#667781] ml-0.5">
+                                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                                </svg>
+                                            </>
+                                        ) : message.status === 'sent' && recipientOnline ? (
+                                            <>
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-[#667781]">
+                                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                                </svg>
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-[#667781] ml-0.5">
+                                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                                </svg>
+                                            </>
+                                        ) : (
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-[#667781]">
+                                                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                            </svg>
+                                        )}
+                                    </span>
                                 )}
                             </span>
                         )}

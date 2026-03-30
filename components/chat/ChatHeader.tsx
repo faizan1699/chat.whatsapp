@@ -73,7 +73,7 @@ export default function ChatHeader({ selectedUser, onBack, onStartVideoCall, onS
                     </button>
                     
                     {showMenu && (
-                        <div className="absolute right-0 top-12 bg-white border border-gray-200 rounded-lg shadow-lg py-2 w-48 z-50">
+                        <div className="absolute right-0 top-12 bg-white border border-gray-200 rounded-lg shadow-lg py-2 w-48 z-[99999]">
                             {onClearAllMessages && (
                                 <button
                                     onClick={() => {
