@@ -24,7 +24,7 @@ export default function ChatSkeleton() {
                                     ? 'rounded-l-lg rounded-br-lg bg-gray-100 ml-10' 
                                     : 'rounded-r-lg rounded-bl-lg bg-white mr-10 border border-gray-200'
                             }`}>
-                                <div className="flex flex-col pr-2 min-w-0 flex-1">
+                                <div className="flex flex-col min-w-0 flex-1">
                                     <div className="space-y-1">
                                         {[...Array(index % 3 === 0 ? 1 : 2)].map((_, lineIndex) => (
                                             <div 

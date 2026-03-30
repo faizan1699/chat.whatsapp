@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
 import { io, Socket } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
 import { Pin, ChevronDown, X } from 'lucide-react';
@@ -26,6 +27,8 @@ import EmptyChatState from '@/components/chat/EmptyChatState';
 import CallOverlay from '@/components/video/CallOverlay';
 import MessageList from '@/components/chat/MessageList';
 import ChatHeader from '@/components/chat/ChatHeader';
+import { RootState, AppDispatch } from '@/store';
+import ReduxProvider from '@/components/ReduxProvider';
 
 interface User {
     [key: string]: string;
@@ -483,17 +486,9 @@ export default function ChatPage() {
                     // Get current user ID
             const cookies = getClientCookies();
             const currentUserId = cookies['user-id'] || SecureSession.getUserId();
-            
-            if (!currentUserId) {
-                console.log('❌ User not authenticated');
-                setMessages([]);
-                return;
-            }
-
             // Format messages for frontend and calculate unread counts
                     const formattedMessages = messagesData.map((msg: any) => {
-                        // Check if current user has hidden this message
-                        const isHidden = msg.hidden_by && Array.isArray(msg.hidden_by) && msg.hidden_by.includes(currentUserId);
+                        const isHidden = msg.hidden_by && Array.isArray(msg.hidden_by) && currentUserId && msg.hidden_by.includes(currentUserId);
                         
                         return {
                             id: msg.id,
@@ -1112,11 +1107,17 @@ export default function ChatPage() {
         console.log('🔔 Creating notification...');
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
+        // Determine message direction for better notification text
+        const isIncoming = data.from !== username;
+        const senderName = isIncoming ? data.from : 'You';
+        const notificationTitle = isIncoming ? `New message from ${data.from}` : 'Message sent';
+        const notificationBody = isIncoming ? data.message : `You: ${data.message}`;
+
         const options: NotificationOptions = {
-            body: data.message,
+            body: notificationBody,
             icon: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.from}`,
             tag: 'chat-msg',
-            requireInteraction: isMobile, // Require interaction on mobile
+            requireInteraction: isMobile,
             silent: false,
             // Mobile-specific options
             badge: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.from}`
@@ -1124,13 +1125,12 @@ export default function ChatPage() {
 
         // Trigger vibration separately for mobile devices
         if (isMobile && 'vibrate' in navigator) {
-            navigator.vibrate([200, 100, 200]);
+            navigator.vibrate([2000, 100, 2005]);
         }
 
-        const notification = new Notification(`New message from ${data.from}`, options);
+        const notification = new Notification(notificationTitle, options);
 
         notification.onclick = () => {
-            console.log('🔔 Notification clicked');
             window.focus();
             setSelectedUser(data.from);
             notification.close();
@@ -1140,13 +1140,12 @@ export default function ChatPage() {
             console.error('🔔 Notification error:', error);
         };
 
-        // Auto-close after longer time on mobile (8 seconds vs 5 seconds)
-        const autoCloseTime = isMobile ? 8000 : 5000;
+        // Auto-close notification after 5 seconds
         setTimeout(() => {
-            if (notification) {
+            if (notification.close) {
                 notification.close();
             }
-        }, autoCloseTime);
+        }, 5000);
     };
 
     const handleSendMessage = async (e: React.FormEvent) => {
@@ -1157,7 +1156,6 @@ export default function ChatPage() {
         setInputMessage('');
         setReplyingTo(null);
 
-        // Create temporary message with sending status
         const tempMessage: Message = {
             id: `temp-${Date.now()}`,
             from: username,
@@ -1173,10 +1171,8 @@ export default function ChatPage() {
             } : undefined,
         };
 
-        // Add to UI immediately with sending status
         setMessages(prev => [...prev, tempMessage]);
 
-        // Add timeout to prevent stuck in sending state
         const timeoutId = setTimeout(() => {
             setMessages(prev => prev.map(m =>
                 m.id === tempMessage.id ? {
@@ -1187,7 +1183,6 @@ export default function ChatPage() {
                 } : m
             ));
 
-            // Save to localStorage for retry
             saveFailedMessageLocal({
                 ...tempMessage,
                 status: 'failed',
@@ -1195,13 +1190,10 @@ export default function ChatPage() {
                 lastRetryTime: new Date()
             });
 
-            // Restore input message
             setInputMessage(tempContent);
-            console.warn('Message sending timed out, marked as failed');
-        }, 10000); // 10 second timeout
+        }, 10000); 
 
         try {
-            // Send message using hook
             const savedMsg = await sendMessage(
                 tempContent,
                 selectedUser,
@@ -1210,10 +1202,7 @@ export default function ChatPage() {
                 replyingTo
             );
 
-            // Clear timeout on success
             clearTimeout(timeoutId);
-
-            // Update local state with the saved message
             setMessages(prev => prev.map(m =>
                 m.id === tempMessage.id ? {
                     ...savedMsg,
@@ -1225,7 +1214,6 @@ export default function ChatPage() {
                 } : m
             ));
 
-            // Emit to recipient via socket
             if (socketRef.current?.connected) {
                 socketRef.current.emit('send-message', {
                     id: savedMsg.id,
@@ -1250,12 +1238,7 @@ export default function ChatPage() {
             }
 
         } catch (error) {
-            console.error('Failed to send message:', error);
-
-            // Clear timeout on error
             clearTimeout(timeoutId);
-
-            // Update message status to failed
             setMessages(prev => prev.map(m =>
                 m.id === tempMessage.id ? {
                     ...m,
@@ -1264,16 +1247,12 @@ export default function ChatPage() {
                     lastRetryTime: new Date()
                 } : m
             ));
-
-            // Save to localStorage for retry
             saveFailedMessageLocal({
                 ...tempMessage,
                 status: 'failed',
                 retryCount: 1,
                 lastRetryTime: new Date()
             });
-
-            // Restore input message so user can retry
             setInputMessage(tempContent);
         }
     };
@@ -1287,7 +1266,6 @@ export default function ChatPage() {
         setInputMessage('');
 
         try {
-            // Update message in database
             const response = await fetch('/api/messages', {
                 method: 'PUT',
                 headers: {
@@ -1306,20 +1284,13 @@ export default function ChatPage() {
             }
 
             const updatedMsg = await response.json();
-
-            // Update local state
             setMessages(prev => prev.map(msg =>
                 msg.id === editingMessage.id
                     ? { ...msg, message: tempContent, isEdited: true }
                     : msg
             ));
 
-            // Socket event is handled by the API server
-            // No need to emit from client side
-
         } catch (error) {
-            console.error('Failed to update message:', error);
-            // Restore editing state if failed
             setEditingMessage(editingMessage);
             setInputMessage(tempContent);
         }
@@ -1340,7 +1311,6 @@ export default function ChatPage() {
         if (!selectedUser) return;
 
         try {
-            // Send voice message using hook
             const savedMsg = await sendVoiceMessage(
                 audioBlob,
                 duration,
@@ -1349,7 +1319,6 @@ export default function ChatPage() {
                 conversations
             );
 
-            // Update local state
             setMessages(prev => [...prev, {
                 ...savedMsg,
                 from: username,
@@ -1362,7 +1331,6 @@ export default function ChatPage() {
                 audioDuration: savedMsg.audioDuration
             }]);
 
-            // Emit to recipient via socket
             if (socketRef.current?.connected) {
                 socketRef.current.emit('send-message', {
                     id: savedMsg.id,
@@ -1401,7 +1369,6 @@ export default function ChatPage() {
         }
     };
 
-    // Auto retry failed messages when there are 2 or more
     useEffect(() => {
         const failedMessages = messages.filter(m => m.status === 'failed');
 
@@ -1425,7 +1392,7 @@ export default function ChatPage() {
     const handleDeleteMessage = async (id: string, type: 'me' | 'everyone') => {
         try {
             const cookies = getClientCookies();
-            const userId = cookies['user-id'] || SecureSession.getUserId();
+            const userId = window.localStorage.getItem('user-id');
             
             if (!userId) {
                 alert('User not authenticated');
@@ -1464,7 +1431,6 @@ export default function ChatPage() {
                 }
                 
             } else {
-                // Delete for everyone - call API and update local state
                 setMessages(prev => prev.map(m =>
                     m.id === id ? { ...m, isDeleted: true, message: '[This message was deleted]', audioUrl: undefined } : m
                 ));
@@ -1487,8 +1453,6 @@ export default function ChatPage() {
                     
                     console.log('✅ Message deleted for everyone:', id);
                 } catch (apiError) {
-                    console.error('❌ Failed to delete message from API:', apiError);
-                    // Revert local state if API call fails
                     setMessages(prev => prev.map(m =>
                         m.id === id ? { ...m, isDeleted: false, message: m.message, audioUrl: m.audioUrl } : m
                     ));
@@ -1774,7 +1738,6 @@ export default function ChatPage() {
                                                     onClick={() => {
                                                         setHighlightedMessageId(msg.id || '');
                                                         setShowPinsDropdown(false);
-                                                        // Auto-scroll to the message
                                                         if (msg.id) {
                                                             setTimeout(() => {
                                                                 handleScrollToMessage(msg?.id);
@@ -1798,7 +1761,7 @@ export default function ChatPage() {
                                                                 e.stopPropagation();
                                                                 handlePinMessage(msg);
                                                             }}
-                                                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-red-50 rounded-full text-red-500 transition-colors absolute right-2 top-2"
+                                                            className=" transition-opacity p-1.5 hover:bg-red-50 rounded-full text-red-500 transition-colors absolute right-2 top-2"
                                                             title="Unpin message"
                                                         >
                                                             <X size={14} />

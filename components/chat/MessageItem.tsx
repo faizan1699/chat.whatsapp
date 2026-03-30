@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Reply, Trash2, Pin, ChevronDown, Play, Pause, Pencil, Eye, EyeOff } from 'lucide-react';
+import { Pin, Reply, Edit, Trash2, MoreVertical, Mic, Send, X, Eye, EyeOff, Phone, Video, Download, Volume2, Pause, Play, Pencil } from 'lucide-react';
+import CheckIcon from './CheckIcon';
 import { Message, ReplyTo } from '@/types/message';
 
 interface MessageItemProps {
@@ -235,12 +236,6 @@ export default function MessageItem({
                             {!isMe && (
                                 <button
                                     onClick={() => {
-                                        console.log('👁️ Hide/Unhide button clicked:', {
-                                            messageId: message.id,
-                                            isHidden: message.isHidden,
-                                            from: message.from,
-                                            isMe: isMe
-                                        });
                                         if (message.id) {
                                             if (message.isHidden) {
                                                 onUnhide?.(message.id);
@@ -273,7 +268,6 @@ export default function MessageItem({
                                             <div className="flex flex-col gap-2">
                                                 <button
                                                     onClick={() => {
-                                                        console.log('� Hide message for me clicked:', message.id);
                                                         if (message.id) {
                                                             onDelete?.(message.id, 'me');
                                                         }
@@ -321,7 +315,7 @@ export default function MessageItem({
                 </div>
 
                 {/* Message Content */}
-                <div className="flex flex-col pr-2 min-w-0 flex-1">
+                <div className="flex flex-col min-w-0 flex-1">
                     {message.isHidden ? (
                         <div className="flex items-center gap-2 py-1 text-[#667781] italic text-[13px]">
                             <EyeOff size={14} className="opacity-60" />
@@ -401,7 +395,6 @@ export default function MessageItem({
                         </p>
                     )}
 
-                    {/* Meta data (Time + Status) */}
                     <div className="flex items-center gap-1 ml-auto pt-1 h-5">
                         <span className="text-[11px] text-[#667781] whitespace-nowrap">
                             {formatTimestamp(message.timestamp)}
@@ -432,35 +425,21 @@ export default function MessageItem({
                                     <span className="flex items-center">
                                         {message.status === 'read' && recipientOnline ? (
                                             <>
-                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-[#53bdeb]">
-                                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                                                </svg>
-                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-[#53bdeb] ml-0.5">
-                                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                                                </svg>
+                                                <CheckIcon color="#53bdeb" />
+                                                <CheckIcon color="#53bdeb" className="ml-0.5" />
                                             </>
                                         ) : message.status === 'delivered' && recipientOnline ? (
                                             <>
-                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-[#667781]">
-                                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                                                </svg>
-                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-[#667781] ml-0.5">
-                                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                                                </svg>
+                                                <CheckIcon color="#667781" />
+                                                <CheckIcon color="#667781" className="ml-0.5" />
                                             </>
                                         ) : message.status === 'sent' && recipientOnline ? (
                                             <>
-                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-[#667781]">
-                                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                                                </svg>
-                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-[#667781] ml-0.5">
-                                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                                                </svg>
+                                                <CheckIcon color="#667781" />
+                                                <CheckIcon color="#667781" className="ml-0.5" />
                                             </>
                                         ) : (
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-[#667781]">
-                                                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                                            </svg>
+                                            <CheckIcon color="#667781" />
                                         )}
                                     </span>
                                 )}
