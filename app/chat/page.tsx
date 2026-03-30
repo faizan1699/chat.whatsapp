@@ -200,10 +200,10 @@ export default function ChatPage() {
             setConversations(prev => {
                 return prev.map(conv => {
                     // Check if this conversation involves the message sender/receiver
-                    const involvesSender = conv.participants.some((p: any) => 
+                    const involvesSender = conv.participants.some((p: any) =>
                         p.user.username === data.from || p.user.username === data.to
                     );
-                    
+
                     if (involvesSender) {
                         // Update the last message in this conversation
                         return {
@@ -480,27 +480,43 @@ export default function ChatPage() {
                     const messagesData = await response.json();
                     console.log('✅ Messages API loaded successfully:', messagesData.length, 'messages');
 
-                    // Format messages for frontend and calculate unread counts
-                    const formattedMessages = messagesData.map((msg: any) => ({
-                        id: msg.id,
-                        from: msg.sender?.username || 'Unknown',
-                        to: msg.sender?.username === username ? selectedUsername : username,
-                        message: msg.content,
-                        timestamp: msg.timestamp,
-                        status: msg.status,
-                        isVoiceMessage: msg.is_voice_message,
-                        audioUrl: msg.audio_url,
-                        audioDuration: msg.audio_duration,
-                        isDeleted: msg.is_deleted,
-                        isEdited: msg.is_edited,
-                        isPinned: msg.is_pinned,
-                        replyTo: msg.reply_to ? {
-                            id: msg.reply_to.id,
-                            from: msg.reply_to.sender?.username || 'Unknown',
-                            message: msg.reply_to.content || msg.reply_to.message
-                        } : undefined,
-                        senderId: msg.sender_id
-                    }));
+                    // Get current user ID
+            const cookies = getClientCookies();
+            const currentUserId = cookies['user-id'] || SecureSession.getUserId();
+            
+            if (!currentUserId) {
+                console.log('❌ User not authenticated');
+                setMessages([]);
+                return;
+            }
+
+            // Format messages for frontend and calculate unread counts
+                    const formattedMessages = messagesData.map((msg: any) => {
+                        // Check if current user has hidden this message
+                        const isHidden = msg.hidden_by && Array.isArray(msg.hidden_by) && msg.hidden_by.includes(currentUserId);
+                        
+                        return {
+                            id: msg.id,
+                            from: msg.sender?.username || 'Unknown',
+                            to: msg.sender?.username === username ? selectedUsername : username,
+                            message: msg.deleted_by ? '[This message was deleted]' : msg.content,
+                            timestamp: msg.timestamp,
+                            status: msg.status,
+                            isVoiceMessage: msg.is_voice_message,
+                            audioUrl: msg.audio_url,
+                            audioDuration: msg.audio_duration,
+                            isDeleted: !!msg.deleted_by,
+                            isEdited: msg.is_edited,
+                            isPinned: msg.is_pinned,
+                            isHidden: isHidden,
+                            replyTo: msg.reply_to ? {
+                                id: msg.reply_to.id,
+                                from: msg.reply_to.sender?.username || 'Unknown',
+                                message: msg.reply_to.content || msg.reply_to.message
+                            } : undefined,
+                            senderId: msg.sender_id
+                        };
+                    }).filter((msg: any) => !msg.isHidden); // Filter out hidden messages
 
                     // Calculate unread messages for this conversation
                     const unreadCount = formattedMessages.filter((msg: any) =>
@@ -1095,7 +1111,7 @@ export default function ChatPage() {
 
         console.log('🔔 Creating notification...');
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        
+
         const options: NotificationOptions = {
             body: data.message,
             icon: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.from}`,
@@ -1392,40 +1408,102 @@ export default function ChatPage() {
         if (failedMessages.length >= 2 && isConnected && socketRef.current) {
             console.log(`🔄 Auto-retrying ${failedMessages.length} failed messages`);
 
-            // Retry all failed messages with delay between each
             failedMessages.forEach((msg, index) => {
                 setTimeout(() => {
                     if (msg.id) {
-                        console.log(`🔄 Auto-retrying message ${index + 1}/${failedMessages.length}:`, msg.id);
                         setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'pending' } : m));
 
                         if (isConnected && socketRef.current) {
                             sendMessageInternal(msg);
                         }
                     }
-                }, index * 1000); // 1 second delay between each retry
+                }, index * 5000);
             });
         }
     }, [messages, isConnected]);
 
     const handleDeleteMessage = async (id: string, type: 'me' | 'everyone') => {
         try {
+            const cookies = getClientCookies();
+            const userId = cookies['user-id'] || SecureSession.getUserId();
+            
+            if (!userId) {
+                alert('User not authenticated');
+                return;
+            }
+
             if (type === 'me') {
-                // Delete for me - hide message for current user only
                 setMessages(prev => prev.map(m =>
                     m.id === id ? { ...m, isHidden: true } : m
                 ));
-                console.log('� Hidden message for current user:', id);
+                
+                try {
+                    const response = await fetch(`/api/messages/${id}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            type: 'me',
+                            userId: userId
+                        }),
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to hide message');
+                    }
+                    
+                    console.log('✅ Message hidden for user:', id);
+                } catch (apiError) {
+                    console.error('❌ Failed to hide message from API:', apiError);
+                    setMessages(prev => prev.map(m =>
+                        m.id === id ? { ...m, isHidden: false } : m
+                    ));
+                    alert('Failed to hide message. Please try again.');
+                    return;
+                }
+                
             } else {
+                // Delete for everyone - call API and update local state
                 setMessages(prev => prev.map(m =>
-                    m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m
+                    m.id === id ? { ...m, isDeleted: true, message: '[This message was deleted]', audioUrl: undefined } : m
                 ));
+                
+                try {
+                    const response = await fetch(`/api/messages/${id}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            type: 'everyone',
+                            userId: userId
+                        }),
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to delete message from server');
+                    }
+                    
+                    console.log('✅ Message deleted for everyone:', id);
+                } catch (apiError) {
+                    console.error('❌ Failed to delete message from API:', apiError);
+                    // Revert local state if API call fails
+                    setMessages(prev => prev.map(m =>
+                        m.id === id ? { ...m, isDeleted: false, message: m.message, audioUrl: m.audioUrl } : m
+                    ));
+                    alert('Failed to delete message. Please try again.');
+                    return;
+                }
+                
+                // Emit socket event to update other users
                 if (socketRef.current && selectedUser) {
                     socketRef.current?.emit('delete-message', { id, to: selectedUser });
                 }
             }
         } catch (error) {
             console.error('❌ Failed to delete message:', error);
+            alert('Failed to delete message. Please try again.');
         }
     };
 
@@ -1604,7 +1682,7 @@ export default function ChatPage() {
         }
     };
 
-    const handleScrollToMessage = (messageId: string) => {
+    const handleScrollToMessage = (messageId: string | undefined ) => {
         const messageElement = document.getElementById(`msg-${messageId}`);
         if (messageElement) {
             messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1699,7 +1777,7 @@ export default function ChatPage() {
                                                         // Auto-scroll to the message
                                                         if (msg.id) {
                                                             setTimeout(() => {
-                                                                handleScrollToMessage(msg.id);
+                                                                handleScrollToMessage(msg?.id);
                                                             }, 100);
                                                         }
                                                     }}

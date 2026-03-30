@@ -68,6 +68,8 @@ model Message {
   isEdited       Boolean  @default(false)
   isDeleted      Boolean  @default(false)
   isPinned       Boolean  @default(false)
+  deletedBy      String?  // User ID who deleted the message for everyone
+  hiddenBy       Json?    // Array of user IDs who hid the message for themselves
   replyTo        Json?    // Store partial message for reply
   groupId        String?  // For chunked messages (UI level)
   chunkIndex     Int?

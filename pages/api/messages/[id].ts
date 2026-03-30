@@ -3,21 +3,55 @@ import { supabaseAdmin } from '../../../utils/supabase-server';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     const { id } = req.query;
+    const { type, userId } = req.body;
     if (!id || typeof id !== 'string') return res.status(400).end();
 
     if (req.method === 'DELETE') {
         try {
-            await supabaseAdmin
-                .from('messages')
-                .update({
-                    is_deleted: true,
-                    content: '',
-                    audio_url: null,
-                })
-                .eq('id', id);
+            if (type === 'everyone' && userId) {
+                // Delete for everyone - set deletedBy and clear content
+                await supabaseAdmin
+                    .from('messages')
+                    .update({
+                        deletedBy: userId,
+                        content: '[This message was deleted]',
+                        audioUrl: null,
+                    })
+                    .eq('id', id);
+            } else if (type === 'me' && userId) {
+                // Hide for me - add user to hiddenBy array
+                const { data: message } = await supabaseAdmin
+                    .from('messages')
+                    .select('hiddenBy')
+                    .eq('id', id)
+                    .single();
+
+                const hiddenBy = message?.hiddenBy || [];
+                if (!hiddenBy.includes(userId)) {
+                    hiddenBy.push(userId);
+                }
+
+                await supabaseAdmin
+                    .from('messages')
+                    .update({
+                        hiddenBy: hiddenBy
+                    })
+                    .eq('id', id);
+            } else {
+                // Legacy delete - just mark as deleted
+                await supabaseAdmin
+                    .from('messages')
+                    .update({
+                        is_deleted: true,
+                        content: '',
+                        audio_url: null,
+                    })
+                    .eq('id', id);
+            }
 
             res.status(200).json({ success: true });
         } catch (error) {
+            console.error('Delete message error:', error);
             res.status(500).json({ error: 'Failed to delete message' });
         }
     } else if (req.method === 'PATCH') {

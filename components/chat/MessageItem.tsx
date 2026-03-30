@@ -264,51 +264,55 @@ export default function MessageItem({
                                     <Trash2 size={16} />
                                 </button>
                                 {showDeleteMenu && (
-                                    <div
-                                        ref={deleteMenuRef}
-                                        className="absolute top-full right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border border-gray-100 z-50 overflow-hidden"
-                                    >
-                                        {message.isHidden ? (
-                                            <button
-                                                onClick={() => {
-                                                    console.log('👁️ Unhide message clicked:', message.id);
-                                                    if (message.id) {
-                                                        onUnhide?.(message.id);
-                                                    }
-                                                    setShowDeleteMenu(false);
-                                                }}
-                                                className="w-full px-4 py-2 text-left text-[13px] text-[#00a884] hover:bg-green-50 transition-colors"
-                                            >
-                                                Unhide message
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={() => {
-                                                    console.log('🙈 Hide message for me clicked:', message.id);
-                                                    if (message.id) {
-                                                        onDelete?.(message.id, 'me');
-                                                    }
-                                                    setShowDeleteMenu(false);
-                                                }}
-                                                className="w-full px-4 py-2 text-left text-[13px] text-gray-700 hover:bg-gray-50 transition-colors"
-                                            >
-                                                Hide for me
-                                            </button>
-                                        )}
-                                        {isMe && (
-                                            <button
-                                                onClick={() => {
-                                                    console.log('🗑️ Delete for everyone clicked:', message.id);
-                                                    if (message.id) {
-                                                        onDelete?.(message.id, 'everyone');
-                                                    }
-                                                    setShowDeleteMenu(false);
-                                                }}
-                                                className="w-full px-4 py-2 text-left text-[13px] text-red-600 hover:bg-red-50 transition-colors"
-                                            >
-                                                Delete for everyone
-                                            </button>
-                                        )}
+                                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999] animate-in fade-in duration-200">
+                                        <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4 animate-in zoom-in-95 duration-200">
+                                            <h3 className="text-lg font-semibold text-[#111b21] mb-4">Delete Message</h3>
+                                            <p className="text-[#667781] text-sm mb-6">
+                                                Choose how you want to delete this message:
+                                            </p>
+                                            <div className="flex flex-col gap-2">
+                                                <button
+                                                    onClick={() => {
+                                                        console.log('� Hide message for me clicked:', message.id);
+                                                        if (message.id) {
+                                                            onDelete?.(message.id, 'me');
+                                                        }
+                                                        setShowDeleteMenu(false);
+                                                    }}
+                                                    className="w-full px-4 py-3 text-left text-[13px] text-gray-700 hover:bg-gray-50 rounded-lg transition-colors flex items-center gap-3"
+                                                >
+                                                    <EyeOff size={16} />
+                                                    <div>
+                                                        <div className="font-medium">Hide for me</div>
+                                                        <div className="text-xs text-gray-500">Message will be hidden only for you</div>
+                                                    </div>
+                                                </button>
+                                                {isMe && (
+                                                    <button
+                                                        onClick={() => {
+                                                            console.log('�️ Delete for everyone clicked:', message.id);
+                                                            if (message.id) {
+                                                                onDelete?.(message.id, 'everyone');
+                                                            }
+                                                            setShowDeleteMenu(false);
+                                                        }}
+                                                        className="w-full px-4 py-3 text-left text-[13px] text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-3"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                        <div>
+                                                            <div className="font-medium">Delete for everyone</div>
+                                                            <div className="text-xs text-red-500">This action cannot be undone</div>
+                                                        </div>
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => setShowDeleteMenu(false)}
+                                                    className="w-full px-4 py-2 text-left text-[13px] text-gray-600 hover:bg-gray-50 rounded-lg transition-colors mt-2"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
