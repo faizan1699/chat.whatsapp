@@ -157,10 +157,10 @@ export default function MessageItem({
             onMouseEnter={() => setShowActions(true)}
             onMouseLeave={() => setShowActions(false)}
         >
-            <div className={`flex flex-col max-w-[85%] md:max-w-[65%] ${isMe ? 'items-end' : 'items-start'}`}>
+            <div className={`flex flex-col max-w-[85%] md:max-w-[65%] lg:max-w-[60%] xl:max-w-[55%] ${isMe ? 'items-end' : 'items-start'}`}>
                 {/* Message bubble */}
                 <div
-                    className={`flex flex-col px-2 py-1 shadow-sm relative ${isMe
+                    className={`flex flex-col px-2 py-1 shadow-sm relative w-full min-w-0 ${isMe
                         ? 'rounded-l-lg rounded-br-lg bg-[#d9fdd3] text-[#111b21] ml-10'
                         : 'rounded-r-lg rounded-bl-lg bg-white text-[#111b21] mr-10'
                         } ${message.status === 'failed' ? 'bg-red-50 border border-red-200' : ''} ${isHighlighted ? 'highlight-message' : ''}`}
@@ -307,7 +307,7 @@ export default function MessageItem({
                 </div>
 
                 {/* Message Content */}
-                <div className="flex flex-col pr-2">
+                <div className="flex flex-col pr-2 min-w-0 flex-1">
                     {message.isHidden ? (
                         <div className="flex items-center gap-2 py-1 text-[#667781] italic text-[13px]">
                             <EyeOff size={14} className="opacity-60" />
@@ -366,12 +366,12 @@ export default function MessageItem({
                             </div>
                         </div>
                     ) : (
-                        <p className="text-[14.2px] leading-tight whitespace-pre-wrap py-0.5 min-w-[50px]">
+                        <p className="text-[14.2px] leading-tight whitespace-pre-wrap break-words overflow-wrap-anywhere py-0.5 min-w-[50px]">
                             {displayedMessage}
                             {hasMore && (
                                 <button
                                     onClick={handleSeeMore}
-                                    className="ml-1 text-[#00a884] font-bold hover:underline text-[12px]"
+                                    className="ml-1 text-[#00a884] font-bold hover:underline text-[12px] flex-shrink-0"
                                 >
                                     Read more
                                 </button>
@@ -379,7 +379,7 @@ export default function MessageItem({
                             {!hasMore && isLongMessage && visibleWords > 30 && (
                                 <button
                                     onClick={handleSeeLess}
-                                    className="ml-1 text-[#00a884] font-bold hover:underline text-[12px]"
+                                    className="ml-1 text-[#00a884] font-bold hover:underline text-[12px] flex-shrink-0"
                                 >
                                     See less
                                 </button>

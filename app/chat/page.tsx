@@ -140,15 +140,12 @@ export default function ChatPage() {
         }
     }, [selectedUser]);
 
-    // Socket connection setup
     const socket = useSocket();
 
     useEffect(() => {
         if (!socket) return;
 
         socketRef.current = socket;
-
-        // Socket event listeners
         socket.on('connect', () => {
             console.log('✅ Socket connected');
             setIsConnected(true);
