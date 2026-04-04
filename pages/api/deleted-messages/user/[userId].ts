@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { supabaseAdmin } from '../../../../../utils/supabase-server';
 import { jwtVerify, JWTPayload } from 'jose';
+import { supabaseAdmin } from '@/utils/supabase-server';
 
 const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback_secret_dont_use_in_production');
 
