@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, Fragment } from 'react';
-import { Pin, Reply, Edit, Trash2, MoreVertical, Mic, Send, X, Eye, EyeOff, Phone, Video, Download, Volume2, Pause, Play, Pencil, ArrowUp } from 'lucide-react';
+import { Pin, Reply, Edit, Trash2, MoreVertical, Mic, Send, X, Eye, EyeOff, Phone, Video, Download, Volume2, Pause, Play, Pencil, ArrowUp, PinOff } from 'lucide-react';
 import CheckIcon from './CheckIcon';
 import { Message } from '@/types/message';
 
@@ -228,7 +228,7 @@ export default function MessageItem({
                                     className={`p-1.5 hover:bg-black/5 rounded-full transition-colors ${message.isPinned ? 'text-[#00a884]' : 'text-[#667781]'}`}
                                     title={message.isPinned ? 'Unpin' : 'Pin'}
                                 >
-                                    {message.isPinned ? <X size={16} /> : <Pin size={16} />}
+                                    {message.isPinned ? <PinOff size={16} /> : <Pin size={16} />}
                                 </button>
                                 {!isMe && (
                                     <button

@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
-import {  Socket } from 'socket.io-client';
+import { Socket } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
-import { Pin, ChevronDown, X } from 'lucide-react';
+import { Pin, ChevronDown, X, PinOff } from 'lucide-react';
 import { frontendAuth } from '@/utils/frontendAuth';
 import IncomingCallModal from '@/components/video/IncomingCallModal';
 import { Message } from '@/types/message';
@@ -417,11 +417,11 @@ export default function ChatPage() {
                 if (response.ok) {
                     const messagesData = await response.json();
 
-            const cookies = getClientCookies();
-            const currentUserId = cookies['user-id'] || SecureSession.getUserId();
+                    const cookies = getClientCookies();
+                    const currentUserId = cookies['user-id'] || SecureSession.getUserId();
                     const formattedMessages = messagesData.map((msg: any) => {
                         const isHidden = msg.hidden_by && Array.isArray(msg.hidden_by) && currentUserId && msg.hidden_by.includes(currentUserId);
-                        
+
                         return {
                             id: msg.id,
                             from: msg.sender?.username || 'Unknown',
@@ -761,7 +761,7 @@ export default function ChatPage() {
             ringtoneRef.current = new Audio('/assets/ringtones/ringtone.mp3');
             ringtoneRef.current.loop = true;
         }
-        ringtoneRef.current.play().catch(e => {});
+        ringtoneRef.current.play().catch(e => { });
     };
 
     const stopRingtone = () => {
@@ -981,7 +981,7 @@ export default function ChatPage() {
             });
 
             setInputMessage(tempContent);
-        }, 10000); 
+        }, 10000);
 
         try {
             const savedMsg = await sendMessage(
@@ -1414,11 +1414,10 @@ export default function ChatPage() {
         }
     };
 
-    const handleScrollToMessage = (messageId: string | undefined ) => {
+    const handleScrollToMessage = (messageId: string | undefined) => {
         const messageElement = document.getElementById(`msg-${messageId}`);
         if (messageElement) {
             messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            // Add highlight effect
             messageElement.classList.add('highlight-message-reply');
             setTimeout(() => {
                 messageElement.classList.remove('highlight-message-reply');
@@ -1487,53 +1486,49 @@ export default function ChatPage() {
                                             <p className="text-[12px] font-bold text-[#00a884]">
                                                 {pinnedMessages.length === 1 ? 'Pinned Message' : `${pinnedMessages.length} Pinned Messages`}
                                             </p>
-                                            <p className="text-[13px] text-[#54656f] truncate">
-                                                {pinnedMessages[pinnedMessages.length - 1].message}
-                                            </p>
                                         </div>
                                         <ChevronDown size={18} className={`text-[#667781] transition-transform ${showPinsDropdown ? 'rotate-180' : ''}`} />
                                     </div>
 
                                     {showPinsDropdown && (
                                         <div className="absolute top-full left-0 right-0 bg-white shadow-xl border-b border-[#f0f2f5] max-h-[300px] overflow-y-auto animate-in slide-in-from-top-2 duration-200">
-                                            {pinnedMessages.slice().reverse().map((msg) => (
-                                                <div
-                                                    key={msg.id}
-                                                    className="p-3 border-b border-[#f0f2f5] hover:bg-[#f8f9fa] cursor-pointer relative group"
-                                                    onClick={() => {
-                                                        setHighlightedMessageId(msg.id || '');
-                                                        setShowPinsDropdown(false);
-                                                        if (msg.id) {
-                                                            setTimeout(() => {
-                                                                handleScrollToMessage(msg?.id);
-                                                            }, 100);
-                                                        }
-                                                    }}
-                                                >
-                                                    <div className="flex items-start gap-2">
-                                                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#00a884]/10 text-[#00a884] mt-1">
-                                                            <Pin size={12} className="fill-current" />
+                                            {pinnedMessages.slice().reverse().map((msg, index) => {
+                                                return (
+                                                    <div
+                                                        key={msg.id}
+                                                        className="px-3 py-1 border-b border-[#f0f2f5] hover:bg-[#f8f9fa] cursor-pointer relative group"
+                                                        onClick={() => {
+                                                            setHighlightedMessageId(msg.id || '');
+                                                            setShowPinsDropdown(false);
+                                                            if (msg.id) {
+                                                                setTimeout(() => {
+                                                                    handleScrollToMessage(msg?.id);
+                                                                }, 100);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#00a884]/10 text-[#00a884] mt-1">
+                                                                <Pin size={12} className="fill-current" />
+                                                            </div>
+                                                            <div className="flex flex-wrap min-w-0">
+                                                                <p className="text-[13px] font-medium text-[#111b21]">{msg.from ? `${msg.from} : ` : ''}</p>
+                                                                <p className="text-[14px] text-[#3b4a54] break-words ml-1">{msg.message}</p>
+                                                            </div>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handlePinMessage(msg);
+                                                                }}
+                                                                className="bg-red-200/50 transition-opacity p-1.5 hover:bg-red-50 rounded-full text-red-500 transition-colors absolute right-2 top-2"
+                                                                title="Unpin message"
+                                                            >
+                                                                <PinOff size={14} color='red' />
+                                                            </button>
                                                         </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-[13px] font-medium text-[#111b21]">{msg.from}</p>
-                                                            <p className="text-[14px] text-[#3b4a54] break-words">{msg.message}</p>
-                                                            <p className="text-[11px] text-[#8696a0] mt-1">
-                                                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                            </p>
-                                                        </div>
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handlePinMessage(msg);
-                                                            }}
-                                                            className=" transition-opacity p-1.5 hover:bg-red-50 rounded-full text-red-500 transition-colors absolute right-2 top-2"
-                                                            title="Unpin message"
-                                                        >
-                                                            <X size={14} />
-                                                        </button>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                )
+                                            })}
                                         </div>
                                     )}
                                 </div>
