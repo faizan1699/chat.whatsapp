@@ -16,6 +16,7 @@ export interface Message {
     isPinned?: boolean;
     pinnedBy?: string;
     isHidden?: boolean;
+    hideFromAll?: boolean;
     audioUrl?: string;
     audioDuration?: number;
     isVoiceMessage?: boolean;

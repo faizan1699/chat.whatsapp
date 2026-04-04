@@ -106,7 +106,7 @@ export default function MessageList({
 
     const sortedMessages = [...(messages || [])].sort((a, b) => 
         new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-    );
+    ).filter(msg => !msg.isHidden && !msg.hideFromAll);
 
     sortedMessages?.forEach((msg, idx) => {
         const msgDate = new Date(msg.timestamp);

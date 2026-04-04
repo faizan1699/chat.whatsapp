@@ -222,9 +222,9 @@ export default function ChatPage() {
             ));
         });
 
-        socket.on('delete-message', ({ id }: { id: string }) => {
+        socket.on('delete-message', ({ id, hideFromAll }: { id: string; hideFromAll?: boolean }) => {
             setMessages(prev => prev.map(m =>
-                m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m
+                m.id === id ? { ...m, isDeleted: true, hideFromAll: hideFromAll || false, message: '', audioUrl: undefined } : m
             ));
         });
 
@@ -441,6 +441,7 @@ export default function ChatPage() {
                             isEdited: msg.is_edited,
                             isPinned: msg.is_pinned,
                             isHidden: isHidden,
+                            hideFromAll: msg.hide_from_all || false,
                             replyTo: msg.reply_to ? {
                                 id: msg.reply_to.id,
                                 from: msg.reply_to.sender?.username || 'Unknown',
@@ -448,7 +449,7 @@ export default function ChatPage() {
                             } : undefined,
                             senderId: msg.sender_id
                         };
-                    }).filter((msg: any) => !msg.isHidden);
+                    }).filter((msg: any) => !msg.isHidden && !msg.hideFromAll);
 
                     const unreadCount = formattedMessages.filter((msg: any) =>
                         msg.from === selectedUsername &&
@@ -1244,7 +1245,10 @@ export default function ChatPage() {
                         throw new Error('Failed to hide message');
                     }
 
-                    setMessages(prev => prev.filter(m => m.id !== id));
+                    // Mark message as hidden for current user instead of removing it completely
+                    setMessages(prev => prev.map(m =>
+                        m.id === id ? { ...m, isHidden: true } : m
+                    ));
                 } catch (apiError) {
                     alert('Failed to hide message. Please try again.');
                     return;
@@ -1281,7 +1285,7 @@ export default function ChatPage() {
                 }
 
                 if (socketRef.current && selectedUser) {
-                    socketRef.current?.emit('delete-message', { id, to: selectedUser });
+                    socketRef.current?.emit('delete-message', { id, to: selectedUser, hideFromAll: true });
                 }
             }
         } catch (error) {

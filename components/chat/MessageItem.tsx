@@ -169,6 +169,8 @@ export default function MessageItem({
             className={`group flex w-full mb-1  ${isMe ? 'justify-end' : 'justify-start'} ${isHighlighted ? 'highlight-message' : ''}`}
             onMouseEnter={() => setShowActions(true)}
             onMouseLeave={() => setShowActions(false)}
+            onTouchStart={() => setShowActions(true)}
+            onTouchEnd={() => setTimeout(() => setShowActions(false), 3000)}
         >
             <div className={`flex flex-col max-w-[85%] md:max-w-[65%] lg:max-w-[60%] xl:max-w-[55%] ${isMe ? 'items-end' : 'items-start'}`}>
                 <div
@@ -201,9 +203,13 @@ export default function MessageItem({
                         </div>
                     )}
 
-                    <div className={`absolute top-1 z-10 ${showActions ? 'opacity-100' : 'opacity-0'} transition-opacity ${isMe ? 'right-full mr-[10px]' : 'left-full ml-[10px]'}`}>
+                    <div className={`absolute top-1 z-10 ${showActions ? 'opacity-100' : 'opacity-0'} transition-opacity ${
+                        isMe 
+                            ? 'right-full mr-[10px] md:right-full md:mr-[10px] right-0' 
+                            : 'left-full ml-[10px] md:left-full md:ml-[10px] left-0'
+                    }`}>
                         {!message.isDeleted && (
-                            <div className="flex gap-1 bg-white shadow-md rounded-full p-1 border border-[#f0f2f5]">
+                            <div className="flex gap-1 bg-white shadow-md rounded-full p-1 border border-[#f0f2f5] md:flex md:gap-1">
                                 <button
                                     onClick={() => onReply?.(message)}
                                     className="p-1.5 hover:bg-black/5 rounded-full text-[#667781] transition-colors"
@@ -235,6 +241,7 @@ export default function MessageItem({
                                                     onDelete?.(message.id, 'me');
                                                 }
                                             } else {
+                                                // Sender gets the delete menu
                                                 setShowDeleteMenu(!showDeleteMenu);
                                             }
                                         }}
@@ -244,8 +251,8 @@ export default function MessageItem({
                                         <Trash2 size={16} />
                                     </button>
                                     {showDeleteMenu && (
-                                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999] animate-in fade-in duration-200">
-                                            <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4 animate-in zoom-in-95 duration-200">
+                                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999] animate-in fade-in duration-200 p-4">
+                                            <div className="bg-white rounded-lg shadow-xl p-4 md:p-6 max-w-sm w-full mx-auto animate-in zoom-in-95 duration-200">
                                                 <h3 className="text-lg font-semibold text-[#111b21] mb-4">Delete Message</h3>
                                                 <p className="text-[#667781] text-sm mb-6">
                                                     Choose how you want to delete this message:
@@ -258,7 +265,7 @@ export default function MessageItem({
                                                             }
                                                             setShowDeleteMenu(false);
                                                         }}
-                                                        className="w-full px-4 py-3 text-left text-[13px] text-gray-700 hover:bg-gray-50 rounded-lg transition-colors flex items-center gap-3"
+                                                        className="w-full px-4 py-4 text-left text-[13px] text-gray-700 hover:bg-gray-50 rounded-lg transition-colors flex items-center gap-3 min-h-[48px]"
                                                     >
                                                         <EyeOff size={16} />
                                                         <div>
@@ -274,7 +281,7 @@ export default function MessageItem({
                                                                 }
                                                                 setShowDeleteMenu(false);
                                                             }}
-                                                            className="w-full px-4 py-3 text-left text-[13px] text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-3"
+                                                            className="w-full px-4 py-4 text-left text-[13px] text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-3 min-h-[48px]"
                                                         >
                                                             <Trash2 size={16} />
                                                             <div>
@@ -285,7 +292,7 @@ export default function MessageItem({
                                                     )}
                                                     <button
                                                         onClick={() => setShowDeleteMenu(false)}
-                                                        className="w-full px-4 py-2 text-left text-[13px] text-gray-600 hover:bg-gray-50 rounded-lg transition-colors mt-2"
+                                                        className="w-full px-4 py-4 text-left text-[13px] text-gray-600 hover:bg-gray-50 rounded-lg transition-colors mt-2 min-h-[48px]"
                                                     >
                                                         Cancel
                                                     </button>
