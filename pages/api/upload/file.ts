@@ -2,6 +2,14 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../utils/supabase-server';
 import { getAuthUser } from '../../../utils/auth';
 
+export const config = {
+    api: {
+        bodyParser: false,
+        responseLimit: false,
+        externalResolver: true,
+    },
+};
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'POST') {
         return res.status(405).json({ message: 'Method not allowed' });
@@ -19,18 +27,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         const contentLength = req.headers['content-length'];
-        if (contentLength && parseInt(contentLength) > 1 * 1024 * 1024) {
-            return res.status(400).json({ message: 'File size must be less than 1MB' });
+        if (contentLength && parseInt(contentLength) > 10 * 1024 * 1024) {
+            return res.status(400).json({ message: 'File size must be less than 10MB' });
         }
 
         const chunks: Buffer[] = [];
         let totalSize = 0;
-        const maxSize = 1 * 1024 * 1024;
+        const maxSize = 10 * 1024 * 1024;
 
         for await (const chunk of req) {
             totalSize += chunk.length;
             if (totalSize > maxSize) {
-                return res.status(400).json({ message: 'File size must be less than 1MB' });
+                return res.status(400).json({ message: 'File size must be less than 10MB' });
             }
             chunks.push(chunk);
         }
@@ -41,10 +49,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const randomString = Math.random().toString(36).substring(2, 15);
         const filename = `chat-files/${authUser.userId}/${timestamp}-${randomString}`;
         
+        // Get MIME type from request headers first
         let fileType = 'application/octet-stream';
         let isImage = false;
         
-        if (buffer.length >= 4) {
+        // Try to extract MIME type from multipart form data
+        const contentTypeHeader = req.headers['content-type'] || '';
+        if (contentTypeHeader.includes('multipart/form-data')) {
+            // Parse multipart to get actual file content-type
+            const boundary = contentTypeHeader.split('boundary=')[1];
+            if (boundary) {
+                const data = buffer.toString('binary');
+                const parts = data.split(`--${boundary}`);
+                for (const part of parts) {
+                    if (part.includes('Content-Type:') && !part.includes('name="file"')) {
+                        const contentTypeMatch = part.match(/Content-Type:\s*(.+)/i);
+                        if (contentTypeMatch) {
+                            fileType = contentTypeMatch[1].trim();
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (fileType === 'application/octet-stream' && buffer.length >= 4) {
             const header = buffer.subarray(0, 4);
             const headerHex = header.toString('hex');
             

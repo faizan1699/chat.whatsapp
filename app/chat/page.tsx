@@ -91,6 +91,7 @@ export default function ChatPage() {
         size: number;
         type: string;
         isImage: boolean;
+        caption?: string;
     } | null>(null);
 
     useEffect(() => {
@@ -188,11 +189,11 @@ export default function ChatPage() {
 
             setConversations(prev => {
                 return prev.map(conv => {
-                    const involvesSender = conv.participants.some((p: any) =>
-                        p.user.username === data.from || p.user.username === data.to
-                    );
+                    const involvesSender = conv.participants.some((p: any) => p.user.username === data.from);
+                    const involvesReceiver = conv.participants.some((p: any) => p.user.username === data.to);
+                    const isCorrectConversation = involvesSender && involvesReceiver && conv.participants.length === 2;
 
-                    if (involvesSender) {
+                    if (isCorrectConversation) {
                         return {
                             ...conv,
                             messages: [data],
@@ -955,7 +956,7 @@ export default function ChatPage() {
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!inputMessage.trim() || !selectedUser) return;
+        if ((!inputMessage.trim() && !attachedFile) || !selectedUser) return;
 
         const tempContent = inputMessage.trim();
         setInputMessage('');
@@ -973,6 +974,14 @@ export default function ChatPage() {
                 id: replyingTo.id,
                 from: replyingTo.from,
                 message: replyingTo.message
+            } : undefined,
+            file: attachedFile ? {
+                url: attachedFile.url,
+                filename: attachedFile.filename,
+                size: attachedFile.size,
+                type: attachedFile.type,
+                isImage: attachedFile.isImage,
+                caption: attachedFile.caption
             } : undefined,
         };
 
@@ -1004,7 +1013,8 @@ export default function ChatPage() {
                 selectedUser,
                 username,
                 conversations,
-                replyingTo
+                replyingTo,
+                attachedFile || undefined
             );
 
             clearTimeout(timeoutId);
@@ -1040,9 +1050,19 @@ export default function ChatPage() {
                     groupId: null,
                     chunkIndex: null,
                     totalChunks: null,
-                    replyToMessageId: replyingTo?.id
+                    replyToMessageId: replyingTo?.id,
+                    file: attachedFile ? {
+                        url: attachedFile.url,
+                        filename: attachedFile.filename,
+                        size: attachedFile.size,
+                        type: attachedFile.type,
+                        isImage: attachedFile.isImage,
+                        caption: attachedFile.caption
+                    } : undefined,
                 });
             }
+
+            setAttachedFile(null);
 
         } catch (error) {
             clearTimeout(timeoutId);

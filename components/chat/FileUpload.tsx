@@ -25,9 +25,9 @@ export default function FileUpload({ onFileSelect, disabled = false }: FileUploa
         const file = event.target.files?.[0];
         if (!file) return;
 
-        // Check file size (1MB limit)
-        if (file.size > 1 * 1024 * 1024) {
-            setError('File size must be less than 1MB');
+        // Check file size (10MB limit)
+        if (file.size > 10 * 1024 * 1024) {
+            setError('File size must be less than 10MB');
             return;
         }
 
@@ -114,7 +114,7 @@ export default function FileUpload({ onFileSelect, disabled = false }: FileUploa
                 onClick={handleClick}
                 disabled={disabled || uploading}
                 className="p-2 hover:bg-gray-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Attach file (max 1MB)"
+                title="Attach file (max 10MB)"
             >
                 {uploading ? (
                     <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
@@ -143,7 +143,7 @@ export default function FileUpload({ onFileSelect, disabled = false }: FileUploa
 
                         <div className="text-center">
                             <p className="text-sm text-gray-500">
-                                Uploading file... (max 1MB)
+                                Uploading file... (max 10MB)
                             </p>
                         </div>
                     </div>

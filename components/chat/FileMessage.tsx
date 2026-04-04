@@ -10,6 +10,7 @@ interface FileMessageProps {
         size: number;
         type: string;
         isImage: boolean;
+        caption?: string;
     };
     removable?: boolean;
     onRemove?: () => void;
@@ -94,6 +95,11 @@ export default function FileMessage({ file, removable = false, onRemove }: FileM
                         <div className="mt-1 text-xs text-gray-500">
                             {file.filename} • {formatFileSize(file.size)}
                         </div>
+                        {file.caption && (
+                            <div className="mt-1 text-sm text-gray-700">
+                                {file.caption}
+                            </div>
+                        )}
                     </div>
                 ) : (
                     /* File Preview */
@@ -111,6 +117,11 @@ export default function FileMessage({ file, removable = false, onRemove }: FileM
                             <p className="text-xs text-gray-500">
                                 {formatFileSize(file.size)}
                             </p>
+                            {file.caption && (
+                                <p className="text-xs text-gray-600 mt-1">
+                                    {file.caption}
+                                </p>
+                            )}
                         </div>
                         <Download size={16} className="text-gray-400 flex-shrink-0" />
                     </div>
@@ -144,6 +155,9 @@ export default function FileMessage({ file, removable = false, onRemove }: FileM
                         <div className="absolute bottom-4 left-4 right-4 bg-black/50 text-white p-3 rounded-lg">
                             <p className="font-medium">{file.filename}</p>
                             <p className="text-sm opacity-80">{formatFileSize(file.size)}</p>
+                            {file.caption && (
+                                <p className="text-sm mt-1">{file.caption}</p>
+                            )}
                         </div>
                     </div>
                 </div>

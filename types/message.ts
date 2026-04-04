@@ -31,4 +31,12 @@ export interface Message {
     senderId?: string | null;
     content?: string;
     reactions?: Record<string, string[]>;
+    file?: {
+        url: string;
+        filename: string;
+        size: number;
+        type: string;
+        isImage: boolean;
+        caption?: string;
+    };
 }

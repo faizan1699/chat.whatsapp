@@ -103,7 +103,15 @@ export const useMessageApi = () => {
     selectedUser: string,
     username: string,
     conversations: Conversation[],
-    replyingTo?: Message | null
+    replyingTo?: Message | null,
+    file?: {
+      url: string;
+      filename: string;
+      size: number;
+      type: string;
+      isImage: boolean;
+      caption?: string;
+    }
   ): Promise<Message> => {
     
     setLoading(true);
@@ -119,13 +127,39 @@ export const useMessageApi = () => {
         userId
       );
 
+      // If there's a file, upload it first
+      let uploadedFile = null;
+      if (file) {
+        const formData = new FormData();
+        const response = await fetch(file.url);
+        const blob = await response.blob();
+        formData.append('file', blob, file.filename);
+
+        const uploadResponse = await fetch('/api/upload/file', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: formData
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error('Failed to upload file');
+        }
+
+        const uploadResult = await uploadResponse.json();
+        uploadedFile = {
+          ...uploadResult.file,
+          caption: file.caption
+        };
+      }
+
       const response = await axios.post('/api/messages', {
         conversationId: currentConversation.id,
         senderId: userId,
         content,
         to: selectedUser,
         from: username,
-        replyTo: replyingTo?.id || null
+        replyTo: replyingTo?.id || null,
+        file: uploadedFile
       }, {
         headers: getAuthHeaders()
       });
