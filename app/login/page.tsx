@@ -19,9 +19,10 @@ function LoginForm() {
 
     useEffect(() => {
         if (frontendAuth.isAuthenticated()) {
-            router.push('/chat');
+            const returnTo = searchParams?.get('returnTo') || '/chat';
+            router.push(returnTo);
         }
-    }, [router]);
+    }, [router, searchParams]);
 
     const {
         register,
@@ -41,7 +42,8 @@ function LoginForm() {
                 responseData.user
             );
 
-            router.push('/chat');
+            const returnTo = searchParams?.get('returnTo') || '/chat';
+            router.push(returnTo);
         } catch (error: any) {
             const errorMessage = error?.response?.data?.message || 'Login failed';
             setFormError('root', { type: 'manual', message: errorMessage });
