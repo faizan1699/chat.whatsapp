@@ -13,63 +13,44 @@ interface LoginFormData {
 }
 
 function LoginForm() {
-    
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const router = useRouter();
     const searchParams = useSearchParams();
 
-    // Check if user is already logged in and redirect to chat
     useEffect(() => {
         if (frontendAuth.isAuthenticated()) {
-            console.log('✅ User already logged in, redirecting to chat...');
             router.push('/chat');
-            router.refresh();
         }
     }, [router]);
 
     const {
         register,
         handleSubmit,
-        formState: { errors },
-        setValue,
+        formState: { errors, isSubmitting },
+        setError: setFormError,
     } = useForm<LoginFormData>();
 
     const onSubmit = async (data: LoginFormData) => {
-        setLoading(true);
-        setError('');
-
         try {
-            const response = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(data),
-            });
-            const responseData = await response.json();
-            if (response.ok) {
-                frontendAuth.setSession(
-                    responseData.accessToken,
-                    responseData.refreshToken,
-                    responseData.user
-                );
-                router.push('/chat');
-            } else {
-                setError(responseData.message || 'Login failed');
-            }
-        } catch (error) {
-            setError('Network error. Please try again.');
-        } finally {
-            setLoading(false);
+            const response = await api.post('/auth/login', data);
+            const responseData = response.data;
+
+            frontendAuth.setSession(
+                responseData.accessToken,
+                responseData.refreshToken,
+                responseData.user
+            );
+
+            router.push('/chat');
+        } catch (error: any) {
+            const errorMessage = error?.response?.data?.message || 'Login failed';
+            setFormError('root', { type: 'manual', message: errorMessage });
         }
     };
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
             <div className="w-full max-w-md">
-                {/* Logo and Brand */}
                 <div className="text-center mb-8">
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
                         <MessageCircle className="w-8 h-8 text-white" />
@@ -78,7 +59,6 @@ function LoginForm() {
                     <p className="text-gray-600">Connect with friends securely</p>
                 </div>
 
-                {/* Login Card */}
                 <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
                     <div className="mb-6">
                         <h2 className="text-xl font-semibold text-gray-900 mb-2">Welcome Back</h2>
@@ -86,7 +66,6 @@ function LoginForm() {
                     </div>
 
                     <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
-                        {/* Identifier Field */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                 Username or Email
@@ -150,20 +129,18 @@ function LoginForm() {
                             )}
                         </div>
 
-                        {/* Error Message */}
-                        {error && (
+                        {errors.root && (
                             <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                                <p className="text-sm text-red-600">{error}</p>
+                                <p className="text-sm text-red-600">{errors.root.message}</p>
                             </div>
                         )}
 
-                        {/* Submit Button */}
                         <button
                             type="submit"
-                            disabled={loading}
+                            disabled={isSubmitting}
                             className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
-                            {loading ? (
+                            {isSubmitting ? (
                                 <div className="flex items-center justify-center">
                                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                                     Signing in...
@@ -174,7 +151,6 @@ function LoginForm() {
                         </button>
                     </form>
 
-                    {/* Footer */}
                     <div className="mt-6 text-center">
                         <p className="text-sm text-gray-600">
                             Don't have an account?{' '}
@@ -185,7 +161,6 @@ function LoginForm() {
                     </div>
                 </div>
 
-                {/* Security Note */}
                 <div className="mt-6 text-center">
                     <p className="text-xs text-gray-500">
                         🔒 Secured with HTTP-only cookies

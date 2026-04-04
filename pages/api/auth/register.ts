@@ -12,14 +12,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    if (!termsAccepted) {
-        return res.status(400).json({ error: 'Terms and conditions must be accepted' });
-    }
+    // if (!termsAccepted) {
+    //     return res.status(400).json({ error: 'Terms and conditions must be accepted' });
+    // }
 
     try {
+        // Check if username, email, or phone already exists
+        const { data: existingUser } = await supabaseAdmin
+            .from('users')
+            .select('id, username, email, phone_number')
+            .or(`username.eq.${username},email.eq.${email},phone_number.eq.${phoneNumber}`)
+            .limit(1);
+
+        if (existingUser && existingUser.length > 0) {
+            const existing = existingUser[0];
+            
+            if (existing.username === username) {
+                return res.status(400).json({ error: 'Username is already taken' });
+            }
+            if (existing.email === email) {
+                return res.status(400).json({ error: 'Email is already registered' });
+            }
+            if (existing.phone_number === phoneNumber) {
+                return res.status(400).json({ error: 'Phone number is already registered' });
+            }
+        }
+
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const hashedPassword = await bcrypt.hash(password, 10);
-        const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+        const otpExpires = new Date(Date.now() + 10 * 60 * 1000); 
 
         const userData: any = {
             username,
@@ -29,15 +50,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             email_verified: false,
             verification_otp: email ? otp : null,
             verification_otp_expires: email ? otpExpires.toISOString() : null,
-            termsAccepted: true,
-            termsAcceptedAt: new Date().toISOString(),
         };
-
-        // Add cookie consent if provided
-        if (cookieConsent) {
-            userData.cookieConsent = cookieConsent;
-            userData.cookieConsentAt = new Date().toISOString();
-        }
 
         const { data: user, error } = await supabaseAdmin
             .from('users')
@@ -47,12 +60,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         if (error) {
             if (error.code === '23505') {
-                return res.status(400).json({ error: 'Username, email or phone already exists' });
+                // Check which field caused the uniqueness violation
+                const errorMessage = error.message || '';
+                
+                if (errorMessage.includes('users_username_key')) {
+                    return res.status(400).json({ error: 'Username is already taken' });
+                } else if (errorMessage.includes('users_email_key')) {
+                    return res.status(400).json({ error: 'Email is already registered' });
+                } else if (errorMessage.includes('users_phone_number_key')) {
+                    return res.status(400).json({ error: 'Phone number is already registered' });
+                } else {
+                    return res.status(400).json({ error: 'Username, email or phone already exists' });
+                }
             }
             throw error;
         }
 
-        // OTP via Email (FREE - Gmail)
         if (email) {
             await otpService.sendOTP(email, otp);
         }
