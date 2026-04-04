@@ -9,6 +9,32 @@ datasource db {
 }
 
 
+model DeletedMessage {
+  id                String   @id @default(cuid())
+  originalMessageId String
+  conversationId    String
+  senderId          String
+  deletedBy         String
+  originalContent   String
+  originalAudioUrl  String?
+  originalAudioDuration Float?
+  timestamp         DateTime @default(now())
+  deletionReason    String   @default("deleted_by_sender")
+  replyTo           Json?
+  isVoiceMessage    Boolean  @default(false)
+  isEdited          Boolean  @default(false)
+  isPinned          Boolean  @default(false)
+  
+  conversation      Conversation @relation(fields: [conversationId], references: [id])
+  sender            User         @relation(fields: [senderId], references: [id])
+  deletedByUser     User         @relation("DeletedByUser", fields: [deletedBy], references: [id])
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([deletedBy])
+  @@index([originalMessageId])
+}
+
 model User {
   id               String         @id @default(cuid())
   username         String         @unique
@@ -31,6 +57,12 @@ model User {
   
   // Messages sent by this user
   messages         Message[]
+  
+  // Messages deleted by this user
+  deletedMessages  DeletedMessage[] @relation("DeletedByUser")
+  
+  // Messages this user sent that were deleted
+  sentDeletedMessages DeletedMessage[]
 }
 
 model Conversation {
@@ -42,6 +74,7 @@ model Conversation {
 
   participants ConversationParticipant[]
   messages     Message[]
+  deletedMessages DeletedMessage[]
 }
 
 model ConversationParticipant {
@@ -70,6 +103,7 @@ model Message {
   isPinned       Boolean  @default(false)
   deletedBy      String?  // User ID who deleted the message for everyone
   isDeletedFromMe Json?    @default("[]") // Array of user IDs who hid the message for themselves
+  isHidden       Boolean  @default(false) // When true, message is hidden from everyone
   hideFromAll    Boolean  @default(false) // When true, message is hidden from everyone
   replyTo        Json?    // Store partial message for reply
   groupId        String?  // For chunked messages (UI level)
@@ -82,4 +116,5 @@ model Message {
   @@index([conversationId])
   @@index([senderId])
   @@index([hideFromAll])
+  @@index([isHidden])
 }

@@ -309,7 +309,7 @@ export default function MessageItem({
                         {message.isDeleted ? (
                             <div className="flex items-center gap-2 py-1 text-[#667781] italic text-[13px]">
                                 <span className="opacity-60 text-[12px]">🚫</span>
-                                <span>This message was deleted</span>
+                                <span>[This message was deleted]</span>
                             </div>
                         ) : message.isVoiceMessage ? (
                             <div className="flex items-center gap-3 py-2 min-w-[200px]">

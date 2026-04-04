@@ -19,7 +19,7 @@ async function authenticate(req: NextApiRequest): Promise<SessionPayload | null>
 
         const token = authHeader.substring(7);
         const { payload } = await jwtVerify(token, secret) as { payload: SessionPayload };
-        
+
         if (payload.type !== 'access') {
             return null;
         }
@@ -32,7 +32,7 @@ async function authenticate(req: NextApiRequest): Promise<SessionPayload | null>
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    // Authenticate user
+
     const session = await authenticate(req);
     if (!session) {
         return res.status(401).json({ error: 'Unauthorized' });
@@ -47,35 +47,60 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'DELETE') {
-        try {
+        try {            
             const { data: existingMessage, error: fetchError } = await supabaseAdmin
                 .from('messages')
-                .select('sender_id')
+                .select('sender_id, content')
                 .eq('id', id)
                 .single();
-                
+
             if (fetchError || !existingMessage) {
                 return res.status(404).json({ error: 'Message not found' });
             }
-            
+
             if (type === 'everyone' && userId) {
-                // Only sender can delete for everyone
                 if (existingMessage.sender_id !== session.userId) {
                     return res.status(403).json({ error: 'Forbidden: Only sender can delete for everyone' });
                 }
-                
+
+                const { data: fullMessage, error: fetchError } = await supabaseAdmin
+                    .from('messages')
+                    .select('*')
+                    .eq('id', id)
+                    .single();
+
+                if (fetchError || !fullMessage) {
+                    return res.status(404).json({ error: 'Message not found' });
+                }
+
+                await supabaseAdmin
+                    .from('deleted_messages')
+                    .insert({
+                        original_message_id: fullMessage.id,
+                        conversation_id: fullMessage.conversation_id,
+                        sender_id: fullMessage.sender_id,
+                        deleted_by: userId,
+                        original_content: fullMessage.content,
+                        original_audio_url: fullMessage.audio_url,
+                        original_audio_duration: fullMessage.audio_duration,
+                        reply_to: fullMessage.reply_to,
+                        is_voice_message: fullMessage.is_voice_message,
+                        is_edited: fullMessage.is_edited,
+                        is_pinned: fullMessage.is_pinned,
+                        deletion_reason: 'deleted_by_sender'
+                    });
+
                 await supabaseAdmin
                     .from('messages')
                     .update({
-                        deletedBy: userId,
                         content: '[This message was deleted]',
-                        audioUrl: null,
-                        hide_from_all: true
+                        audio_url: null,
+                        is_deleted: true,
+                        is_pinned: false
                     })
                     .eq('id', id);
+                
             } else if (type === 'me' && userId) {
-                // Anyone in the conversation can hide message for themselves
-                // For 'Delete for me', add the user's ID to the is_deleted_from_me array
                 const { data: message } = await supabaseAdmin
                     .from('messages')
                     .select('is_deleted_from_me')
@@ -83,12 +108,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                     .single();
 
                 let deletedFromMe = message?.is_deleted_from_me || [];
-                
-                // Ensure it's an array
+
                 if (!Array.isArray(deletedFromMe)) {
                     deletedFromMe = [];
                 }
-                
+
                 if (!deletedFromMe.includes(userId)) {
                     deletedFromMe.push(userId);
                 }
@@ -96,18 +120,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 await supabaseAdmin
                     .from('messages')
                     .update({
-                        is_deleted_from_me: deletedFromMe
+                        is_deleted_from_me: deletedFromMe,
+                        content: '[This message was deleted]',
+                        is_deleted: true,
+                        audio_url: null
                     })
                     .eq('id', id);
+                
+                console.log('✅ "me" delete completed - content set to: [This message was deleted]');
             } else {
                 await supabaseAdmin
                     .from('messages')
                     .update({
                         is_deleted: true,
-                        content: '',
+                        content: '[This message was deleted]',
                         audio_url: null,
                     })
                     .eq('id', id);
+                
+                console.log('✅ "everyone" delete completed - content set to: [This message was deleted]');
             }
 
             res.status(200).json({ success: true });
