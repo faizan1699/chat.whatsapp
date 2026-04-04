@@ -1,13 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo, useCallback, Fragment } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
+import { Socket } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
-import { Pin, ChevronDown, X } from 'lucide-react';
-import { getClientSessionOptimized, invalidateSessionCache } from '@/utils/sessionCache';
+import { Pin, ChevronDown, X, PinOff } from 'lucide-react';
+import { frontendAuth } from '@/utils/frontendAuth';
 import IncomingCallModal from '@/components/video/IncomingCallModal';
-import MessageItem from '@/components/chat/MessageItem';
-import { Message, ReplyTo } from '@/types/message';
+import { Message } from '@/types/message';
 import CallNotification from '@/components/video/CallNotification';
 import Sidebar from '@/components/global/Sidebar';
 import ResizableSidebar from '@/components/global/ResizableSidebar';
@@ -18,9 +17,9 @@ import FullPageLoader from '@/components/global/FullPageLoader';
 import { SecureSession } from '@/utils/secureSession';
 import { useMessageApi } from '@/hooks/useMessageApi';
 import { useSocket } from '@/hooks/useSocket';
-import { storageHelpers, STORAGE_KEYS, chatStorage } from '@/utils/storage';
+import { useNotifications } from '@/hooks/useNotifications';
+import { storageHelpers, chatStorage } from '@/utils/storage';
 import { supabaseAdmin } from '@/utils/supabase-server';
-import { uploadAudio } from '@/utils/supabase';
 import api from '@/utils/api';
 import { conversationsManager } from '@/utils/conversationsManager';
 import { clearAllSessionData, handleAuthFailure } from '@/utils/sessionCleanup';
@@ -62,20 +61,24 @@ export default function ChatPage() {
     const [isConversationsLoading, setIsConversationsLoading] = useState<boolean>(false);
     const [isMessagesLoading, setIsMessagesLoading] = useState<boolean>(false);
 
-    // Message API hook
     const {
         sendMessage,
         sendVoiceMessage,
-        updateMessage,
-        deleteMessage,
-        pinMessage,
-        fetchMessages,
-        retryMessage,
         loading: messageLoading,
         error: messageError
     } = useMessageApi();
 
-    const socket = useSocket();
+    const { showNotification: showNotificationMessage, permission: notificationPermission } = useNotifications();
+
+    const [isCallActive, setIsCallActive] = useState<boolean>(false);
+    const [incomingCall, setIncomingCall] = useState<{ from: string; to: string; offer: RTCSessionDescriptionInit; isAudioOnly?: boolean } | null>(null);
+    const [showEndCallButton, setShowEndCallButton] = useState<boolean>(false);
+    const [showRemoteVideo, setShowRemoteVideo] = useState<boolean>(false);
+    const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+    const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+    const [callTimer, setCallTimer] = useState(0);
+    const [isMuted, setIsMuted] = useState<boolean>(false);
+    const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
     const [callNotification, setCallNotification] = useState<{ message: string; type: 'start' | 'end' } | null>(null);
 
     const call = useWebRTCCall({
@@ -90,6 +93,15 @@ export default function ChatPage() {
     const [unreadCounts, setUnreadCounts] = useState<{ [key: string]: number }>({});
     const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
     const [showEditProfile, setShowEditProfile] = useState(false);
+    const [lastReceivedMessage, setLastReceivedMessage] = useState<Message | null>(null);
+    const [attachedFile, setAttachedFile] = useState<{
+        url: string;
+        filename: string;
+        size: number;
+        type: string;
+        isImage: boolean;
+        caption?: string;
+    } | null>(null);
 
     useEffect(() => {
         if (highlightedMessageId) {
@@ -103,31 +115,40 @@ export default function ChatPage() {
 
     const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
     const chunkBufferRef = useRef<Record<string, Message[]>>({});
+    const pinsDropdownRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         selectedUserRef.current = selectedUser;
     }, [selectedUser]);
 
     useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (pinsDropdownRef.current && !pinsDropdownRef.current.contains(event.target as Node)) {
+                setShowPinsDropdown(false);
+            }
+        };
+
+        if (showPinsDropdown) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showPinsDropdown]);
+
+    useEffect(() => {
         isWindowFocusedRef.current = isWindowFocused;
     }, [isWindowFocused]);
 
-    const conversationUsers = (conversations || []).reduce((acc: { [key: string]: string }, conv) => {
-        conv.participants?.forEach((p: any) => {
+    const conversationUsers = conversations.reduce((acc: { [key: string]: string }, conv) => {
+        conv.participants.forEach((p: any) => {
             if (p.user.username !== username) {
                 acc[p.user.username] = p.user.id;
             }
         });
         return acc;
     }, {});
-
-    const memoizedConversations = useMemo(() => {
-        return conversations.map(conv => ({
-            ...conv,
-            lastMessage: conv.last_message,
-            unreadCount: unreadCounts[conv.other_user_id] || 0
-        }));
-    }, [conversations, unreadCounts]);
 
     const allUsers = { ...conversationUsers, ...users };
     useEffect(() => {
@@ -139,11 +160,12 @@ export default function ChatPage() {
         }
     }, [selectedUser]);
 
+    const socket = useSocket();
+
     useEffect(() => {
         if (!socket) return;
 
         socketRef.current = socket;
-
         socket.on('connect', () => {
             setIsConnected(true);
             if (username) {
@@ -160,40 +182,34 @@ export default function ChatPage() {
         });
 
         socket.on('receive-message', (data: Message) => {
-            console.log('📨 Received message:', data);
-            console.log('Current user:', username, 'Selected user:', selectedUser);
 
             setMessages(prev => {
                 const exists = prev.some(m => m.id === data.id);
                 if (!exists) {
-                    console.log('✅ Adding new message to state');
                     return [...prev, data];
                 } else {
-                    console.log('⚠️ Message already exists, skipping');
                     return prev;
                 }
             });
 
-            // Update conversation's last message in real-time
-            setConversations(prev => prev.map(conv => {
-                const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
-                const hasBothParticipants = participantUsernames.includes(data.from) && participantUsernames.includes(data.to);
+            setConversations(prev => {
+                return prev.map(conv => {
+                    const involvesSender = conv.participants.some((p: any) => p.user.username === data.from);
+                    const involvesReceiver = conv.participants.some((p: any) => p.user.username === data.to);
+                    const isCorrectConversation = involvesSender && involvesReceiver && conv.participants.length === 2;
 
-                if (hasBothParticipants) {
-                    return {
-                        ...conv,
-                        lastMessage: {
-                            id: data.id,
-                            message: data.message,
-                            from: data.from,
-                            timestamp: data.timestamp,
-                            isDeleted: data.isDeleted,
-                            status: data.status
-                        }
-                    };
-                }
-                return conv;
-            }));
+                    if (isCorrectConversation) {
+                        return {
+                            ...conv,
+                            messages: [data],
+                            updatedAt: new Date().toISOString()
+                        };
+                    }
+                    return conv;
+                });
+            });
+
+            setLastReceivedMessage(data);
 
             if (data.from !== username && data.to === username) {
                 setUnreadCounts(prev => ({
@@ -201,14 +217,9 @@ export default function ChatPage() {
                     [data.from]: (prev[data.from] || 0) + 1
                 }));
 
-                if (!isWindowFocusedRef.current) {
-                    showNotification(data);
+                if (selectedUser !== data.from) {
+                    showNotificationMessage(data, username, selectedUser);
                 }
-            }
-
-            if ((data.from === selectedUser && data.to === username) ||
-                (data.from === username && data.to === selectedUser)) {
-                // Message is for current conversation - it's already added above
             }
         });
 
@@ -240,9 +251,9 @@ export default function ChatPage() {
             }));
         });
 
-        socket.on('delete-message', ({ id }: { id: string }) => {
+        socket.on('delete-message', ({ id, hideFromAll }: { id: string; hideFromAll?: boolean }) => {
             setMessages(prev => prev.map(m =>
-                m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m
+                m.id === id ? { ...m, isDeleted: true, hideFromAll: hideFromAll || false, message: '', audioUrl: undefined } : m
             ));
 
             // Update conversation's last message if it was the deleted message
@@ -282,12 +293,9 @@ export default function ChatPage() {
         });
 
         socket.on('answer', (payload) => {
-            call.handleAnswer(payload.answer);
         });
 
-        socket.on('icecandidate', (payload) => {
-            const c = typeof payload === 'object' && payload?.candidate ? payload.candidate : payload;
-            call.handleIceCandidate(c);
+        socket.on('icecandidate', (candidate) => {
         });
 
         socket.on('call-ended', () => {
@@ -317,20 +325,31 @@ export default function ChatPage() {
         };
     }, [socket, username, call]);
 
-    // Handle username changes after socket is already connected
     useEffect(() => {
-        if (socketRef.current && socketRef.current.connected && username) {
-            socketRef.current.emit('join-user', username);
-        }
-    }, [username]);
+        const requestNotificationPermission = async () => {
+            if ('Notification' in window) {
+                if (Notification.permission === 'default') {
+                    try {
+                        const permission = await Notification.requestPermission();
+                        if (permission === 'granted') {
+                        } else if (permission === 'denied') {
+                        }
+                    } catch (error) {
+                    }
+                } else {
+                }
+            } else {
+            }
+        };
 
-    useEffect(() => {
-        if ('Notification' in window && Notification.permission === 'default') {
-            Notification.requestPermission();
-        }
+        requestNotificationPermission();
 
-        const handleFocus = () => setIsWindowFocused(true);
-        const handleBlur = () => setIsWindowFocused(false);
+        const handleFocus = () => {
+            setIsWindowFocused(true);
+        };
+        const handleBlur = () => {
+            setIsWindowFocused(false);
+        };
 
         window.addEventListener('focus', handleFocus);
         window.addEventListener('blur', handleBlur);
@@ -397,6 +416,7 @@ export default function ChatPage() {
                 c.participants.some((p: any) => p.user.username === selectedUsername)
             );
 
+
             if (!currentConversation) {
                 const cookies = getClientCookies();
                 const userId = cookies['user-id'] || SecureSession.getUserId();
@@ -407,6 +427,7 @@ export default function ChatPage() {
                         .select('id')
                         .eq('username', selectedUsername)
                         .maybeSingle();
+
 
                     if (selectedUserData) {
                         const response = await fetch('/api/conversations', {
@@ -429,51 +450,45 @@ export default function ChatPage() {
             }
 
             if (currentConversation) {
-                const response = await fetch(`/api/conversations/${currentConversation.id}/messages`);
+                const token = frontendAuth.getAccessToken();
+                const response = await fetch(`/api/conversations/${currentConversation.id}/messages`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
                 if (response.ok) {
                     const messagesData = await response.json();
 
+                    const cookies = getClientCookies();
+                    const currentUserId = cookies['user-id'] || SecureSession.getUserId();
                     const formattedMessages = messagesData.map((msg: any) => {
-                        let timestamp = msg.timestamp;
-                        if (timestamp) {
-                            try {
-                                if (typeof timestamp === 'string') {
-                                    timestamp = new Date(timestamp);
-                                }
-                                if (!(timestamp instanceof Date)) {
-                                    timestamp = new Date(timestamp);
-                                }
-                                if (isNaN(timestamp.getTime())) {
-                                    timestamp = new Date();
-                                }
-                            } catch (error) {
-                                timestamp = new Date();
-                            }
-                        } else {
-                            timestamp = new Date();
-                        }
+                        const isHidden = msg.hidden_by && Array.isArray(msg.hidden_by) && currentUserId && msg.hidden_by.includes(currentUserId);
 
                         return {
                             id: msg.id,
-                            from: msg.from || msg.sender?.username || 'Unknown',
-                            to: msg.to || (msg.sender?.username === username ? selectedUsername : username),
-                            message: msg.message,
-                            timestamp: timestamp,
+                            from: msg.sender?.username || 'Unknown',
+                            to: msg.sender?.username === username ? selectedUsername : username,
+                            message: msg.deleted_by ? '[This message was deleted]' : msg.content,
+                            timestamp: msg.timestamp,
                             status: msg.status,
-                            isVoiceMessage: msg.isVoiceMessage,
-                            audioUrl: msg.audioUrl,
-                            audioDuration: msg.audioDuration,
-                            isDeleted: msg.isDeleted,
-                            isEdited: msg.isEdited,
-                            isPinned: msg.isPinned,
-                            replyTo: msg.replyTo ? {
-                                id: msg.replyTo.id,
-                                from: msg.replyTo.from || msg.replyTo.sender?.username || 'Unknown',
-                                message: msg.replyTo.message
+                            isVoiceMessage: msg.is_voice_message,
+                            audioUrl: msg.audio_url,
+                            audioDuration: msg.audio_duration,
+                            isDeleted: !!msg.deleted_by,
+                            isEdited: msg.is_edited,
+                            isPinned: msg.is_pinned,
+                            isHidden: isHidden,
+                            hideFromAll: msg.hide_from_all || false,
+                            replyTo: msg.reply_to ? {
+                                id: msg.reply_to.id,
+                                from: msg.reply_to.sender?.username || 'Unknown',
+                                message: msg.reply_to.content || msg.reply_to.message
                             } : undefined,
-                            senderId: msg.senderId
+                            senderId: msg.sender_id
                         };
-                    });
+                    }).filter((msg: any) => !msg.isHidden && !msg.hideFromAll);
 
                     const unreadCount = formattedMessages.filter((msg: any) =>
                         msg.from === selectedUsername &&
@@ -486,7 +501,9 @@ export default function ChatPage() {
                         [selectedUsername]: unreadCount
                     }));
 
+
                     setMessages(formattedMessages);
+
                     if (currentConversation && unreadCounts[selectedUsername] > 0) {
                         const unreadMsgs = messages.filter(m =>
                             m.from === selectedUsername && m.status !== 'read' && m.to === username
@@ -518,23 +535,6 @@ export default function ChatPage() {
         }
     };
 
-    // Load user conversations from API
-    const loadConversations = useCallback(async (userId: string) => {
-        try {
-            const response = await fetch(`/api/conversations?userId=${userId}`);
-            if (response.ok) {
-                const result = await response.json();
-                const conversationsData = result.data || [];
-                setConversations(conversationsData);
-            } else if (response.status === 401) {
-                // 401 Unauthorized - clear session and redirect to login
-                handleAuthFailure(router);
-            }
-        } catch (error) {
-            throw error;
-        }
-    }, [router]);
-
     useEffect(() => {
         if (selectedUser && username) {
             loadMessages(selectedUser);
@@ -544,40 +544,29 @@ export default function ChatPage() {
     useEffect(() => {
         const checkAuth = async () => {
             try {
-                const storedSession = getClientSessionOptimized();
+                const storedSession = frontendAuth.getSession();
 
                 if (storedSession) {
-                    setUsername(storedSession?.user?.username || '');
-                    setCurrentUserId(storedSession?.user?.id || null);
+                    setUsername(storedSession.user.username);
                     setIsLoading(false);
                     setIsConversationsLoading(true);
-
-                    // Load conversations asynchronously to avoid blocking
-                    loadConversations(storedSession?.user?.id || '').then(() => {
+                    loadConversations(storedSession.user.id).then(() => {
                         setIsConversationsLoading(false);
                     }).catch((error: any) => {
                         setIsConversationsLoading(false);
                     });
-
-                    // Load failed messages asynchronously
-                    setTimeout(() => {
-                        const failed = storageHelpers.getFailedMessages() || [];
-                        if (failed.length > 0) {
-                            setMessages(prev => {
-                                const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
-                                return [...prev, ...newMessages];
-                            });
-                        }
-                    }, 100);
+                    const failed = storageHelpers.getFailedMessages() || [];
+                    if (failed.length > 0) {
+                        setMessages(prev => {
+                            const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
+                            return [...prev, ...newMessages];
+                        });
+                    }
                 } else {
-                    // No session found - clear cookies and localStorage, then redirect to login
-                    handleAuthFailure(router);
                     setIsLoading(false);
                     setIsConversationsLoading(false);
                 }
             } catch (error) {
-                // Error checking auth - clear everything and redirect to login
-                handleAuthFailure(router);
                 setIsLoading(false);
                 setIsConversationsLoading(false);
             }
@@ -612,7 +601,8 @@ export default function ChatPage() {
                         router.push('/login');
                     }
                 }
-            } catch (error) { }
+            } catch (error) {
+            }
         };
 
         const handleStorageChange = (e: StorageEvent) => {
@@ -626,22 +616,13 @@ export default function ChatPage() {
 
         window.addEventListener('storage', handleStorageChange);
 
-        const interval = setInterval(checkSessionChange, 60000); // Increased from 30s to 60s
+        const interval = setInterval(checkSessionChange, 30000);
 
         return () => {
             window.removeEventListener('storage', handleStorageChange);
             clearInterval(interval);
         };
     }, [username, router, currentUserId, loadConversations]);
-
-    // Auto-focus input when a user is selected
-    useEffect(() => {
-        if (selectedUser) {
-            setAutoFocusInput(true);
-            // Reset autoFocus after a short delay to trigger the effect
-            setTimeout(() => setAutoFocusInput(false), 100);
-        }
-    }, [selectedUser]);
 
     const saveFailedMessageLocal = (msg: Message) => {
         try {
@@ -651,7 +632,8 @@ export default function ChatPage() {
                 lastRetryTime: new Date(),
                 status: 'failed'
             });
-        } catch (error) { }
+        } catch (error) {
+        }
     };
 
     const retryFailedMessages = () => {
@@ -670,8 +652,8 @@ export default function ChatPage() {
                             m.id === msg.id ? { ...m, status: 'sending' } : m
                         ));
 
-                        const cookies = getClientCookies();
-                        const userId = (cookies['user-id'] as string) || SecureSession.getUserId();
+                        const session = frontendAuth.getSession();
+                        const userId = session?.user?.id;
 
                         let currentConversation = conversations.find(c =>
                             c.participants.some((p: any) => p.user.username === msg.to)
@@ -702,10 +684,12 @@ export default function ChatPage() {
                         }
 
                         if (currentConversation && userId) {
+                            const token = frontendAuth.getAccessToken();
                             const response = await fetch('/api/messages', {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
                                 },
                                 body: JSON.stringify({
                                     conversationId: currentConversation.id,
@@ -723,8 +707,11 @@ export default function ChatPage() {
                                 setMessages(prev => prev.map(m =>
                                     m.id === msg.id ? { ...m, status: 'sent' } : m
                                 ));
-                            } else { }
-                        } else { }
+                            } else {
+                                throw new Error('Failed to send message');
+                            }
+                        } else {
+                        }
                     } catch (error) {
                         msg.retryCount = (msg.retryCount || 0) + 1;
                         msg.lastRetryTime = new Date();
@@ -832,6 +819,7 @@ export default function ChatPage() {
                 }
                 isProcessing = false;
             };
+
             processQueue();
             interval = setInterval(processQueue, 1000);
         }
@@ -841,33 +829,35 @@ export default function ChatPage() {
         };
     }, [isConnected]);
 
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (isCallActive) {
+            interval = setInterval(() => setCallTimer(prev => prev + 1), 1000);
+        }
+        return () => clearInterval(interval);
+    }, [isCallActive]);
+
+    const playRingtone = () => {
+        if (!ringtoneRef.current) {
+            ringtoneRef.current = new Audio('/assets/ringtones/ringtone.mp3');
+            ringtoneRef.current.loop = true;
+        }
+        ringtoneRef.current.play().catch(e => { });
+    };
+
+    const stopRingtone = () => {
+        if (ringtoneRef.current) {
+            ringtoneRef.current.pause();
+            ringtoneRef.current.currentTime = 0;
+        }
+    };
+
     const sendMessageInternal = (msg: Message) => {
         if (!socketRef.current) return;
         socketRef.current.emit('send-message', msg, (ack: any) => {
             if (ack && ack.status === 'ok') {
                 setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'sent' } : m));
                 removeFailedMessage(msg.id!);
-
-                // Update conversation's last message
-                setConversations(prev => prev.map(conv => {
-                    const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
-                    const hasBothParticipants = participantUsernames.includes(msg.to) && participantUsernames.includes(msg.from);
-
-                    if (hasBothParticipants) {
-                        return {
-                            ...conv,
-                            lastMessage: {
-                                id: msg.id,
-                                message: msg.message,
-                                from: msg.from,
-                                timestamp: msg.timestamp,
-                                isDeleted: msg.isDeleted,
-                                status: 'sent'
-                            }
-                        };
-                    }
-                    return conv;
-                }));
             } else {
                 setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'failed' } : m));
                 saveFailedMessageLocal({ ...msg, status: 'failed' });
@@ -875,29 +865,163 @@ export default function ChatPage() {
         });
     };
 
-    const showNotification = (data: Message) => {
-        if (!('Notification' in window)) return;
+    const PeerConnection: PeerConnectionManager = useMemo(() => ({
+        getInstance: (stream: MediaStream) => {
+            if (peerConnectionRef.current) peerConnectionRef.current.close();
 
-        if (Notification.permission === 'granted') {
-            const options: any = {
-                body: data.message,
-                icon: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.from}`,
-                tag: 'chat-msg',
-                renotify: true
-            };
-            const notification = new Notification(`New message from ${data.from}`, options);
+            const pc = new RTCPeerConnection({
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            });
 
-            notification.onclick = () => {
-                window.focus();
-                setSelectedUser(data.from);
-                notification.close();
+            stream.getTracks().forEach(track => {
+                pc.addTrack(track, stream);
+            });
+
+            pc.onicecandidate = (e) => {
+                if (e.candidate) {
+                    socketRef.current?.emit('icecandidate', e.candidate);
+                }
             };
+
+            pc.ontrack = (e) => {
+                if (e.streams[0]) {
+                    setRemoteStream(e.streams[0]);
+                    setShowRemoteVideo(true);
+                    e.streams[0].getTracks().forEach(track => {
+                    });
+                }
+            };
+
+            pc.onconnectionstatechange = () => {
+                if (pc.connectionState === 'connected') setConnectionState('connected');
+            };
+
+            peerConnectionRef.current = pc;
+            return pc;
+        },
+        reset: () => {
+            if (peerConnectionRef.current) {
+                peerConnectionRef.current.close();
+                peerConnectionRef.current = null;
+            }
+        }
+    }), []);
+
+    const startCall = async (isAudio: boolean) => {
+        if (!selectedUser) return;
+        setIsAudioOnly(isAudio);
+        setCallParticipant(selectedUser);
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: isAudio ? false : true,
+                audio: true
+            });
+            localStreamRef.current = stream;
+            setLocalStream(stream);
+
+            const pc = PeerConnection.getInstance(stream);
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            socketRef.current?.emit('offer', {
+                from: username,
+                to: selectedUser,
+                offer,
+                isAudioOnly: isAudio
+            });
+
+            callerRef.current = [username, selectedUser];
+            setShowEndCallButton(true);
+            setIsCallActive(true);
+            setConnectionState('connecting');
+        } catch (e) {
+            alert('Could not access camera/mic');
         }
     };
 
+    const handleAcceptCall = async () => {
+        if (!incomingCall) return;
+        stopRingtone();
+
+        const isAudioCall = incomingCall.isAudioOnly === true;
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: !isAudioCall,
+                audio: true
+            });
+            localStreamRef.current = stream;
+            setLocalStream(stream);
+
+            const pc = PeerConnection.getInstance(stream);
+            await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+            processBufferedIceCandidates(pc);
+
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+
+            socketRef.current?.emit('answer', {
+                from: username,
+                to: incomingCall.from,
+                answer
+            });
+
+            setIsAudioOnly(isAudioCall);
+            setIsCallActive(true);
+            setShowRemoteVideo(!isAudioCall);
+            setShowEndCallButton(true);
+            setIncomingCall(null);
+            setCallParticipant(incomingCall.from);
+            setConnectionState('connected');
+        } catch (e) {
+            alert('Could not accept call: ' + (e as Error).message);
+        }
+    };
+
+    const handleRejectCall = () => {
+        if (!incomingCall) return;
+        stopRingtone();
+        socketRef.current?.emit('call-rejected', { from: username, to: incomingCall.from });
+        setIncomingCall(null);
+    };
+
+    const handleEndCallRequest = () => {
+        const otherUser = callerRef.current.find(u => u !== username) || selectedUser || callParticipant;
+        if (otherUser) {
+            socketRef.current?.emit('call-ended', { from: username, to: otherUser });
+        }
+        handleEndCallInternal();
+    };
+
+    const handleEndCallInternal = () => {
+        PeerConnection.reset();
+        if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(t => t.stop());
+            localStreamRef.current = null;
+        }
+        setLocalStream(null);
+        setRemoteStream(null);
+        setIsCallActive(false);
+        setShowEndCallButton(false);
+        setShowRemoteVideo(false);
+        setCallTimer(0);
+        setCallParticipant('');
+        setConnectionState('disconnected');
+        stopRingtone();
+    };
+
+    const processBufferedIceCandidates = async (pc: RTCPeerConnection) => {
+        while (iceCandidatesBuffer.current.length > 0) {
+            const candidate = iceCandidatesBuffer.current.shift();
+            if (candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+    };
+
+
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!inputMessage.trim() || !selectedUser) return;
+        if ((!inputMessage.trim() && !attachedFile) || !selectedUser) return;
 
         const tempContent = inputMessage.trim();
         setInputMessage('');
@@ -916,30 +1040,17 @@ export default function ChatPage() {
                 from: replyingTo.from,
                 message: replyingTo.message
             } : undefined,
+            file: attachedFile ? {
+                url: attachedFile.url,
+                filename: attachedFile.filename,
+                size: attachedFile.size,
+                type: attachedFile.type,
+                isImage: attachedFile.isImage,
+                caption: attachedFile.caption
+            } : undefined,
         };
 
         setMessages(prev => [...prev, tempMessage]);
-
-        // Update conversation's last message immediately
-        setConversations(prev => prev.map(conv => {
-            const participantUsernames = conv.participants?.map((p: any) => p.user.username) || [];
-            const hasBothParticipants = participantUsernames.includes(selectedUser) && participantUsernames.includes(username);
-
-            if (hasBothParticipants) {
-                return {
-                    ...conv,
-                    lastMessage: {
-                        id: tempMessage.id,
-                        message: tempContent,
-                        from: username,
-                        timestamp: tempMessage.timestamp,
-                        isDeleted: false,
-                        status: 'pending'
-                    }
-                };
-            }
-            return conv;
-        }));
 
         const timeoutId = setTimeout(() => {
             setMessages(prev => prev.map(m =>
@@ -950,22 +1061,6 @@ export default function ChatPage() {
                     lastRetryTime: new Date()
                 } : m
             ));
-
-            // Update conversation's last message status to 'failed'
-            setConversations(prev => prev.map(conv => {
-                if (conv.lastMessage?.id === tempMessage.id) {
-                    return {
-                        ...conv,
-                        lastMessage: {
-                            ...conv.lastMessage,
-                            status: 'failed',
-                            retryCount: 1,
-                            lastRetryTime: new Date()
-                        }
-                    };
-                }
-                return conv;
-            }));
 
             saveFailedMessageLocal({
                 ...tempMessage,
@@ -983,11 +1078,11 @@ export default function ChatPage() {
                 selectedUser,
                 username,
                 conversations,
-                replyingTo
+                replyingTo,
+                attachedFile || undefined
             );
 
             clearTimeout(timeoutId);
-
             setMessages(prev => prev.map(m =>
                 m.id === tempMessage.id ? {
                     ...savedMsg,
@@ -995,25 +1090,10 @@ export default function ChatPage() {
                     to: selectedUser,
                     message: tempContent,
                     timestamp: new Date(savedMsg.timestamp),
-                    status: 'sent'
+                    status: 'sent',
+                    replyToMessageId: replyingTo?.id
                 } : m
             ));
-
-            // Update conversation's last message status to 'sent'
-            setConversations(prev => prev.map(conv => {
-                if (conv.lastMessage?.id === tempMessage.id) {
-                    return {
-                        ...conv,
-                        lastMessage: {
-                            ...conv.lastMessage,
-                            id: savedMsg.id,
-                            status: 'sent',
-                            timestamp: new Date(savedMsg.timestamp)
-                        }
-                    };
-                }
-                return conv;
-            }));
 
             if (socketRef.current?.connected) {
                 socketRef.current.emit('send-message', {
@@ -1034,9 +1114,20 @@ export default function ChatPage() {
                     } : undefined,
                     groupId: null,
                     chunkIndex: null,
-                    totalChunks: null
+                    totalChunks: null,
+                    replyToMessageId: replyingTo?.id,
+                    file: attachedFile ? {
+                        url: attachedFile.url,
+                        filename: attachedFile.filename,
+                        size: attachedFile.size,
+                        type: attachedFile.type,
+                        isImage: attachedFile.isImage,
+                        caption: attachedFile.caption
+                    } : undefined,
                 });
             }
+
+            setAttachedFile(null);
 
         } catch (error) {
             clearTimeout(timeoutId);
@@ -1048,23 +1139,6 @@ export default function ChatPage() {
                     lastRetryTime: new Date()
                 } : m
             ));
-
-            // Update conversation's last message status to 'failed'
-            setConversations(prev => prev.map(conv => {
-                if (conv.lastMessage?.id === tempMessage.id) {
-                    return {
-                        ...conv,
-                        lastMessage: {
-                            ...conv.lastMessage,
-                            status: 'failed',
-                            retryCount: 1,
-                            lastRetryTime: new Date()
-                        }
-                    };
-                }
-                return conv;
-            }));
-
             saveFailedMessageLocal({
                 ...tempMessage,
                 status: 'failed',
@@ -1086,53 +1160,56 @@ export default function ChatPage() {
         setEditingMessage(null);
         setInputMessage('');
 
-        // Optimistic update - update UI immediately
-        setMessages(prev => prev.map(msg =>
-            msg.id === editingMessage.id
-                ? { ...msg, message: tempContent, isEdited: true, editedAt: new Date().toISOString() }
-                : msg
-        ));
-
         try {
-            const response = await fetch(`/api/messages/${editingMessage.id}`, {
+            const session = frontendAuth.getSession();
+            const userId = session?.user?.id;
+            let token = frontendAuth.getAccessToken();
+
+            if (!userId) {
+                throw new Error('User not authenticated');
+            }
+
+            const response = await fetch('/api/messages', {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({
                     content: tempContent,
-                    from: username,
+                    from: userId,
                     to: selectedUser
                 }),
             });
 
-            if (response.ok) {
-                const updatedMsg = await response.json();
-                // Update with server response
-                setMessages(prev => prev.map(msg =>
-                    msg.id === editingMessage.id
-                        ? { ...msg, ...updatedMsg.data }
-                        : msg
-                ));
-            } else {
-                // Revert on error
-                setMessages(prev => prev.map(msg =>
-                    msg.id === editingMessage.id
-                        ? { ...msg, message: originalMessage }
-                        : msg
-                ));
-                setEditingMessage(editingMessage);
-                setInputMessage(tempContent);
-            }
+            if (response.status === 401) {
+                const refreshed = await frontendAuth.refreshSession();
+                if (refreshed) {
+                    token = frontendAuth.getAccessToken();
+                    const retryResponse = await fetch('/api/messages', {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            messageId: editingMessage.id,
+                            content: tempContent,
+                            from: userId,
+                            to: selectedUser
+                        }),
+                    });
 
-        } catch (error: any) {
-            console.error('Failed to update message:', error);
-            // Revert on error
-            setMessages(prev => prev.map(msg =>
-                msg.id === editingMessage.id
-                    ? { ...msg, message: originalMessage }
-                    : msg
-            ));
+                    if (!retryResponse.ok) {
+                        throw new Error('Failed to update message after token refresh');
+                    }
+                } else {
+                    throw new Error('Session expired, please login again');
+                }
+            } else if (!response.ok) {
+                throw new Error('Failed to update message');
+            }
+        } catch (error) {
             setEditingMessage(editingMessage);
             setInputMessage(tempContent);
         }
@@ -1187,10 +1264,15 @@ export default function ChatPage() {
                     isEdited: false,
                     isDeleted: false,
                     isPinned: false,
-                    replyTo: null,
+                    replyTo: replyingTo ? {
+                        id: replyingTo.id,
+                        from: replyingTo.from,
+                        message: replyingTo.message
+                    } : undefined,
                     groupId: null,
                     chunkIndex: null,
-                    totalChunks: null
+                    totalChunks: null,
+                    replyToMessageId: replyingTo?.id
                 });
             }
 
@@ -1224,52 +1306,101 @@ export default function ChatPage() {
                             sendMessageInternal(msg);
                         }
                     }
-                }, index * 1000);
+                }, index * 5000);
             });
         }
     }, [messages, isConnected]);
 
     const handleDeleteMessage = async (id: string, type: 'me' | 'everyone') => {
         try {
+            const session = frontendAuth.getSession();
+            const user = frontendAuth.getUser();
+
+            if (!session || !user) {
+                alert('User not authenticated');
+                return;
+            }
+
             if (type === 'me') {
-                setMessages(prev => prev.map(m =>
-                    m.id === id ? { ...m, isHidden: true } : m
-                ));
+                try {
+                    const response = await fetch(`/api/messages/${id}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.accessToken}`,
+                        },
+                        body: JSON.stringify({
+                            type: 'me',
+                            userId: user.id
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to hide message');
+                    }
+
+                    // Mark message as hidden for current user instead of removing it completely
+                    setMessages(prev => prev.map(m =>
+                        m.id === id ? { ...m, isHidden: true } : m
+                    ));
+                } catch (apiError) {
+                    alert('Failed to hide message. Please try again.');
+                    return;
+                }
+
             } else {
                 setMessages(prev => prev.map(m =>
-                    m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m
+                    m.id === id ? { ...m, isDeleted: true, message: '[This message was deleted]', audioUrl: undefined } : m
                 ));
+
+                try {
+                    const response = await fetch(`/api/messages/${id}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.accessToken}`,
+                        },
+                        body: JSON.stringify({
+                            type: 'everyone',
+                            userId: user.id
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to delete message from server');
+                    }
+
+                } catch (apiError) {
+                    setMessages(prev => prev.map(m =>
+                        m.id === id ? { ...m, isDeleted: false, message: m.message, audioUrl: m.audioUrl } : m
+                    ));
+                    alert('Failed to delete message. Please try again.');
+                    return;
+                }
+
                 if (socketRef.current && selectedUser) {
-                    socketRef.current?.emit('delete-message', { id, to: selectedUser });
+                    socketRef.current?.emit('delete-message', { id, to: selectedUser, hideFromAll: true });
                 }
             }
         } catch (error) {
+            alert('Failed to delete message. Please try again.');
         }
     };
 
     const handlePinMessage = (msg: Message) => {
         const isPinned = !msg.isPinned;
-
         const currentPins = messages.filter(m =>
             m.isPinned &&
             ((m.from === username && m.to === selectedUser) || (m.from === selectedUser && m.to === username))
         );
 
         if (isPinned && currentPins.length >= 3) {
-            alert('Aap sirf 3 messages pin kar sakte hain per chat.');
+            alert('Only 3 messages allowed to pin');
             return;
         }
 
         setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isPinned } : m));
         socketRef.current?.emit('pin-message', { id: msg.id, isPinned, to: selectedUser });
-    };
-
-    const handleHideMessage = (id: string) => {
-        setMessages(prev => prev.map(m => m.id === id ? { ...m, isHidden: true } : m));
-    };
-
-    const handleUnhideMessage = (id: string) => {
-        setMessages(prev => prev.map(m => m.id === id ? { ...m, isHidden: false } : m));
     };
 
     const handleRefreshMessages = () => {
@@ -1282,7 +1413,6 @@ export default function ChatPage() {
         setMessages(prev => prev.map(m =>
             m.id === msg.id ? { ...m, status: 'sending' } : m
         ));
-
         retryFailedMessages();
     };
 
@@ -1291,7 +1421,10 @@ export default function ChatPage() {
     };
 
     const handleClearData = () => {
+
         SecureSession.clearSession();
+        frontendAuth.clearSession();
+        localStorage.clear();
         setUsername('');
         setSelectedUser(null);
         setMessages([]);
@@ -1300,7 +1433,7 @@ export default function ChatPage() {
             socketRef.current.disconnect();
             socketRef.current = null;
         }
-        router.push('/');
+        router.push('/login');
     };
 
     const handleClearChat = () => {
@@ -1354,23 +1487,62 @@ export default function ChatPage() {
                 });
                 if (response.ok) {
                     setMessages([]);
+                    const failed = storageHelpers.getFailedMessages() || [];
+                    const updatedFailed = failed.filter((m: Message) => m.to !== selectedUser);
+                    chatStorage.setItem('failed-messages', updatedFailed);
+
+                    if (socketRef.current?.connected) {
+                        socketRef.current.emit('clear-all-messages', {
+                            from: username,
+                            to: selectedUser,
+                            conversationId: currentConversation.id
+                        });
+                    }
+
+                } else {
+                    throw new Error('Failed to delete messages');
                 }
             }
         } catch (error) {
+            alert('Failed to delete messages. Please try again.');
+        }
+    };
+
+    const loadConversations = async (userId: string) => {
+        try {
+            const response = await fetch(`/api/conversations?userId=${userId}`);
+            if (response.ok) {
+                const conversationsData = await response.json();
+                setConversations(conversationsData);
+            } else {
+            }
+        } catch (error) {
+            throw error;
         }
     };
 
     const handleLogout = async () => {
         try {
-            const response = await api.post('/auth/logout');
-            if (response) handleClearData();
-        } catch (error: any) {
+            await api.post('/auth/logout');
+        } catch {
         }
+        handleClearData();
     };
 
     const handleProfileUpdated = (newUsername?: string) => {
         if (newUsername) {
             setUsername(newUsername);
+        }
+    };
+
+    const handleScrollToMessage = (messageId: string | undefined) => {
+        const messageElement = document.getElementById(`msg-${messageId}`);
+        if (messageElement) {
+            messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            messageElement.classList.add('highlight-message-reply');
+            setTimeout(() => {
+                messageElement.classList.remove('highlight-message-reply');
+            }, 2000);
         }
     };
 
@@ -1383,6 +1555,10 @@ export default function ChatPage() {
     );
 
     const pinnedMessages = currentChatMessages.filter(m => m.isPinned);
+
+    if (isLoading) {
+        return <FullPageLoader />;
+    }
 
     return (
         <div className="min-h-[100dvh] h-[100dvh] flex bg-[#f0f2f5] md:p-4 font-sans">
@@ -1406,70 +1582,114 @@ export default function ChatPage() {
                         />
                     </ResizableSidebar>
 
-                    <main className={`flex flex-1 flex-col bg-[#efeae2] relative ${!selectedUser ? 'hidden md:flex' : 'flex'}`}>
-                        {selectedUser ? (
-                            <Fragment>
-                                <ChatHeader
-                                    selectedUser={selectedUser}
-                                    onBack={() => setSelectedUser(null)}
-                                    onStartVideoCall={async () => {
-                                        try { await call.startCall(false); } catch { alert('Could not access camera/mic'); }
-                                    }}
-                                    onStartAudioCall={async () => {
-                                        try { await call.startCall(true); } catch { alert('Could not access camera/mic'); }
-                                    }}
-                                    onClearChat={handleClearChat}
-                                    onClearAllMessages={handleClearAllMessages}
-                                    onRefreshMessages={handleRefreshMessages}
-                                />
+                <main className={`flex flex-1 flex-col bg-[#efeae2] relative pt-[60px] md:pt-0 ${!selectedUser ? 'hidden md:flex' : 'flex'}`}>
+                    {selectedUser ? (
+                        <Fragment>
+                            <ChatHeader
+                                selectedUser={selectedUser}
+                                onBack={() => setSelectedUser(null)}
+                                onStartVideoCall={() => startCall(false)}
+                                onStartAudioCall={() => startCall(true)}
+                                onClearChat={handleClearChat}
+                                onClearAllMessages={handleClearAllMessages}
+                                onRefreshMessages={handleRefreshMessages}
+                            />
 
-                                {pinnedMessages.length > 0 && (
-                                    <div className="relative z-30">
-                                        <div
-                                            onClick={() => setShowPinsDropdown(!showPinsDropdown)}
-                                            className="bg-white/90 backdrop-blur px-4 py-2 border-b border-[#f0f2f5] flex items-center gap-2 shadow-sm cursor-pointer hover:bg-white transition-colors animate-in fade-in duration-300"
-                                        >
-                                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00a884]/10 text-[#00a884]">
-                                                <Pin size={16} className="fill-current" />
-                                            </div>
-                                            <div className="flex-1 overflow-hidden">
-                                                <p className="text-[12px] font-bold text-[#00a884]">
-                                                    {pinnedMessages.length === 1 ? 'Pinned Message' : `${pinnedMessages.length} Pinned Messages`}
-                                                </p>
-                                                <p className="text-[13px] text-[#54656f] truncate">
-                                                    {pinnedMessages[pinnedMessages.length - 1].message}
-                                                </p>
-                                            </div>
+                            {pinnedMessages.length > 0 && (
+                                <div className="relative z-30" ref={pinsDropdownRef}>
+                                    <div
+                                        onClick={() => setShowPinsDropdown(!showPinsDropdown)}
+                                        className="bg-white/90 backdrop-blur px-4 py-2 border-b border-[#f0f2f5] flex items-center gap-2 shadow-sm cursor-pointer hover:bg-white transition-colors animate-in fade-in duration-300"
+                                    >
+                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00a884]/10 text-[#00a884]">
+                                            <Pin size={16} className="fill-current" />
                                         </div>
+                                        <div className="flex-1 overflow-hidden">
+                                            <p className="text-[12px] font-bold text-[#00a884]">
+                                                {pinnedMessages.length === 1 ? 'Pinned Message' : `${pinnedMessages.length} Pinned Messages`}
+                                            </p>
+                                        </div>
+                                        <ChevronDown size={18} className={`text-[#667781] transition-transform ${showPinsDropdown ? 'rotate-180' : ''}`} />
                                     </div>
-                                )}
 
-                                <MessageList
-                                    messages={messages}
-                                    username={username}
-                                    onRetry={handleRetry}
-                                    onReply={setReplyingTo}
-                                    onEdit={setEditingMessage}
-                                    onDelete={handleDeleteMessage}
-                                    onPin={handlePinMessage}
-                                    highlightedMessageId={highlightedMessageId}
-                                    loading={isMessagesLoading}
-                                />
+                                    {showPinsDropdown && (
+                                        <div className="absolute top-full left-0 right-0 bg-white shadow-xl border-b border-[#f0f2f5] max-h-[300px] overflow-y-auto animate-in slide-in-from-top-2 duration-200">
+                                            {pinnedMessages.slice().reverse().map((msg, index) => {
+                                                return (
+                                                    <div
+                                                        key={msg.id}
+                                                        className="px-3 py-1 border-b border-[#f0f2f5] hover:bg-[#f8f9fa] cursor-pointer relative group"
+                                                        onClick={() => {
+                                                            setHighlightedMessageId(msg.id || '');
+                                                            setShowPinsDropdown(false);
+                                                            if (msg.id) {
+                                                                setTimeout(() => {
+                                                                    handleScrollToMessage(msg?.id);
+                                                                }, 100);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#00a884]/10 text-[#00a884] mt-1">
+                                                                <Pin size={12} className="fill-current" />
+                                                            </div>
+                                                            <div className="flex flex-wrap min-w-0">
+                                                                <p className="text-[13px] font-medium text-[#111b21]">{msg.from ? `${msg.from} : ` : ''}</p>
+                                                                <p className="text-[14px] text-[#3b4a54] break-words ml-1">{msg.message}</p>
+                                                            </div>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handlePinMessage(msg);
+                                                                }}
+                                                                className="bg-red-200/50 transition-opacity p-1.5 hover:bg-red-50 rounded-full text-red-500 transition-colors absolute right-2 top-2"
+                                                                title="Unpin message"
+                                                            >
+                                                                <PinOff size={14} color='red' />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
-                                <ChatFooter
-                                    inputMessage={inputMessage}
-                                    setInputMessage={setInputMessage}
-                                    onSendMessage={handleSendMessage}
-                                    onSendVoice={handleSendVoice}
-                                    onUpdateMessage={handleUpdateMessage}
-                                    replyingTo={replyingTo}
-                                    editingMessage={editingMessage}
-                                    onCancelReply={() => setReplyingTo(null)}
-                                    onCancelEdit={() => {
-                                        setEditingMessage(null);
-                                    }}
-                                    autoFocus={autoFocusInput}
-                                />
+                            <MessageList
+                                messages={currentChatMessages}
+                                username={username}
+                                selectedUser={selectedUser}
+                                recipientOnline={!!users[selectedUser]}
+                                isLoading={isMessagesLoading}
+                                onRetry={handleRetry}
+                                onReply={(msg: Message) => setReplyingTo(msg)}
+                                onDelete={handleDeleteMessage}
+                                onPin={handlePinMessage}
+                                onEdit={handleEditMessage}
+                                highlightedMessageId={highlightedMessageId}
+                                onScrollToMessage={handleScrollToMessage}
+                            />
+
+                            <ChatFooter
+                                inputMessage={inputMessage}
+                                setInputMessage={setInputMessage}
+                                onSendMessage={handleSendMessage}
+                                onSendVoice={handleSendVoice}
+                                onUpdateMessage={handleUpdateMessage}
+                                replyingTo={replyingTo}
+                                editingMessage={editingMessage}
+                                onCancelReply={() => setReplyingTo(null)}
+                                onCancelEdit={handleCancelEdit}
+                                attachedFile={attachedFile}
+                                setAttachedFile={setAttachedFile}
+                            />
+                        </Fragment>
+                    ) : (
+                        <EmptyChatState />
+                    )}
+                </main>
+            </div>
 
                                 <CallOverlay
                                     username={username}
@@ -1505,31 +1725,32 @@ export default function ChatPage() {
                                     />
                                 )}
 
-                                <AuthOverlay
-                                    username={username}
-                                    onUsernameCreated={(u, userId) => {
-                                        setUsername(u);
+            <AuthOverlay
+                username={username}
+                onUsernameCreated={(u, userId) => {
+                    setUsername(u);
 
-                                        setTimeout(async () => {
-                                            const cookies = getClientCookies();
-                                            const userData = SecureSession.getUser();
-                                            const finalUserId = userId || (cookies['user-id'] as string) || userData.userId;
+                    setTimeout(async () => {
+                        const cookies = getClientCookies();
+                        const userData = SecureSession.getUser();
+                        const finalUserId = userId || (cookies['user-id'] as string) || userData.userId;
 
-                                            if (finalUserId) {
-                                                try {
-                                                    await loadConversations(finalUserId);
-                                                } catch (error) {
-                                                }
+                        if (finalUserId) {
+                            try {
+                                await loadConversations(finalUserId);
+                            } catch (error) {
+                            }
 
-                                                const failed = storageHelpers.getFailedMessages() || [];
-                                                if (failed.length > 0) {
-                                                    setMessages(prev => {
-                                                        const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
-                                                        return [...prev, ...newMessages];
-                                                    });
-                                                }
-                                            }
-                                        }, 100);
+                            const failed = storageHelpers.getFailedMessages() || [];
+                            if (failed.length > 0) {
+                                setMessages(prev => {
+                                    const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
+                                    return [...prev, ...newMessages];
+                                });
+                            }
+                        } else {
+                        }
+                    }, 100);
 
                                         socketRef.current?.emit('join-user', u);
                                     }}

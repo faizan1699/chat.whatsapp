@@ -1044,7 +1044,7 @@ export default function ChatPage() {
             );
 
             if (isPinned && currentPins.length >= 3) {
-                alert('Aap sirf 3 messages pin kar sakte hain per chat.');
+                alert('You can only pin 3 messages Max');
                 return;
             }
 

@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
             }, { status: 403 });
         }
 
-        // Create access token (1 hour)
+        // Create access token (30 days - 1 month)
         const accessPayload: SessionPayload = {
             userId: user.id,
             username: user.username,
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
         const accessToken = await new SignJWT(accessPayload)
             .setProtectedHeader({ alg: 'HS256' })
             .setIssuedAt()
-            .setExpirationTime('1h')
+            .setExpirationTime('30d') // Changed from 1h to 30d (1 month)
             .sign(secret);
 
         // Create refresh token (30 days)
@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
                 httpOnly: true,
                 secure: isProduction,
                 sameSite: 'strict',
-                maxAge: 60 * 60, // 1 hour
+                maxAge: 60 * 60 * 24 * 30, // 30 days (1 month)
                 path: '/',
             }),
             serialize('refresh_token', refreshToken, {
@@ -153,9 +153,47 @@ export async function POST(req: NextRequest) {
                 maxAge: 60 * 60 * 24 * 30,
                 path: '/',
             }),
-        ].join(', '));
+        ]);
 
-        return response;
+        const updateData: any = {
+            updatedAt: new Date().toISOString()
+        };
+
+        if (termsAccepted !== undefined) {
+            updateData.termsAccepted = termsAccepted;
+            updateData.termsAcceptedAt = termsAccepted ? new Date().toISOString() : null;
+        }
+
+        // Update cookie consent if provided
+        if (cookieConsent !== undefined) {
+            updateData.cookieConsent = cookieConsent;
+            updateData.cookieConsentAt = new Date().toISOString();
+        }
+
+        // Update user record with consent information (skip if columns don't exist)
+        if (Object.keys(updateData).length > 1) {
+            try {
+                await supabaseAdmin
+                    .from('users')
+                    .update(updateData)
+                    .eq('id', user.id);
+            } catch (updateError) {
+                console.error('Error updating user consent (columns might not exist):', updateError);
+            }
+        }
+
+        return res.status(200).json({
+            message: 'Logged in successfully',
+            accessToken,
+            refreshToken,
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                phone: user.phone_number,
+                avatar: user.avatar
+            }
+        });
 
     } catch (error: unknown) {
         console.error('Login error:', error);

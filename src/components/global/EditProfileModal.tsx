@@ -1,16 +1,22 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { X, User, Loader2, Lock, Mail, Phone, Eye, EyeOff } from 'lucide-react';
+import { X, User, Loader2, Lock, Mail, Phone, Camera, Upload } from 'lucide-react';
+import api from '@/utils/api';
+import { useProfile } from '@/contexts/ProfileContext';
 
 const profileSchema = z.object({
     username: z.string().min(2, 'Username must be at least 2 characters'),
-    email: z.string().email('Invalid email address').optional().or(z.literal('')),
-    phone: z.string().optional(),
-    avatar: z.union([z.string().url(), z.literal('')]).optional(),
+    email: z.string().email('Invalid email address').optional().or(z.literal('')).readonly(),
+    phone: z.string().optional().refine((phone) => {
+        if (!phone || phone.trim() === '') return true; // Allow empty phone
+        // Basic phone validation - can be enhanced
+        return phone.length >= 10;
+    }, 'Phone number must be at least 10 digits'),
+    avatar: z.string().optional(),
 });
 
 const passwordSchema = z.object({
@@ -29,13 +35,12 @@ interface EditProfileModalProps {
 }
 
 export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditProfileModalProps) {
+    const { profile, updateProfile, refreshProfile } = useProfile();
     const [activeTab, setActiveTab] = useState<'profile' | 'password'>('profile');
     const [profileLoading, setProfileLoading] = useState(false);
-    const [showPasswords, setShowPasswords] = useState({
-        current: false,
-        new: false,
-        confirm: false
-    });
+    const [previewImage, setPreviewImage] = useState<string>('');
+    const [uploadingImage, setUploadingImage] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const profileForm = useForm<ProfileFormData>({
         resolver: zodResolver(profileSchema),
@@ -45,59 +50,108 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
     });
 
     useEffect(() => {
-        if (isOpen) {
-            fetch('/api/users/profile').then((res) => {
-                if (res.ok) {
-                    return res.json();
-                }
-                throw new Error('Failed to fetch profile');
-            }).then((data) => {
-                const d = data.data;
-                profileForm.reset({
-                    username: d?.username || '',
-                    email: d?.email || '',
-                    phone: d?.phoneNumber || '',
-                    avatar: d?.avatar || '',
-                });
-            }).catch(() => {
-                // Reset with empty values on error
-                profileForm.reset({
-                    username: '',
-                    email: '',
-                    phone: '',
-                    avatar: '',
-                });
+        if (isOpen && profile) {
+            profileForm.reset({
+                username: profile.username || '',
+                email: profile.email || '',
+                phone: profile.phone || '',
+                avatar: profile.avatar || '',
             });
+            setPreviewImage(profile.avatar || '');
         }
-    }, [isOpen, profileForm]);
+    }, [isOpen, profile, profileForm]);
+
+    const handleImageUpload = async (file: File) => {
+        if (!file) return;
+        
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            alert('Please select an image file');
+            return;
+        }
+        
+        if (file.size > 10 * 1024 * 1024) {
+            alert('Image size should be less than 10MB');
+            return;
+        }
+
+        setUploadingImage(true);
+        
+        try {
+            // Create preview and convert to base64
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64String = reader.result as string;
+                setPreviewImage(base64String);
+                profileForm.setValue('avatar', base64String);
+            };
+            reader.readAsDataURL(file);
+            
+        } catch (error) {
+            console.error('Upload failed:', error);
+            alert('Failed to process image');
+            // Reset preview on error
+            const currentAvatar = profileForm.getValues('avatar');
+            setPreviewImage(currentAvatar || '');
+        } finally {
+            setUploadingImage(false);
+        }
+    };
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            handleImageUpload(file);
+        }
+    };
+
+    const removeImage = () => {
+        setPreviewImage('');
+        profileForm.setValue('avatar', '');
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    };
 
     const onProfileSubmit = async (data: ProfileFormData) => {
         setProfileLoading(true);
         profileForm.clearErrors('root');
+        
         try {
-            const res = await fetch('/api/users/profile', {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    username: data.username,
-                    email: data.email || undefined,
-                    phoneNumber: data.phone || undefined,
-                    avatar: data.avatar || undefined,
-                }),
-            });
+            // Compare with current profile and only send changed fields (excluding email)
+            const currentValues = {
+                username: profile?.username || '',
+                phone: profile?.phone || '',
+                avatar: profile?.avatar || '',
+            };
             
-            const responseData = await res.json();
+            const changedFields: Record<string, any> = {};
             
-            if (!res.ok) {
-                throw new Error(responseData.error || 'Update failed');
+            // Only include fields that have actually changed (excluding email)
+            if (data.username !== currentValues.username) {
+                changedFields.username = data.username;
+            }
+            if (data.phone !== currentValues.phone) {
+                changedFields.phone = data.phone || undefined;
+            }
+            if (data.avatar !== currentValues.avatar) {
+                changedFields.avatar = data.avatar || undefined;
             }
             
-            onSuccess(responseData.data?.username);
+            if (Object.keys(changedFields).length === 0) {
+                profileForm.setError('root', { type: 'manual', message: 'No changes made' });
+                setProfileLoading(false);
+                return;
+            }
+            
+            const res = await api.patch('/auth/profile', changedFields);
+            
+            await refreshProfile();
+            
+            onSuccess(res.data?.username);
             onClose();
         } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : 'Update failed';
+            const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Update failed';
             profileForm.setError('root', { type: 'manual', message: msg });
         } finally {
             setProfileLoading(false);
@@ -106,27 +160,14 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
 
     const onPasswordSubmit = async (data: PasswordFormData) => {
         try {
-            const res = await fetch('/api/auth/change-password', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    currentPassword: data.currentPassword,
-                    newPassword: data.newPassword,
-                }),
+            await api.post('/auth/change-password', {
+                currentPassword: data.currentPassword,
+                newPassword: data.newPassword,
             });
-            
-            const responseData = await res.json();
-            
-            if (!res.ok) {
-                throw new Error(responseData.error || 'Failed to change password');
-            }
-            
             passwordForm.reset();
             onClose();
         } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : 'Failed to change password';
+            const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed';
             passwordForm.setError('root', { message: msg });
         }
     };
@@ -166,6 +207,54 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                                     {profileForm.formState.errors.root.message}
                                 </div>
                             )}
+                            
+                            {/* Profile Image Upload */}
+                            <div className="flex justify-center">
+                                <div className="relative">
+                                    <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-200 border-4 border-[#f0f2f5]">
+                                        {previewImage ? (
+                                            <img 
+                                                src={previewImage} 
+                                                alt="Profile" 
+                                                className="w-full h-full object-cover"
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center">
+                                                <User size={32} className="text-gray-400" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleFileSelect}
+                                        className="hidden"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={uploadingImage}
+                                        className="absolute bottom-0 right-0 bg-[#00a884] hover:bg-[#008069] text-white rounded-full p-2 shadow-lg disabled:opacity-70"
+                                    >
+                                        {uploadingImage ? (
+                                            <Loader2 className="animate-spin" size={16} />
+                                        ) : (
+                                            <Camera size={16} />
+                                        )}
+                                    </button>
+                                    {previewImage && (
+                                        <button
+                                            type="button"
+                                            onClick={removeImage}
+                                            className="absolute top-0 right-0 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 shadow-lg"
+                                        >
+                                            <X size={12} />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
                             <div>
                                 <label className="text-[13px] font-medium text-[#00a884] uppercase tracking-wider">Username</label>
                                 <div className="relative mt-1">
@@ -187,9 +276,11 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                                         {...profileForm.register('email')}
                                         type="email"
                                         placeholder="your@email.com"
-                                        className="w-full rounded-lg border border-[#e9edef] px-10 py-2.5 outline-none focus:border-[#00a884]"
+                                        disabled
+                                        className="w-full rounded-lg border border-[#e9edef] px-10 py-2.5 outline-none focus:border-[#00a884] bg-gray-100 cursor-not-allowed"
                                     />
                                 </div>
+                                <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
                                 {profileForm.formState.errors.email && (
                                     <p className="text-xs text-red-500 mt-1">{profileForm.formState.errors.email.message}</p>
                                 )}
@@ -208,6 +299,7 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                                 {profileForm.formState.errors.phone && (
                                     <p className="text-xs text-red-500 mt-1">{profileForm.formState.errors.phone.message}</p>
                                 )}
+                                <p className="text-xs text-gray-500 mt-1">Optional: Enter a unique phone number (min 10 digits)</p>
                             </div>
                             <div>
                                 <label className="text-[13px] font-medium text-[#00a884] uppercase tracking-wider">Avatar URL (optional)</label>
@@ -240,16 +332,9 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                                     <Lock className="absolute left-3 top-2.5 text-[#667781]" size={18} />
                                     <input
                                         {...passwordForm.register('currentPassword')}
-                                        type={showPasswords.current ? "text" : "password"}
-                                        className="w-full rounded-lg border border-[#e9edef] px-10 pr-10 py-2.5 outline-none focus:border-[#00a884]"
+                                        type="password"
+                                        className="w-full rounded-lg border border-[#e9edef] px-10 py-2.5 outline-none focus:border-[#00a884]"
                                     />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowPasswords(prev => ({ ...prev, current: !prev.current }))}
-                                        className="absolute right-3 top-2.5 text-[#667781] hover:text-[#00a884] transition-colors"
-                                    >
-                                        {showPasswords.current ? <EyeOff size={18} /> : <Eye size={18} />}
-                                    </button>
                                 </div>
                                 {passwordForm.formState.errors.currentPassword && (
                                     <p className="text-xs text-red-500 mt-1">{passwordForm.formState.errors.currentPassword.message}</p>
@@ -261,16 +346,9 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                                     <Lock className="absolute left-3 top-2.5 text-[#667781]" size={18} />
                                     <input
                                         {...passwordForm.register('newPassword')}
-                                        type={showPasswords.new ? "text" : "password"}
-                                        className="w-full rounded-lg border border-[#e9edef] px-10 pr-10 py-2.5 outline-none focus:border-[#00a884]"
+                                        type="password"
+                                        className="w-full rounded-lg border border-[#e9edef] px-10 py-2.5 outline-none focus:border-[#00a884]"
                                     />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowPasswords(prev => ({ ...prev, new: !prev.new }))}
-                                        className="absolute right-3 top-2.5 text-[#667781] hover:text-[#00a884] transition-colors"
-                                    >
-                                        {showPasswords.new ? <EyeOff size={18} /> : <Eye size={18} />}
-                                    </button>
                                 </div>
                                 {passwordForm.formState.errors.newPassword && (
                                     <p className="text-xs text-red-500 mt-1">{passwordForm.formState.errors.newPassword.message}</p>
@@ -282,16 +360,9 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                                     <Lock className="absolute left-3 top-2.5 text-[#667781]" size={18} />
                                     <input
                                         {...passwordForm.register('confirmPassword')}
-                                        type={showPasswords.confirm ? "text" : "password"}
-                                        className="w-full rounded-lg border border-[#e9edef] px-10 pr-10 py-2.5 outline-none focus:border-[#00a884]"
+                                        type="password"
+                                        className="w-full rounded-lg border border-[#e9edef] px-10 py-2.5 outline-none focus:border-[#00a884]"
                                     />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowPasswords(prev => ({ ...prev, confirm: !prev.confirm }))}
-                                        className="absolute right-3 top-2.5 text-[#667781] hover:text-[#00a884] transition-colors"
-                                    >
-                                        {showPasswords.confirm ? <EyeOff size={18} /> : <Eye size={18} />}
-                                    </button>
                                 </div>
                                 {passwordForm.formState.errors.confirmPassword && (
                                     <p className="text-xs text-red-500 mt-1">{passwordForm.formState.errors.confirmPassword.message}</p>

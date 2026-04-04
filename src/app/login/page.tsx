@@ -1,17 +1,11 @@
 'use client';
 
-import { useState, Suspense } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, Suspense, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { Eye, EyeOff, MessageCircle, Lock, Mail, User } from 'lucide-react';
 import { frontendAuth } from '@/utils/frontendAuth';
-import { authToast } from '@/utils/toast';
-import { hasCookieAcceptance } from '@/utils/cookieConsent';
-import { conversationsManager } from '@/utils/conversationsManager';
-import EmailVerificationModal from '@/components/auth/EmailVerificationModal';
-import ForgotPasswordModal from '@/components/auth/ForgotPasswordModal';
-import EmailField from '@/components/auth/EmailField';
-import PasswordField from '@/components/auth/PasswordField';
+import api from '@/utils/api';
 
 interface LoginFormData {
     identifier: string;
@@ -19,74 +13,40 @@ interface LoginFormData {
 }
 
 function LoginForm() {
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    const [showEmailVerification, setShowEmailVerification] = useState(false);
-    const [showForgotPassword, setShowForgotPassword] = useState(false);
-    const [pendingUserEmail, setPendingUserEmail] = useState('');
     const router = useRouter();
+    const searchParams = useSearchParams();
+
+    useEffect(() => {
+        if (frontendAuth.isAuthenticated()) {
+            const returnTo = searchParams?.get('returnTo') || '/chat';
+            router.push(returnTo);
+        }
+    }, [router, searchParams]);
 
     const {
         register,
         handleSubmit,
-        watch,
-        setValue,
-        formState: { errors },
+        formState: { errors, isSubmitting },
+        setError: setFormError,
     } = useForm<LoginFormData>();
 
     const onSubmit = async (data: LoginFormData) => {
-        setLoading(true);
-        setError('');
-
         try {
-            const response = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'include',
-                body: JSON.stringify(data),
-            });
+            const response = await api.post('/auth/login', data);
+            const responseData = response.data;
 
-            const responseData = await response.json();
+            frontendAuth.setSession(
+                responseData.accessToken,
+                responseData.refreshToken,
+                responseData.user
+            );
 
-            if (response.ok) {
-                frontendAuth.setSession(
-                    responseData.accessToken,
-                    responseData.refreshToken,
-                    responseData.user
-                );
-                                try {
-                    await conversationsManager.loadConversations('login');
-                    console.log('✅ Conversations pre-loaded after login');
-                } catch (error) {
-                    console.warn('⚠️ Failed to pre-load conversations after login:', error);
-                }
-                
-                authToast.loginSuccess(responseData.user?.username);
-                
-                if (!hasCookieAcceptance()) {
-                    setTimeout(() => {
-                        authToast.cookieConsent();
-                    }, 10000);
-                }
-                                
-                router.push('/chat');
-            } else if (responseData.requiresEmailVerification) {
-                // Handle email verification requirement
-                setPendingUserEmail(responseData.email);
-                setShowEmailVerification(true);
-                setError('');
-            } else {
-                setError(responseData.message || 'Login failed');
-                authToast.loginError(responseData.message);
-            }
-        } catch (error) {
-            setError('Network error. Please try again.');
-            authToast.loginError('Network error. Please try again.');
-        } finally {
-            setLoading(false);
+            const returnTo = searchParams?.get('returnTo') || '/chat';
+            router.push(returnTo);
+        } catch (error: any) {
+            const errorMessage = error?.response?.data?.message || 'Login failed';
+            setFormError('root', { type: 'manual', message: errorMessage });
         }
     };
 
@@ -107,41 +67,82 @@ function LoginForm() {
                         <p className="text-sm text-gray-600">Sign in to continue to your account</p>
                     </div>
 
-                    <form id="login-form" className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
-                        <EmailField
-                            value={watch('identifier') || ''}
-                            onChange={(value) => setValue('identifier', value)}
-                            placeholder="Enter your username or email"
-                            label="Username or Email"
-                            required
-                            disabled={loading}
-                            error={errors.identifier?.message}
-                        />
+                    <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Username or Email
+                            </label>
+                            <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <User className="h-5 w-5 text-gray-400" />
+                                </div>
+                                <input
+                                    id="identifier"
+                                    {...register('identifier', {
+                                        required: 'Username or email is required',
+                                    })}
+                                    type="text"
+                                    className={`block w-full pl-10 pr-3 py-3 border ${errors.identifier ? 'border-red-300' : 'border-gray-300'
+                                        } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
+                                    placeholder="Enter your username or email"
+                                />
+                            </div>
+                            {errors.identifier && (
+                                <p className="mt-2 text-sm text-red-600">{errors.identifier.message}</p>
+                            )}
+                        </div>
 
-                        <PasswordField
-                            value={watch('password') || ''}
-                            onChange={(value) => setValue('password', value)}
-                            placeholder="Enter your password"
-                            label="Password"
-                            required
-                            disabled={loading}
-                            error={errors.password?.message}
-                            showForgotPassword={true}
-                            onForgotPassword={() => setShowForgotPassword(true)}
-                        />
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Password
+                            </label>
+                            <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <Lock className="h-5 w-5 text-gray-400" />
+                                </div>
+                                <input
+                                    id="password"
+                                    {...register('password', {
+                                        required: 'Password is required',
+                                        minLength: {
+                                            value: 6,
+                                            message: 'Password must be at least 6 characters',
+                                        },
+                                    })}
+                                    type={showPassword ? 'text' : 'password'}
+                                    className={`block w-full pl-10 pr-10 py-3 border ${errors.password ? 'border-red-300' : 'border-gray-300'
+                                        } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
+                                    placeholder="Enter your password"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                                >
+                                    {showPassword ? (
+                                        <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                                    ) : (
+                                        <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                                    )}
+                                </button>
+                            </div>
+                            {errors.password && (
+                                <p className="mt-2 text-sm text-red-600">{errors.password.message}</p>
+                            )}
+                        </div>
 
-                        {error && (
+                        {errors.root && (
                             <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                                <p className="text-sm text-red-600">{error}</p>
+                                <p className="text-sm text-red-600">{errors.root.message}</p>
                             </div>
                         )}
 
                         <button
                             type="submit"
-                            disabled={loading}
+                            disabled={isSubmitting}
                             className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
-                            {loading ? (
+                            {isSubmitting ? (
                                 <div className="flex items-center justify-center">
                                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                                     Signing in...
@@ -167,28 +168,6 @@ function LoginForm() {
                         🔒 Secured with HTTP-only cookies
                     </p>
                 </div>
-
-                {/* Email Verification Modal */}
-                <EmailVerificationModal
-                    isOpen={showEmailVerification}
-                    onClose={() => setShowEmailVerification(false)}
-                    email={pendingUserEmail}
-                    onSuccess={() => {
-                        setShowEmailVerification(false);
-                        // Re-attempt login after successful verification
-                        const form = document.getElementById('login-form') as HTMLFormElement;
-                        if (form) {
-                            form.requestSubmit();
-                        }
-                    }}
-                />
-
-                {/* Forgot Password Modal */}
-                <ForgotPasswordModal
-                    isOpen={showForgotPassword}
-                    onClose={() => setShowForgotPassword(false)}
-                    onBackToLogin={() => setShowForgotPassword(false)}
-                />
             </div>
         </div>
     );

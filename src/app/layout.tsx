@@ -3,6 +3,8 @@ import { Inter } from 'next/font/google'
 import { ReduxProvider } from '@/store/Provider'
 import CustomToaster from '@/components/global/CustomToast'
 import { CookieConsentBanner } from '@/components/global/CookieConsentBanner'
+import { ReduxProvider } from '@/store/Provider'
+import { ProfileProvider } from '@/contexts/ProfileContext'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -26,10 +28,11 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <ReduxProvider>
-          {children}
+          <ProfileProvider>
+            {children}
+          </ProfileProvider>
         </ReduxProvider>
         {/* <CookieConsentBanner /> */}
-        <CustomToaster />
       </body>
     </html>
   )

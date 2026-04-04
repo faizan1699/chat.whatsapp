@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, Fragment } from 'react';
-import { debounce } from '../../utils/debounce';
+import { debounce } from '../../../utils/debounce';
 import { Plus, X, Search as SearchIcon, LogOut, User, Users } from 'lucide-react';
-import UserSearch from '../chat/UserSearch';
+import UserSearch from '../../../components/chat/UserSearch';
 import { apiService } from '@/services/apiService';
 
 const UserSkeleton = () => (
@@ -144,35 +144,38 @@ export default function Sidebar({
 
     const filteredConversations = useMemo(() => {
         return conversationData
-        .filter(conv =>
-            conv.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            conv.participants.some((p: any) => p.user.username.toLowerCase().includes(searchQuery.toLowerCase()))
-        )
-        .sort((a, b) => {
-            // Sort by latest message timestamp (WhatsApp-style)
-            const aTime = a.lastMessage?.timestamp || a.updated_at || 0;
-            const bTime = b.lastMessage?.timestamp || b.updated_at || 0;
-            
-            // Handle invalid timestamps - put conversations without messages at bottom
-            if (!aTime && !bTime) return 0;
-            if (!aTime) return 1; // Put conversations without messages at bottom
-            if (!bTime) return -1; // Put conversations without messages at bottom
-            
-            // Convert to Date objects for comparison
-            const aDate = new Date(aTime).getTime();
-            const bDate = new Date(bTime).getTime();
-            
-            // Sort in descending order (newest first) - WhatsApp behavior
-            return bDate - aDate;
-        });
+            .filter(conv =>
+                conv.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                conv.participants.some((p: any) => p.user.username.toLowerCase().includes(searchQuery.toLowerCase()))
+            )
+            .sort((a, b) => {
+                // Sort by latest message timestamp (WhatsApp-style)
+                const aTime = a.lastMessage?.timestamp || a.updated_at || 0;
+                const bTime = b.lastMessage?.timestamp || b.updated_at || 0;
+
+                // Handle invalid timestamps - put conversations without messages at bottom
+                if (!aTime && !bTime) return 0;
+                if (!aTime) return 1; // Put conversations without messages at bottom
+                if (!bTime) return -1; // Put conversations without messages at bottom
+
+                // Convert to Date objects for comparison
+                const aDate = new Date(aTime).getTime();
+                const bDate = new Date(bTime).getTime();
+
+                // Sort in descending order (newest first) - WhatsApp behavior
+                return bDate - aDate;
+            });
     }, [conversationData, searchQuery]);
 
     return (
         <div className="flex h-full w-full flex-col bg-white overflow-hidden">
             {/* Sidebar Header */}
             <header className="flex h-[60px] items-center justify-between bg-[#f0f2f5] px-4 py-2">
-                <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-300 cursor-pointer">
-                    <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`} alt="avatar" className="h-full w-full object-cover" />
+                <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-300 cursor-pointer">
+                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`} alt="avatar" className="h-full w-full object-cover" />
+                    </div>
+                    <span className="text-[#111b21] font-medium">{username}</span>
                 </div>
                 <div className="flex items-center gap-3 text-[#54656f]">
                     <button

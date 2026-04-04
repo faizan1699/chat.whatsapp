@@ -6,10 +6,8 @@ const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback_secr
 
 export async function GET(request: NextRequest) {
     try {
-        // Try to get session from cookies first (for backward compatibility)
         let session = await getSession(request);
         
-        // If no session from cookies, try Bearer token
         if (!session) {
             const authHeader = request.headers.get('authorization');
             if (authHeader?.startsWith('Bearer ')) {
