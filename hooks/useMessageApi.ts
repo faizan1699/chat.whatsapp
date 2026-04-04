@@ -20,13 +20,9 @@ export const useMessageApi = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Get authorization header for API calls
   const getAuthHeaders = useCallback(() => {
-    console.log('🔐 Getting auth headers...');
     const session = frontendAuth.getSession();
-    console.log('📋 Session found:', !!session);
     if (!session?.accessToken) {
-      console.error('❌ No access token found in session');
       throw new Error('No access token found');
     }
     const headers = {
@@ -37,27 +33,22 @@ export const useMessageApi = () => {
     return headers;
   }, []);
 
-  // Get current user ID from localStorage or cookies
   const getCurrentUserId = useCallback(() => {
-    // First try frontendAuth (preferred method)
     const session = frontendAuth.getSession();
     if (session?.user?.id) {
       return session.user.id;
     }
     
-    // Fallback to cookies
     const cookies = getClientCookies();
     if (cookies['user-id']) {
       return cookies['user-id'];
     }
     
-    // Fallback to old localStorage key
     const oldUserId = localStorage.getItem('webrtc-userId');
     if (oldUserId) {
       return oldUserId;
     }
     
-    // Final fallback - parse user_data directly
     try {
       const userDataStr = localStorage.getItem('user_data');
       if (userDataStr) {
@@ -71,7 +62,6 @@ export const useMessageApi = () => {
     return null;
   }, []);
 
-  // Find or create conversation between two users
   const getOrCreateConversation = useCallback(async (
     conversations: Conversation[],
     selectedUser: string,
@@ -82,7 +72,6 @@ export const useMessageApi = () => {
     );
 
     if (!currentConversation) {
-      // Get selected user data
       const { data: selectedUserData } = await supabaseAdmin
         .from('users')
         .select('id')
@@ -93,7 +82,6 @@ export const useMessageApi = () => {
         throw new Error('Selected user not found');
       }
 
-      // Create conversation
       const response = await axios.post('/api/conversations', {
         participantIds: [currentUserId, selectedUserData.id]
       }, {
@@ -110,28 +98,27 @@ export const useMessageApi = () => {
     return currentConversation;
   }, [getAuthHeaders]);
 
-  // Send text message
   const sendMessage = useCallback(async (
     content: string,
     selectedUser: string,
     username: string,
     conversations: Conversation[],
-    replyingTo?: Message | null
+    replyingTo?: Message | null,
+    file?: {
+      url: string;
+      filename: string;
+      size: number;
+      type: string;
+      isImage: boolean;
+      caption?: string;
+    }
   ): Promise<Message> => {
-    console.log('🚀 sendMessage hook called with:', {
-      content,
-      selectedUser,
-      username,
-      conversationsCount: conversations.length,
-      replyingTo: replyingTo?.id || null
-    });
     
     setLoading(true);
     setError(null);
 
     try {
       const userId = getCurrentUserId();
-      console.log('📋 User ID:', userId);
       if (!userId) throw new Error('User not authenticated');
 
       const currentConversation = await getOrCreateConversation(
@@ -140,13 +127,39 @@ export const useMessageApi = () => {
         userId
       );
 
+      // If there's a file, upload it first
+      let uploadedFile = null;
+      if (file) {
+        const formData = new FormData();
+        const response = await fetch(file.url);
+        const blob = await response.blob();
+        formData.append('file', blob, file.filename);
+
+        const uploadResponse = await fetch('/api/upload/file', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: formData
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error('Failed to upload file');
+        }
+
+        const uploadResult = await uploadResponse.json();
+        uploadedFile = {
+          ...uploadResult.file,
+          caption: file.caption
+        };
+      }
+
       const response = await axios.post('/api/messages', {
         conversationId: currentConversation.id,
         senderId: userId,
         content,
         to: selectedUser,
         from: username,
-        replyTo: replyingTo?.id || null
+        replyTo: replyingTo?.id || null,
+        file: uploadedFile
       }, {
         headers: getAuthHeaders()
       });
@@ -160,7 +173,6 @@ export const useMessageApi = () => {
     }
   }, [getCurrentUserId, getOrCreateConversation, getAuthHeaders]);
 
-  // Send voice message
   const sendVoiceMessage = useCallback(async (
     audioBlob: Blob,
     duration: number,
@@ -181,9 +193,8 @@ export const useMessageApi = () => {
         userId
       );
 
-      // Upload audio to Supabase
       const fileName = `voice-${Date.now()}-${userId}`;
-      const publicUrl = await uploadAudio(audioBlob, fileName);
+      const publicUrl = await uploadAudio(audioBlob, fileName, userId);
 
       const response = await axios.post('/api/messages', {
         conversationId: currentConversation.id,
@@ -206,7 +217,6 @@ export const useMessageApi = () => {
     }
   }, [getCurrentUserId, getOrCreateConversation, getAuthHeaders]);
 
-  // Update message
   const updateMessage = useCallback(async (
     messageId: string,
     content: string
@@ -218,6 +228,8 @@ export const useMessageApi = () => {
       const response = await axios.put('/api/messages', {
         messageId,
         content
+      }, {
+        headers: getAuthHeaders()
       });
 
       setLoading(false);
@@ -227,9 +239,8 @@ export const useMessageApi = () => {
       setError(err.message || 'Failed to update message');
       throw err;
     }
-  }, []);
+  }, [getAuthHeaders]);
 
-  // Delete message
   const deleteMessage = useCallback(async (
     messageId: string,
     type: 'me' | 'everyone'
@@ -239,6 +250,7 @@ export const useMessageApi = () => {
 
     try {
       await axios.delete('/api/messages', {
+        headers: getAuthHeaders(),
         data: { messageId, type }
       });
 
@@ -248,9 +260,8 @@ export const useMessageApi = () => {
       setError(err.message || 'Failed to delete message');
       throw err;
     }
-  }, []);
+  }, [getAuthHeaders]);
 
-  // Pin/unpin message
   const pinMessage = useCallback(async (
     messageId: string,
     isPinned: boolean
@@ -262,6 +273,8 @@ export const useMessageApi = () => {
       const response = await axios.patch('/api/messages', {
         messageId,
         isPinned
+      }, {
+        headers: getAuthHeaders()
       });
 
       setLoading(false);
@@ -271,9 +284,8 @@ export const useMessageApi = () => {
       setError(err.message || 'Failed to pin message');
       throw err;
     }
-  }, []);
+  }, [getAuthHeaders]);
 
-  // Fetch messages for a conversation
   const fetchMessages = useCallback(async (
     conversationId: string
   ): Promise<Message[]> => {
@@ -281,7 +293,9 @@ export const useMessageApi = () => {
     setError(null);
 
     try {
-      const response = await axios.get(`/api/conversations/${conversationId}/messages`);
+      const response = await axios.get(`/api/conversations/${conversationId}/messages`, {
+        headers: getAuthHeaders()
+      });
       setLoading(false);
       return response.data;
     } catch (err: any) {
@@ -289,9 +303,8 @@ export const useMessageApi = () => {
       setError(err.message || 'Failed to fetch messages');
       throw err;
     }
-  }, []);
+  }, [getAuthHeaders]);
 
-  // Retry failed message
   const retryMessage = useCallback(async (
     failedMessage: Message,
     conversations: Conversation[],

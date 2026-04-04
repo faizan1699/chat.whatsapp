@@ -7,7 +7,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(405).json({ message: 'Method not allowed' });
     }
 
-    const { email, otp } = req.body;
+    const { email, code: otp } = req.body;
     if (!email || !otp) {
         return res.status(400).json({ error: 'Email and OTP are required' });
     }
@@ -43,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // Auto-login after successful verification
         const sessionData = await createSession(user.id, user.username, res);
 
-        return res.status(200).json({ 
+        return res.status(200).json({
             message: 'Email verified successfully',
             user: { id: user.id, username: user.username },
             accessToken: sessionData.accessToken,

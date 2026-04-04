@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
+import { Socket } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
-import { Pin, ChevronDown, X } from 'lucide-react';
+import { Pin, ChevronDown, X, PinOff } from 'lucide-react';
 import { frontendAuth } from '@/utils/frontendAuth';
 import IncomingCallModal from '@/components/video/IncomingCallModal';
-import { Message, ReplyTo } from '@/types/message';
+import { Message } from '@/types/message';
 import CallNotification from '@/components/video/CallNotification';
 import Sidebar from '@/components/global/Sidebar';
 import ResizableSidebar from '@/components/global/ResizableSidebar';
@@ -17,9 +17,9 @@ import FullPageLoader from '@/components/global/FullPageLoader';
 import { SecureSession } from '@/utils/secureSession';
 import { useMessageApi } from '@/hooks/useMessageApi';
 import { useSocket } from '@/hooks/useSocket';
-import { storageHelpers, STORAGE_KEYS, chatStorage } from '@/utils/storage';
+import { useNotifications } from '@/hooks/useNotifications';
+import { storageHelpers, chatStorage } from '@/utils/storage';
 import { supabaseAdmin } from '@/utils/supabase-server';
-import { uploadAudio } from '@/utils/supabase';
 import api from '@/utils/api';
 import ChatFooter from '@/components/chat/ChatFooter';
 import EmptyChatState from '@/components/chat/EmptyChatState';
@@ -58,21 +58,17 @@ export default function ChatPage() {
     const [autoRetryEnabled, setAutoRetryEnabled] = useState<boolean>(true);
     const [retryInterval, setRetryInterval] = useState<NodeJS.Timeout | null>(null);
     const [isConversationsLoading, setIsConversationsLoading] = useState<boolean>(false);
+    const [isMessagesLoading, setIsMessagesLoading] = useState<boolean>(false);
 
-    // Message API hook
     const {
         sendMessage,
         sendVoiceMessage,
-        updateMessage,
-        deleteMessage,
-        pinMessage,
-        fetchMessages,
-        retryMessage,
         loading: messageLoading,
         error: messageError
     } = useMessageApi();
 
-    // Call States
+    const { showNotification: showNotificationMessage, permission: notificationPermission } = useNotifications();
+
     const [isCallActive, setIsCallActive] = useState<boolean>(false);
     const [incomingCall, setIncomingCall] = useState<{ from: string; to: string; offer: RTCSessionDescriptionInit; isAudioOnly?: boolean } | null>(null);
     const [showEndCallButton, setShowEndCallButton] = useState<boolean>(false);
@@ -89,13 +85,20 @@ export default function ChatPage() {
     const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
     const [showEditProfile, setShowEditProfile] = useState(false);
     const [lastReceivedMessage, setLastReceivedMessage] = useState<Message | null>(null);
+    const [attachedFile, setAttachedFile] = useState<{
+        url: string;
+        filename: string;
+        size: number;
+        type: string;
+        isImage: boolean;
+        caption?: string;
+    } | null>(null);
 
-    // Clear highlighted message after animation
     useEffect(() => {
         if (highlightedMessageId) {
             const timer = setTimeout(() => {
                 setHighlightedMessageId(null);
-            }, 2500); // 2.5 seconds to match animation duration
+            }, 2500);
 
             return () => clearTimeout(timer);
         }
@@ -109,17 +112,32 @@ export default function ChatPage() {
     const iceCandidatesBuffer = useRef<RTCIceCandidateInit[]>([]);
     const callerRef = useRef<string[]>([]);
     const chunkBufferRef = useRef<Record<string, Message[]>>({});
+    const pinsDropdownRef = useRef<HTMLDivElement>(null);
 
-    // Sync refs with state
     useEffect(() => {
         selectedUserRef.current = selectedUser;
     }, [selectedUser]);
 
     useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (pinsDropdownRef.current && !pinsDropdownRef.current.contains(event.target as Node)) {
+                setShowPinsDropdown(false);
+            }
+        };
+
+        if (showPinsDropdown) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showPinsDropdown]);
+
+    useEffect(() => {
         isWindowFocusedRef.current = isWindowFocused;
     }, [isWindowFocused]);
 
-    // Extract unique users from conversations
     const conversationUsers = conversations.reduce((acc: { [key: string]: string }, conv) => {
         conv.participants.forEach((p: any) => {
             if (p.user.username !== username) {
@@ -129,7 +147,6 @@ export default function ChatPage() {
         return acc;
     }, {});
 
-    // Merge online users with conversation users
     const allUsers = { ...conversationUsers, ...users };
     useEffect(() => {
         if (selectedUser) {
@@ -140,23 +157,18 @@ export default function ChatPage() {
         }
     }, [selectedUser]);
 
-    // Socket connection setup
     const socket = useSocket();
 
     useEffect(() => {
         if (!socket) return;
 
         socketRef.current = socket;
-
-        // Socket event listeners
         socket.on('connect', () => {
-            console.log('✅ Socket connected');
             setIsConnected(true);
             socket.emit('join-user', username);
         });
 
         socket.on('disconnect', () => {
-            console.log('❌ Socket disconnected');
             setIsConnected(false);
         });
 
@@ -165,40 +177,45 @@ export default function ChatPage() {
         });
 
         socket.on('receive-message', (data: Message) => {
-            console.log('📨 Received message:', data);
-            console.log('📨 Current user:', username);
-            console.log('📨 Selected user:', selectedUser);
-            console.log('📨 Message from:', data.from, 'to:', data.to);
 
             setMessages(prev => {
-                // Check if message already exists to avoid duplicates
                 const exists = prev.some(m => m.id === data.id);
                 if (!exists) {
-                    console.log('✅ Adding new message to list');
                     return [...prev, data];
                 } else {
-                    console.log('⚠️ Message already exists, skipping');
                     return prev;
                 }
             });
 
-            // Update last received message for notifications
+            setConversations(prev => {
+                return prev.map(conv => {
+                    const involvesSender = conv.participants.some((p: any) => p.user.username === data.from);
+                    const involvesReceiver = conv.participants.some((p: any) => p.user.username === data.to);
+                    const isCorrectConversation = involvesSender && involvesReceiver && conv.participants.length === 2;
+
+                    if (isCorrectConversation) {
+                        return {
+                            ...conv,
+                            messages: [data],
+                            updatedAt: new Date().toISOString()
+                        };
+                    }
+                    return conv;
+                });
+            });
+
             setLastReceivedMessage(data);
 
-            // Update unread count if message is not from current user
             if (data.from !== username && data.to === username) {
                 setUnreadCounts(prev => ({
                     ...prev,
                     [data.from]: (prev[data.from] || 0) + 1
                 }));
 
-                // Show notification only for the last message if window is not focused
-                if (!isWindowFocusedRef.current) {
-                    showNotification(data);
+                if (selectedUser !== data.from) {
+                    showNotificationMessage(data, username, selectedUser);
                 }
             }
-
-            // Real-time messages are handled by socket, no need to reload from API
         });
 
         socket.on('message-status-update', ({ messageId, status }: { messageId: string; status: string }) => {
@@ -213,9 +230,9 @@ export default function ChatPage() {
             ));
         });
 
-        socket.on('delete-message', ({ id }: { id: string }) => {
+        socket.on('delete-message', ({ id, hideFromAll }: { id: string; hideFromAll?: boolean }) => {
             setMessages(prev => prev.map(m =>
-                m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m
+                m.id === id ? { ...m, isDeleted: true, hideFromAll: hideFromAll || false, message: '', audioUrl: undefined } : m
             ));
         });
 
@@ -233,7 +250,6 @@ export default function ChatPage() {
             }
         });
 
-        // WebRTC event listeners
         socket.on('offer', (payload) => {
             setIncomingCall({
                 from: payload.from,
@@ -245,13 +261,9 @@ export default function ChatPage() {
         });
 
         socket.on('answer', (payload) => {
-            // TODO: Implement handleAnswer
-            console.log('Received answer:', payload);
         });
 
         socket.on('icecandidate', (candidate) => {
-            // TODO: Implement handleIceCandidate
-            console.log('Received ICE candidate:', candidate);
         });
 
         socket.on('call-ended', () => {
@@ -282,14 +294,31 @@ export default function ChatPage() {
         };
     }, [socket, username]);
 
-    // Request Notification Permission
     useEffect(() => {
-        if ('Notification' in window && Notification.permission === 'default') {
-            Notification.requestPermission();
-        }
+        const requestNotificationPermission = async () => {
+            if ('Notification' in window) {
+                if (Notification.permission === 'default') {
+                    try {
+                        const permission = await Notification.requestPermission();
+                        if (permission === 'granted') {
+                        } else if (permission === 'denied') {
+                        }
+                    } catch (error) {
+                    }
+                } else {
+                }
+            } else {
+            }
+        };
 
-        const handleFocus = () => setIsWindowFocused(true);
-        const handleBlur = () => setIsWindowFocused(false);
+        requestNotificationPermission();
+
+        const handleFocus = () => {
+            setIsWindowFocused(true);
+        };
+        const handleBlur = () => {
+            setIsWindowFocused(false);
+        };
 
         window.addEventListener('focus', handleFocus);
         window.addEventListener('blur', handleBlur);
@@ -300,10 +329,8 @@ export default function ChatPage() {
         };
     }, []);
 
-    // Mark messages as read when focusing or changing user
     useEffect(() => {
         if (selectedUser && isWindowFocused && socketRef.current) {
-            // Find messages from this user that are not read
             const unreadMsgs = messages.filter(m => m.from === selectedUser && m.status !== 'read' && m.to === username);
 
             if (unreadMsgs.length > 0) {
@@ -313,7 +340,6 @@ export default function ChatPage() {
                     }
                 });
 
-                // Optimistically update local state
                 setMessages(prev => prev.map(m =>
                     (m.from === selectedUser && m.to === username && m.status !== 'read') ? { ...m, status: 'read' as const } : m
                 ));
@@ -322,26 +348,21 @@ export default function ChatPage() {
     }, [selectedUser, isWindowFocused, messages.length]);
 
 
-    // Add no-scroll class to body for chat page
     useEffect(() => {
         document.body.classList.add('no-scroll');
 
         return () => {
-            // Remove no-scroll class when component unmounts
             document.body.classList.remove('no-scroll');
         };
     }, []);
 
-    // Periodic check for stuck sending messages
     useEffect(() => {
         const interval = setInterval(() => {
             const now = new Date();
             setMessages(prev => prev.map(m => {
-                // Check if message has been stuck in sending for more than 15 seconds
                 if (m.status === 'sending' && m.timestamp) {
                     const timeDiff = now.getTime() - new Date(m.timestamp).getTime();
-                    if (timeDiff > 15000) { // 15 seconds
-                        console.warn('Message stuck in sending state, marking as failed:', m.id);
+                    if (timeDiff > 15000) {
                         return {
                             ...m,
                             status: 'failed',
@@ -352,40 +373,31 @@ export default function ChatPage() {
                 }
                 return m;
             }));
-        }, 5000); // Check every 5 seconds
+        }, 5000);
 
         return () => clearInterval(interval);
     }, []);
 
-    // Mark messages as read function removed - using WebSocket instead
-
     const loadMessages = async (selectedUsername: string) => {
         try {
-            console.log('🔄 Loading messages for:', selectedUsername);
-            console.log('🔄 Current conversations:', conversations.length);
+            setIsMessagesLoading(true);
 
-            // Find conversation for this user
             let currentConversation = conversations.find(c =>
                 c.participants.some((p: any) => p.user.username === selectedUsername)
             );
 
-            console.log('Found conversation:', currentConversation);
 
-            // If not found, try to get/create conversation directly
             if (!currentConversation) {
-                console.log('🔄 Conversation not found, trying to create...');
                 const cookies = getClientCookies();
                 const userId = cookies['user-id'] || SecureSession.getUserId();
 
                 if (userId) {
-                    // Try to find conversation by participants
                     const { data: selectedUserData } = await supabaseAdmin
                         .from('users')
                         .select('id')
                         .eq('username', selectedUsername)
                         .maybeSingle();
 
-                    console.log('Selected user data:', selectedUserData);
 
                     if (selectedUserData) {
                         const response = await fetch('/api/conversations', {
@@ -407,62 +419,61 @@ export default function ChatPage() {
             }
 
             if (currentConversation) {
-                console.log('🔄 Fetching messages API for conversation:', currentConversation.id);
-                const response = await fetch(`/api/conversations/${currentConversation.id}/messages`);
+                const token = frontendAuth.getAccessToken();
+                const response = await fetch(`/api/conversations/${currentConversation.id}/messages`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
                 if (response.ok) {
                     const messagesData = await response.json();
-                    console.log('✅ Messages API loaded successfully:', messagesData.length, 'messages');
 
-                    // Format messages for frontend and calculate unread counts
-                    const formattedMessages = messagesData.map((msg: any) => ({
-                        id: msg.id,
-                        from: msg.sender?.username || 'Unknown',
-                        to: msg.sender?.username === username ? selectedUsername : username,
-                        message: msg.content,
-                        timestamp: msg.timestamp,
-                        status: msg.status,
-                        isVoiceMessage: msg.is_voice_message,
-                        audioUrl: msg.audio_url,
-                        audioDuration: msg.audio_duration,
-                        isDeleted: msg.is_deleted,
-                        isEdited: msg.is_edited,
-                        isPinned: msg.is_pinned,
-                        replyTo: msg.reply_to ? {
-                            id: msg.reply_to.id,
-                            from: msg.reply_to.sender?.username || 'Unknown',
-                            message: msg.reply_to.content || msg.reply_to.message
-                        } : undefined,
-                        senderId: msg.sender_id
-                    }));
+                    const cookies = getClientCookies();
+                    const currentUserId = cookies['user-id'] || SecureSession.getUserId();
+                    const formattedMessages = messagesData.map((msg: any) => {
+                        const isHidden = msg.hidden_by && Array.isArray(msg.hidden_by) && currentUserId && msg.hidden_by.includes(currentUserId);
 
-                    // Calculate unread messages for this conversation
+                        return {
+                            id: msg.id,
+                            from: msg.sender?.username || 'Unknown',
+                            to: msg.sender?.username === username ? selectedUsername : username,
+                            message: msg.deleted_by ? '[This message was deleted]' : msg.content,
+                            timestamp: msg.timestamp,
+                            status: msg.status,
+                            isVoiceMessage: msg.is_voice_message,
+                            audioUrl: msg.audio_url,
+                            audioDuration: msg.audio_duration,
+                            isDeleted: !!msg.deleted_by,
+                            isEdited: msg.is_edited,
+                            isPinned: msg.is_pinned,
+                            isHidden: isHidden,
+                            hideFromAll: msg.hide_from_all || false,
+                            replyTo: msg.reply_to ? {
+                                id: msg.reply_to.id,
+                                from: msg.reply_to.sender?.username || 'Unknown',
+                                message: msg.reply_to.content || msg.reply_to.message
+                            } : undefined,
+                            senderId: msg.sender_id
+                        };
+                    }).filter((msg: any) => !msg.isHidden && !msg.hideFromAll);
+
                     const unreadCount = formattedMessages.filter((msg: any) =>
                         msg.from === selectedUsername &&
                         msg.status !== 'read' &&
                         msg.status !== 'delivered'
                     ).length;
 
-                    // Update unread counts
                     setUnreadCounts(prev => ({
                         ...prev,
                         [selectedUsername]: unreadCount
                     }));
 
-                    console.log('📊 Unread count for', selectedUsername, ':', unreadCount);
 
                     setMessages(formattedMessages);
-                    console.log('✅ Loaded messages for', selectedUsername, ':', formattedMessages.length, 'messages');
-                    console.log('📋 All loaded messages:', formattedMessages.map((m: any) => ({
-                        id: m.id,
-                        from: m.from,
-                        to: m.to,
-                        message: m.message?.substring(0, 20) + '...',
-                        status: m.status,
-                        isHidden: m.isHidden
-                    })));
 
                     if (currentConversation && unreadCounts[selectedUsername] > 0) {
-                        // Use WebSocket instead of HTTP API
                         const unreadMsgs = messages.filter(m =>
                             m.from === selectedUsername && m.status !== 'read' && m.to === username
                         );
@@ -481,70 +492,50 @@ export default function ChatPage() {
                         }));
                     }
                 } else {
-                    console.error('❌ Failed to load messages API:', response.status, response.statusText);
                     setMessages([]);
                 }
             } else {
-                console.log('ℹ️ No conversation found for', selectedUsername);
                 setMessages([]);
             }
         } catch (error) {
-            console.error('❌ Failed to load messages API:', error);
             setMessages([]);
+        } finally {
+            setIsMessagesLoading(false);
         }
     };
 
-    // Load messages when selected user changes
     useEffect(() => {
         if (selectedUser && username) {
             loadMessages(selectedUser);
         }
     }, [selectedUser, username]);
 
-    // Messages will only load on page load, user selection change, or manual refresh
-
     useEffect(() => {
         const checkAuth = async () => {
             try {
-                // Check session using frontend auth utility
                 const storedSession = frontendAuth.getSession();
-                console.log('🔐 Checking authentication:', {
-                    storedSession: storedSession,
-                    hasSession: !!storedSession,
-                    username: storedSession?.user?.username
-                });
 
                 if (storedSession) {
-                    console.log('✅ User authenticated:', storedSession.user.username);
                     setUsername(storedSession.user.username);
-                    setIsLoading(false); // Set loading to false when data is available
+                    setIsLoading(false);
                     setIsConversationsLoading(true);
-
-                    // Load user data
                     loadConversations(storedSession.user.id).then(() => {
-                        console.log('✅ Conversations loaded');
                         setIsConversationsLoading(false);
                     }).catch((error: any) => {
-                        console.error('❌ Failed to load conversations:', error);
                         setIsConversationsLoading(false);
                     });
-
-                    // Load failed messages
                     const failed = storageHelpers.getFailedMessages() || [];
                     if (failed.length > 0) {
-                        console.log('🔄 Restoring failed messages:', failed.length);
                         setMessages(prev => {
                             const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
                             return [...prev, ...newMessages];
                         });
                     }
                 } else {
-                    console.log('❌ No session found, showing login');
                     setIsLoading(false);
                     setIsConversationsLoading(false);
                 }
             } catch (error) {
-                console.error('Error checking authentication:', error);
                 setIsLoading(false);
                 setIsConversationsLoading(false);
             }
@@ -553,7 +544,6 @@ export default function ChatPage() {
         checkAuth();
     }, []);
 
-    // Listen for session changes using localStorage events
     useEffect(() => {
         const checkSessionChange = () => {
             try {
@@ -562,37 +552,29 @@ export default function ChatPage() {
 
                 if (currentUsername !== username) {
                     if (currentUsername && storedSession) {
-                        console.log('🔄 Session changed, updating username:', currentUsername);
                         setUsername(currentUsername);
                         if (storedSession.user.id) {
                             loadConversations(storedSession.user.id);
                         }
                     } else {
-                        // Session was cleared, redirect to login
-                        console.log('❌ Session cleared, redirecting to login');
                         router.push('/login');
                     }
                 }
             } catch (error) {
-                console.error('Error checking session:', error);
             }
         };
 
-        // Listen for storage events (for cross-tab changes)
         const handleStorageChange = (e: StorageEvent) => {
             if (e.key === 'user_data' || e.key === 'session_token') {
                 checkSessionChange();
             }
         };
 
-        // Check immediately
         checkSessionChange();
 
-        // Set up storage event listener
         window.addEventListener('storage', handleStorageChange);
 
-        // Also check periodically (less frequently) as fallback
-        const interval = setInterval(checkSessionChange, 30000); // 30 seconds instead of 5
+        const interval = setInterval(checkSessionChange, 30000);
 
         return () => {
             window.removeEventListener('storage', handleStorageChange);
@@ -600,7 +582,6 @@ export default function ChatPage() {
         };
     }, [username, router]);
 
-    // Persistence Helpers
     const saveFailedMessageLocal = (msg: Message) => {
         try {
             storageHelpers.saveFailedMessage({
@@ -610,7 +591,6 @@ export default function ChatPage() {
                 status: 'failed'
             });
         } catch (error) {
-            console.error('Error saving failed message:', error);
         }
     };
 
@@ -620,27 +600,23 @@ export default function ChatPage() {
             const now = new Date();
 
             failed.forEach(async (msg: Message) => {
-                // Only retry if 5 minutes have passed since last retry
                 const timeSinceLastRetry = msg.lastRetryTime ?
                     now.getTime() - new Date(msg.lastRetryTime).getTime() :
                     now.getTime() - new Date(msg.timestamp).getTime();
 
-                if (timeSinceLastRetry > 30 * 1000) { // 30 seconds
+                if (timeSinceLastRetry > 30 * 1000) {
                     try {
-                        // Update status to sending
                         setMessages(prev => prev.map(m =>
                             m.id === msg.id ? { ...m, status: 'sending' } : m
                         ));
 
-                        // Get current user ID and conversation
-                        const cookies = getClientCookies();
-                        const userId = (cookies['user-id'] as string) || SecureSession.getUserId();
+                        const session = frontendAuth.getSession();
+                        const userId = session?.user?.id;
 
                         let currentConversation = conversations.find(c =>
                             c.participants.some((p: any) => p.user.username === msg.to)
                         );
 
-                        // If conversation not found, create it
                         if (!currentConversation && userId) {
                             const { data: selectedUserData } = await supabaseAdmin
                                 .from('users')
@@ -665,10 +641,12 @@ export default function ChatPage() {
                         }
 
                         if (currentConversation && userId) {
+                            const token = frontendAuth.getAccessToken();
                             const response = await fetch('/api/messages', {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
                                 },
                                 body: JSON.stringify({
                                     conversationId: currentConversation.id,
@@ -680,11 +658,9 @@ export default function ChatPage() {
                             });
 
                             if (response.ok) {
-                                // Remove from failed messages
                                 const updatedFailed = failed.filter((m: Message) => m.id !== msg.id);
                                 chatStorage.setItem('failed-messages', updatedFailed);
 
-                                // Update message status to sent
                                 setMessages(prev => prev.map(m =>
                                     m.id === msg.id ? { ...m, status: 'sent' } : m
                                 ));
@@ -692,11 +668,8 @@ export default function ChatPage() {
                                 throw new Error('Failed to send message');
                             }
                         } else {
-                            console.error('No conversation or user ID found for retry');
                         }
                     } catch (error) {
-                        console.error('Failed to retry message:', error);
-                        // Update retry count and last retry time
                         msg.retryCount = (msg.retryCount || 0) + 1;
                         msg.lastRetryTime = new Date();
                         saveFailedMessageLocal(msg);
@@ -704,16 +677,14 @@ export default function ChatPage() {
                 }
             });
         } catch (error) {
-            console.error('Failed to retry messages:', error);
         }
     };
 
-    // Auto-retry failed messages
     useEffect(() => {
         if (autoRetryEnabled && isConnected) {
             const interval = setInterval(() => {
                 retryFailedMessages();
-            }, 10000); // Retry every 10 seconds
+            }, 10000);
             setRetryInterval(interval);
         } else if (retryInterval) {
             clearInterval(retryInterval);
@@ -733,11 +704,9 @@ export default function ChatPage() {
             const newFailed = failed.filter((m: Message) => m.id !== id);
             chatStorage.setItem('failed-messages', newFailed);
         } catch (error) {
-            console.error('Error removing failed message:', error);
         }
     };
 
-    // Restore failed messages on mount
     useEffect(() => {
         const failed = storageHelpers.getFailedMessages() || [];
         if (failed.length > 0) {
@@ -748,7 +717,6 @@ export default function ChatPage() {
         }
     }, []);
 
-    // Retry failed messages when connected (every 5 seconds)
     useEffect(() => {
         let interval: NodeJS.Timeout;
         let isProcessing = false;
@@ -761,10 +729,8 @@ export default function ChatPage() {
                 if (failed.length === 0) return;
 
                 isProcessing = true;
-                console.log(`Auto-retrying ${failed.length} failed messages...`);
 
                 for (const msg of failed) {
-                    // Update status to pending in UI
                     setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'pending' } : m));
 
                     try {
@@ -782,16 +748,13 @@ export default function ChatPage() {
                                 }
                             });
                         });
-                        // Wait a bit between messages
                         await new Promise(r => setTimeout(r, 200));
                     } catch (err) {
-                        console.error('Error retrying message:', msg.id, err);
                     }
                 }
                 isProcessing = false;
             };
 
-            // Run immediately and then every 5 seconds
             processQueue();
             interval = setInterval(processQueue, 1000);
         }
@@ -801,7 +764,6 @@ export default function ChatPage() {
         };
     }, [isConnected]);
 
-    // Timer Effect
     useEffect(() => {
         let interval: NodeJS.Timeout;
         if (isCallActive) {
@@ -810,13 +772,12 @@ export default function ChatPage() {
         return () => clearInterval(interval);
     }, [isCallActive]);
 
-    // Ringtone Logic
     const playRingtone = () => {
         if (!ringtoneRef.current) {
             ringtoneRef.current = new Audio('/assets/ringtones/ringtone.mp3');
             ringtoneRef.current.loop = true;
         }
-        ringtoneRef.current.play().catch(e => console.log('Audio play error:', e));
+        ringtoneRef.current.play().catch(e => { });
     };
 
     const stopRingtone = () => {
@@ -848,7 +809,6 @@ export default function ChatPage() {
             });
 
             stream.getTracks().forEach(track => {
-                console.log(`Adding local track: ${track.kind}, enabled: ${track.enabled}`);
                 pc.addTrack(track, stream);
             });
 
@@ -859,19 +819,10 @@ export default function ChatPage() {
             };
 
             pc.ontrack = (e) => {
-                console.log('Received remote stream:', e.streams[0]);
-                console.log('Track kinds:', e.streams[0]?.getTracks().map(t => t.kind));
-
                 if (e.streams[0]) {
-                    // Set remote video stream state
                     setRemoteStream(e.streams[0]);
-
-                    // Show remote video
                     setShowRemoteVideo(true);
-
-                    // Log for debugging
                     e.streams[0].getTracks().forEach(track => {
-                        console.log(`Remote track: ${track.kind}, enabled: ${track.enabled}, state: ${track.readyState}`);
                     });
                 }
             };
@@ -920,7 +871,6 @@ export default function ChatPage() {
             setIsCallActive(true);
             setConnectionState('connecting');
         } catch (e) {
-            console.error('Media error:', e);
             alert('Could not access camera/mic');
         }
     };
@@ -960,7 +910,6 @@ export default function ChatPage() {
             setCallParticipant(incomingCall.from);
             setConnectionState('connected');
         } catch (e) {
-            console.error('Accept call error:', e);
             alert('Could not accept call: ' + (e as Error).message);
         }
     };
@@ -1004,40 +953,15 @@ export default function ChatPage() {
         }
     };
 
-    const showNotification = (data: Message) => {
-        // Only show notification if this is the last received message
-        if (!lastReceivedMessage || lastReceivedMessage.id !== data.id) {
-            return;
-        }
-
-        if (!('Notification' in window)) return;
-
-        if (Notification.permission === 'granted') {
-            const options: any = {
-                body: data.message,
-                icon: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.from}`,
-                tag: 'chat-msg',
-                renotify: true
-            };
-            const notification = new Notification(`New message from ${data.from}`, options);
-
-            notification.onclick = () => {
-                window.focus();
-                setSelectedUser(data.from);
-                notification.close();
-            };
-        }
-    };
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!inputMessage.trim() || !selectedUser) return;
+        if ((!inputMessage.trim() && !attachedFile) || !selectedUser) return;
 
         const tempContent = inputMessage.trim();
         setInputMessage('');
         setReplyingTo(null);
 
-        // Create temporary message with sending status
         const tempMessage: Message = {
             id: `temp-${Date.now()}`,
             from: username,
@@ -1051,12 +975,18 @@ export default function ChatPage() {
                 from: replyingTo.from,
                 message: replyingTo.message
             } : undefined,
+            file: attachedFile ? {
+                url: attachedFile.url,
+                filename: attachedFile.filename,
+                size: attachedFile.size,
+                type: attachedFile.type,
+                isImage: attachedFile.isImage,
+                caption: attachedFile.caption
+            } : undefined,
         };
 
-        // Add to UI immediately with sending status
         setMessages(prev => [...prev, tempMessage]);
 
-        // Add timeout to prevent stuck in sending state
         const timeoutId = setTimeout(() => {
             setMessages(prev => prev.map(m =>
                 m.id === tempMessage.id ? {
@@ -1067,7 +997,6 @@ export default function ChatPage() {
                 } : m
             ));
 
-            // Save to localStorage for retry
             saveFailedMessageLocal({
                 ...tempMessage,
                 status: 'failed',
@@ -1075,25 +1004,20 @@ export default function ChatPage() {
                 lastRetryTime: new Date()
             });
 
-            // Restore input message
             setInputMessage(tempContent);
-            console.warn('Message sending timed out, marked as failed');
-        }, 10000); // 10 second timeout
+        }, 10000);
 
         try {
-            // Send message using hook
             const savedMsg = await sendMessage(
                 tempContent,
                 selectedUser,
                 username,
                 conversations,
-                replyingTo
+                replyingTo,
+                attachedFile || undefined
             );
 
-            // Clear timeout on success
             clearTimeout(timeoutId);
-
-            // Update local state with the saved message
             setMessages(prev => prev.map(m =>
                 m.id === tempMessage.id ? {
                     ...savedMsg,
@@ -1101,11 +1025,11 @@ export default function ChatPage() {
                     to: selectedUser,
                     message: tempContent,
                     timestamp: new Date(savedMsg.timestamp),
-                    status: 'sent'
+                    status: 'sent',
+                    replyToMessageId: replyingTo?.id
                 } : m
             ));
 
-            // Emit to recipient via socket
             if (socketRef.current?.connected) {
                 socketRef.current.emit('send-message', {
                     id: savedMsg.id,
@@ -1125,17 +1049,23 @@ export default function ChatPage() {
                     } : undefined,
                     groupId: null,
                     chunkIndex: null,
-                    totalChunks: null
+                    totalChunks: null,
+                    replyToMessageId: replyingTo?.id,
+                    file: attachedFile ? {
+                        url: attachedFile.url,
+                        filename: attachedFile.filename,
+                        size: attachedFile.size,
+                        type: attachedFile.type,
+                        isImage: attachedFile.isImage,
+                        caption: attachedFile.caption
+                    } : undefined,
                 });
             }
 
+            setAttachedFile(null);
+
         } catch (error) {
-            console.error('Failed to send message:', error);
-
-            // Clear timeout on error
             clearTimeout(timeoutId);
-
-            // Update message status to failed
             setMessages(prev => prev.map(m =>
                 m.id === tempMessage.id ? {
                     ...m,
@@ -1144,16 +1074,12 @@ export default function ChatPage() {
                     lastRetryTime: new Date()
                 } : m
             ));
-
-            // Save to localStorage for retry
             saveFailedMessageLocal({
                 ...tempMessage,
                 status: 'failed',
                 retryCount: 1,
                 lastRetryTime: new Date()
             });
-
-            // Restore input message so user can retry
             setInputMessage(tempContent);
         }
     };
@@ -1167,39 +1093,56 @@ export default function ChatPage() {
         setInputMessage('');
 
         try {
-            // Update message in database
+            const session = frontendAuth.getSession();
+            const userId = session?.user?.id;
+            let token = frontendAuth.getAccessToken();
+
+            if (!userId) {
+                throw new Error('User not authenticated');
+            }
+
             const response = await fetch('/api/messages', {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({
                     messageId: editingMessage.id,
                     content: tempContent,
-                    from: username,
+                    from: userId,
                     to: selectedUser
                 }),
             });
 
-            if (!response.ok) {
+            if (response.status === 401) {
+                const refreshed = await frontendAuth.refreshSession();
+                if (refreshed) {
+                    token = frontendAuth.getAccessToken();
+                    const retryResponse = await fetch('/api/messages', {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            messageId: editingMessage.id,
+                            content: tempContent,
+                            from: userId,
+                            to: selectedUser
+                        }),
+                    });
+
+                    if (!retryResponse.ok) {
+                        throw new Error('Failed to update message after token refresh');
+                    }
+                } else {
+                    throw new Error('Session expired, please login again');
+                }
+            } else if (!response.ok) {
                 throw new Error('Failed to update message');
             }
-
-            const updatedMsg = await response.json();
-
-            // Update local state
-            setMessages(prev => prev.map(msg =>
-                msg.id === editingMessage.id
-                    ? { ...msg, message: tempContent, isEdited: true }
-                    : msg
-            ));
-
-            // Socket event is handled by the API server
-            // No need to emit from client side
-
         } catch (error) {
-            console.error('Failed to update message:', error);
-            // Restore editing state if failed
             setEditingMessage(editingMessage);
             setInputMessage(tempContent);
         }
@@ -1220,7 +1163,6 @@ export default function ChatPage() {
         if (!selectedUser) return;
 
         try {
-            // Send voice message using hook
             const savedMsg = await sendVoiceMessage(
                 audioBlob,
                 duration,
@@ -1229,7 +1171,6 @@ export default function ChatPage() {
                 conversations
             );
 
-            // Update local state
             setMessages(prev => [...prev, {
                 ...savedMsg,
                 from: username,
@@ -1242,7 +1183,6 @@ export default function ChatPage() {
                 audioDuration: savedMsg.audioDuration
             }]);
 
-            // Emit to recipient via socket
             if (socketRef.current?.connected) {
                 socketRef.current.emit('send-message', {
                     id: savedMsg.id,
@@ -1257,15 +1197,19 @@ export default function ChatPage() {
                     isEdited: false,
                     isDeleted: false,
                     isPinned: false,
-                    replyTo: null,
+                    replyTo: replyingTo ? {
+                        id: replyingTo.id,
+                        from: replyingTo.from,
+                        message: replyingTo.message
+                    } : undefined,
                     groupId: null,
                     chunkIndex: null,
-                    totalChunks: null
+                    totalChunks: null,
+                    replyToMessageId: replyingTo?.id
                 });
             }
 
         } catch (error) {
-            console.error('Failed to send voice message:', error);
             alert('Failed to send voice message');
         }
     };
@@ -1281,61 +1225,110 @@ export default function ChatPage() {
         }
     };
 
-    // Auto retry failed messages when there are 2 or more
     useEffect(() => {
         const failedMessages = messages.filter(m => m.status === 'failed');
 
         if (failedMessages.length >= 2 && isConnected && socketRef.current) {
-            console.log(`🔄 Auto-retrying ${failedMessages.length} failed messages`);
 
-            // Retry all failed messages with delay between each
             failedMessages.forEach((msg, index) => {
                 setTimeout(() => {
                     if (msg.id) {
-                        console.log(`🔄 Auto-retrying message ${index + 1}/${failedMessages.length}:`, msg.id);
                         setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'pending' } : m));
 
                         if (isConnected && socketRef.current) {
                             sendMessageInternal(msg);
                         }
                     }
-                }, index * 1000); // 1 second delay between each retry
+                }, index * 5000);
             });
         }
     }, [messages, isConnected]);
 
     const handleDeleteMessage = async (id: string, type: 'me' | 'everyone') => {
         try {
+            const session = frontendAuth.getSession();
+            const user = frontendAuth.getUser();
+
+            if (!session || !user) {
+                alert('User not authenticated');
+                return;
+            }
+
             if (type === 'me') {
-                // Delete for me - hide message for current user only
-                setMessages(prev => prev.map(m =>
-                    m.id === id ? { ...m, isHidden: true } : m
-                ));
-                console.log('� Hidden message for current user:', id);
+                try {
+                    const response = await fetch(`/api/messages/${id}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.accessToken}`,
+                        },
+                        body: JSON.stringify({
+                            type: 'me',
+                            userId: user.id
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to hide message');
+                    }
+
+                    // Mark message as hidden for current user instead of removing it completely
+                    setMessages(prev => prev.map(m =>
+                        m.id === id ? { ...m, isHidden: true } : m
+                    ));
+                } catch (apiError) {
+                    alert('Failed to hide message. Please try again.');
+                    return;
+                }
+
             } else {
                 setMessages(prev => prev.map(m =>
-                    m.id === id ? { ...m, isDeleted: true, message: '', audioUrl: undefined } : m
+                    m.id === id ? { ...m, isDeleted: true, message: '[This message was deleted]', audioUrl: undefined } : m
                 ));
+
+                try {
+                    const response = await fetch(`/api/messages/${id}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.accessToken}`,
+                        },
+                        body: JSON.stringify({
+                            type: 'everyone',
+                            userId: user.id
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to delete message from server');
+                    }
+
+                } catch (apiError) {
+                    setMessages(prev => prev.map(m =>
+                        m.id === id ? { ...m, isDeleted: false, message: m.message, audioUrl: m.audioUrl } : m
+                    ));
+                    alert('Failed to delete message. Please try again.');
+                    return;
+                }
+
                 if (socketRef.current && selectedUser) {
-                    socketRef.current?.emit('delete-message', { id, to: selectedUser });
+                    socketRef.current?.emit('delete-message', { id, to: selectedUser, hideFromAll: true });
                 }
             }
         } catch (error) {
-            console.error('❌ Failed to delete message:', error);
+            alert('Failed to delete message. Please try again.');
         }
     };
 
     const handlePinMessage = (msg: Message) => {
         const isPinned = !msg.isPinned;
-
-        // Count pins for current chat
         const currentPins = messages.filter(m =>
             m.isPinned &&
             ((m.from === username && m.to === selectedUser) || (m.from === selectedUser && m.to === username))
         );
 
         if (isPinned && currentPins.length >= 3) {
-            alert('Aap sirf 3 messages pin kar sakte hain per chat.');
+            alert('Only 3 messages allowed to pin');
             return;
         }
 
@@ -1343,30 +1336,16 @@ export default function ChatPage() {
         socketRef.current?.emit('pin-message', { id: msg.id, isPinned, to: selectedUser });
     };
 
-    const handleHideMessage = (id: string) => {
-        console.log('🙈 Hiding message:', id);
-        setMessages(prev => prev.map(m => m.id === id ? { ...m, isHidden: true } : m));
-    };
-
-    const handleUnhideMessage = (id: string) => {
-        console.log('👁️ Unhiding message:', id);
-        setMessages(prev => prev.map(m => m.id === id ? { ...m, isHidden: false } : m));
-    };
-
     const handleRefreshMessages = () => {
         if (selectedUser) {
-            console.log('🔄 Manual refresh triggered for:', selectedUser);
             loadMessages(selectedUser);
         }
     };
 
     const handleRetryMessage = (msg: Message) => {
-        // Update status to sending
         setMessages(prev => prev.map(m =>
             m.id === msg.id ? { ...m, status: 'sending' } : m
         ));
-
-        // Retry immediately
         retryFailedMessages();
     };
 
@@ -1375,8 +1354,10 @@ export default function ChatPage() {
     };
 
     const handleClearData = () => {
-        // Clear secure session (requires server-side)
+
         SecureSession.clearSession();
+        frontendAuth.clearSession();
+        localStorage.clear();
         setUsername('');
         setSelectedUser(null);
         setMessages([]);
@@ -1385,13 +1366,12 @@ export default function ChatPage() {
             socketRef.current.disconnect();
             socketRef.current = null;
         }
-        router.push('/');
+        router.push('/login');
     };
 
     const handleClearChat = () => {
         if (selectedUser) {
             setMessages([]);
-            // Clear failed messages for this conversation
             const failed = storageHelpers.getFailedMessages() || [];
             const updatedFailed = failed.filter((m: Message) => m.to !== selectedUser);
             chatStorage.setItem('failed-messages', updatedFailed);
@@ -1402,13 +1382,11 @@ export default function ChatPage() {
         if (!selectedUser || !username) return;
 
         try {
-            // Find current conversation
             let currentConversation = conversations.find(c =>
                 c.participants.some((p: any) => p.user.username === selectedUser)
             );
 
             if (!currentConversation) {
-                // Try to get conversation ID
                 const cookies = getClientCookies();
                 const userId = (cookies['user-id'] as string) || SecureSession.getUserId();
 
@@ -1436,20 +1414,16 @@ export default function ChatPage() {
             }
 
             if (currentConversation) {
-                // Delete all messages from database
                 const response = await fetch(`/api/conversations/${currentConversation.id}/messages/delete`, {
                     method: 'DELETE',
                 });
 
                 if (response.ok) {
-                    // Clear local messages
                     setMessages([]);
-                    // Clear failed messages for this conversation
                     const failed = storageHelpers.getFailedMessages() || [];
                     const updatedFailed = failed.filter((m: Message) => m.to !== selectedUser);
                     chatStorage.setItem('failed-messages', updatedFailed);
 
-                    // Emit socket event for real-time sync
                     if (socketRef.current?.connected) {
                         socketRef.current.emit('clear-all-messages', {
                             from: username,
@@ -1458,30 +1432,24 @@ export default function ChatPage() {
                         });
                     }
 
-                    console.log('All messages deleted successfully');
                 } else {
                     throw new Error('Failed to delete messages');
                 }
             }
         } catch (error) {
-            console.error('Failed to clear all messages:', error);
             alert('Failed to delete messages. Please try again.');
         }
     };
 
-    // Load user conversations from API
     const loadConversations = async (userId: string) => {
         try {
             const response = await fetch(`/api/conversations?userId=${userId}`);
             if (response.ok) {
                 const conversationsData = await response.json();
                 setConversations(conversationsData);
-                console.log('✅ Conversations loaded successfully:', conversationsData.length, 'conversations');
             } else {
-                console.error('❌ Failed to load conversations:', response.statusText);
             }
         } catch (error) {
-            console.error('❌ Error loading conversations:', error);
             throw error;
         }
     };
@@ -1497,6 +1465,17 @@ export default function ChatPage() {
     const handleProfileUpdated = (newUsername?: string) => {
         if (newUsername) {
             setUsername(newUsername);
+        }
+    };
+
+    const handleScrollToMessage = (messageId: string | undefined) => {
+        const messageElement = document.getElementById(`msg-${messageId}`);
+        if (messageElement) {
+            messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            messageElement.classList.add('highlight-message-reply');
+            setTimeout(() => {
+                messageElement.classList.remove('highlight-message-reply');
+            }, 2000);
         }
     };
 
@@ -1535,10 +1514,9 @@ export default function ChatPage() {
                     />
                 </ResizableSidebar>
 
-                {/* Main Chat Area */}
-                <main className={`flex flex-1 flex-col bg-[#efeae2] relative ${!selectedUser ? 'hidden md:flex' : 'flex'}`}>
+                <main className={`flex flex-1 flex-col bg-[#efeae2] relative pt-[60px] md:pt-0 ${!selectedUser ? 'hidden md:flex' : 'flex'}`}>
                     {selectedUser ? (
-                        <>
+                        <Fragment>
                             <ChatHeader
                                 selectedUser={selectedUser}
                                 onBack={() => setSelectedUser(null)}
@@ -1549,9 +1527,8 @@ export default function ChatPage() {
                                 onRefreshMessages={handleRefreshMessages}
                             />
 
-                            {/* Pinned Messages Banner */}
                             {pinnedMessages.length > 0 && (
-                                <div className="relative z-30">
+                                <div className="relative z-30" ref={pinsDropdownRef}>
                                     <div
                                         onClick={() => setShowPinsDropdown(!showPinsDropdown)}
                                         className="bg-white/90 backdrop-blur px-4 py-2 border-b border-[#f0f2f5] flex items-center gap-2 shadow-sm cursor-pointer hover:bg-white transition-colors animate-in fade-in duration-300"
@@ -1563,39 +1540,49 @@ export default function ChatPage() {
                                             <p className="text-[12px] font-bold text-[#00a884]">
                                                 {pinnedMessages.length === 1 ? 'Pinned Message' : `${pinnedMessages.length} Pinned Messages`}
                                             </p>
-                                            <p className="text-[13px] text-[#54656f] truncate">
-                                                {pinnedMessages[pinnedMessages.length - 1].message}
-                                            </p>
                                         </div>
                                         <ChevronDown size={18} className={`text-[#667781] transition-transform ${showPinsDropdown ? 'rotate-180' : ''}`} />
                                     </div>
 
-                                    {/* Pins Dropdown */}
                                     {showPinsDropdown && (
                                         <div className="absolute top-full left-0 right-0 bg-white shadow-xl border-b border-[#f0f2f5] max-h-[300px] overflow-y-auto animate-in slide-in-from-top-2 duration-200">
-                                            {pinnedMessages.slice().reverse().map((msg) => (
-                                                <div
-                                                    key={msg.id}
-                                                    className="p-3 border-b border-[#f0f2f5] hover:bg-[#f8f9fa] cursor-pointer"
-                                                    onClick={() => {
-                                                        setHighlightedMessageId(msg.id || '');
-                                                        setShowPinsDropdown(false);
-                                                    }}
-                                                >
-                                                    <div className="flex items-start gap-2">
-                                                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#00a884]/10 text-[#00a884] mt-1">
-                                                            <Pin size={12} className="fill-current" />
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-[13px] font-medium text-[#111b21]">{msg.from}</p>
-                                                            <p className="text-[14px] text-[#3b4a54] break-words">{msg.message}</p>
-                                                            <p className="text-[11px] text-[#8696a0] mt-1">
-                                                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                            </p>
+                                            {pinnedMessages.slice().reverse().map((msg, index) => {
+                                                return (
+                                                    <div
+                                                        key={msg.id}
+                                                        className="px-3 py-1 border-b border-[#f0f2f5] hover:bg-[#f8f9fa] cursor-pointer relative group"
+                                                        onClick={() => {
+                                                            setHighlightedMessageId(msg.id || '');
+                                                            setShowPinsDropdown(false);
+                                                            if (msg.id) {
+                                                                setTimeout(() => {
+                                                                    handleScrollToMessage(msg?.id);
+                                                                }, 100);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#00a884]/10 text-[#00a884] mt-1">
+                                                                <Pin size={12} className="fill-current" />
+                                                            </div>
+                                                            <div className="flex flex-wrap min-w-0">
+                                                                <p className="text-[13px] font-medium text-[#111b21]">{msg.from ? `${msg.from} : ` : ''}</p>
+                                                                <p className="text-[14px] text-[#3b4a54] break-words ml-1">{msg.message}</p>
+                                                            </div>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handlePinMessage(msg);
+                                                                }}
+                                                                className="bg-red-200/50 transition-opacity p-1.5 hover:bg-red-50 rounded-full text-red-500 transition-colors absolute right-2 top-2"
+                                                                title="Unpin message"
+                                                            >
+                                                                <PinOff size={14} color='red' />
+                                                            </button>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                )
+                                            })}
                                         </div>
                                     )}
                                 </div>
@@ -1604,14 +1591,16 @@ export default function ChatPage() {
                             <MessageList
                                 messages={currentChatMessages}
                                 username={username}
+                                selectedUser={selectedUser}
+                                recipientOnline={!!users[selectedUser]}
+                                isLoading={isMessagesLoading}
                                 onRetry={handleRetry}
                                 onReply={(msg: Message) => setReplyingTo(msg)}
                                 onDelete={handleDeleteMessage}
                                 onPin={handlePinMessage}
                                 onEdit={handleEditMessage}
-                                onHide={handleHideMessage}
-                                onUnhide={handleUnhideMessage}
                                 highlightedMessageId={highlightedMessageId}
+                                onScrollToMessage={handleScrollToMessage}
                             />
 
                             <ChatFooter
@@ -1624,8 +1613,10 @@ export default function ChatPage() {
                                 editingMessage={editingMessage}
                                 onCancelReply={() => setReplyingTo(null)}
                                 onCancelEdit={handleCancelEdit}
+                                attachedFile={attachedFile}
+                                setAttachedFile={setAttachedFile}
                             />
-                        </>
+                        </Fragment>
                     ) : (
                         <EmptyChatState />
                     )}
@@ -1669,10 +1660,8 @@ export default function ChatPage() {
             <AuthOverlay
                 username={username}
                 onUsernameCreated={(u, userId) => {
-                    console.log('Login successful, setting up user session...');
                     setUsername(u);
 
-                    // Wait a moment for cookies to be set, then load data
                     setTimeout(async () => {
                         const cookies = getClientCookies();
                         const userData = SecureSession.getUser();
@@ -1681,21 +1670,17 @@ export default function ChatPage() {
                         if (finalUserId) {
                             try {
                                 await loadConversations(finalUserId);
-                                console.log('✅ Conversations API loaded successfully');
                             } catch (error) {
-                                console.error('❌ Failed to load conversations:', error);
                             }
 
                             const failed = storageHelpers.getFailedMessages() || [];
                             if (failed.length > 0) {
-                                console.log('🔄 Restoring failed messages:', failed.length);
                                 setMessages(prev => {
                                     const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
                                     return [...prev, ...newMessages];
                                 });
                             }
                         } else {
-                            console.error('❌ No user ID found after login');
                         }
                     }, 100);
 

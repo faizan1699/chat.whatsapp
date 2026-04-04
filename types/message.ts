@@ -12,24 +12,31 @@ export interface Message {
     timestamp: Date;
     status?: 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
     replyTo?: ReplyTo;
+    replyToMessageId?: string;
     isPinned?: boolean;
+    pinnedBy?: string;
     isHidden?: boolean;
+    hideFromAll?: boolean;
     audioUrl?: string;
     audioDuration?: number;
     isVoiceMessage?: boolean;
     isEdited?: boolean;
-    // Chunking metadata
     groupId?: string;
     chunkIndex?: number;
     totalChunks?: number;
     isDeleted?: boolean;
-    // Failed message tracking
     retryCount?: number;
     lastRetryTime?: Date;
-    // Additional properties for failed message handling
     conversationId?: string | null;
     senderId?: string | null;
-    // Additional properties for MessageList compatibility
     content?: string;
     reactions?: Record<string, string[]>;
+    file?: {
+        url: string;
+        filename: string;
+        size: number;
+        type: string;
+        isImage: boolean;
+        caption?: string;
+    };
 }

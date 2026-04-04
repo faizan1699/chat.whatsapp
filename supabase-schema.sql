@@ -54,7 +54,8 @@ CREATE TABLE IF NOT EXISTS messages (
   reply_to JSONB,
   group_id TEXT,
   chunk_index INT,
-  total_chunks INT
+  total_chunks INT,
+  is_deleted_from_me JSONB DEFAULT '[]'
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);

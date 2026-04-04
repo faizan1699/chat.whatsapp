@@ -26,7 +26,6 @@ console.log('\n4. Expected Console Output When Sending Message:');
 console.log('   📝 Send message triggered');
 console.log('   📋 Pre-checks: { hasInput: true, hasSelectedUser: true, ... }');
 console.log('   🚀 Starting to send message: "your message"');
-console.log('   🚀 sendMessage hook called with: { content, selectedUser, ... }');
 console.log('   🔐 Getting auth headers...');
 console.log('   📋 Session found: true  ← This should now be TRUE');
 console.log('   ✅ Auth headers created successfully');

@@ -4,6 +4,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Smile, Paperclip, Send, Mic, X, Check } from 'lucide-react';
 import { Message, ReplyTo } from '@/types/message';
 import VoiceRecorder from '../audio/VoiceRecorder';
+import FileUpload from './FileUpload';
+import FileMessage from './FileMessage';
+import FilePreviewModal from './FilePreviewModal';
 import dynamic from 'next/dynamic';
 import { EmojiStyle, Theme, PickerProps } from 'emoji-picker-react';
 
@@ -27,6 +30,22 @@ interface ChatFooterProps {
     editingMessage?: Message | null;
     onCancelReply?: () => void;
     onCancelEdit?: () => void;
+    attachedFile?: {
+        url: string;
+        filename: string;
+        size: number;
+        type: string;
+        isImage: boolean;
+        caption?: string;
+    } | null;
+    setAttachedFile: (file: {
+        url: string;
+        filename: string;
+        size: number;
+        type: string;
+        isImage: boolean;
+        caption?: string;
+    } | null) => void;
 }
 
 export default function ChatFooter({
@@ -38,11 +57,22 @@ export default function ChatFooter({
     replyingTo,
     editingMessage,
     onCancelReply,
-    onCancelEdit
+    onCancelEdit,
+    attachedFile,
+    setAttachedFile
 }: ChatFooterProps) {
 
     const [isVoiceRecording, setIsVoiceRecording] = useState(false);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [showFilePreview, setShowFilePreview] = useState(false);
+    const [pendingFile, setPendingFile] = useState<{
+        url: string;
+        filename: string;
+        size: number;
+        type: string;
+        isImage: boolean;
+    } | null>(null);
+    const [sendingFile, setSendingFile] = useState(false);
     const emojiPickerRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -72,6 +102,42 @@ export default function ChatFooter({
         setInputMessage(inputMessage + emojiData.emoji);
         // Optional: Keep picker open or close it
         // setShowEmojiPicker(false); 
+    };
+
+    const handleFileSelect = (file: {
+        url: string;
+        filename: string;
+        size: number;
+        type: string;
+        isImage: boolean;
+    }) => {
+        setPendingFile(file);
+        setShowFilePreview(true);
+    };
+
+    const handleSendFile = async (caption: string) => {
+        if (!pendingFile) return;
+        
+        setSendingFile(true);
+        try {
+            setAttachedFile({
+                ...pendingFile,
+                caption: caption
+            });
+            
+            // Close modal and reset state
+            setShowFilePreview(false);
+            setPendingFile(null);
+        } catch (error) {
+            console.error('Error sending file:', error);
+        } finally {
+            setSendingFile(false);
+        }
+    };
+
+    const handleCloseFilePreview = () => {
+        setShowFilePreview(false);
+        setPendingFile(null);
     };
 
     return (
@@ -154,9 +220,10 @@ export default function ChatFooter({
                             >
                                 <Smile className="w-5 h-5 md:w-6 md:h-6" />
                             </button>
-                            <button className="hover:bg-black/5 p-1.5 md:p-2 rounded-full transition-colors">
-                                <Paperclip className="w-5 h-5 md:w-6 md:h-6" />
-                            </button>
+                            <FileUpload 
+                                onFileSelect={handleFileSelect}
+                                disabled={isVoiceRecording}
+                            />
                         </div>
                         <form onSubmit={(e) => {
                             if (editingMessage && onUpdateMessage) {
@@ -165,6 +232,16 @@ export default function ChatFooter({
                                 onSendMessage(e);
                             }
                         }} className="flex flex-1 items-end gap-1 md:gap-2 min-w-0 relative py-1">
+                            {attachedFile && (
+                                <div className="absolute -top-2 left-0 right-0 z-10">
+                                    <FileMessage
+                                        file={attachedFile}
+                                        removable={true}
+                                        onRemove={() => setAttachedFile(null)}
+                                    />
+                                </div>
+                            )}
+                            
                             <div className="flex-1 relative flex items-center">
                                 <textarea
                                     ref={textareaRef}
@@ -221,6 +298,15 @@ export default function ChatFooter({
                     </>
                 )}
             </footer>
+            
+            {/* File Preview Modal */}
+            <FilePreviewModal
+                isOpen={showFilePreview}
+                file={pendingFile}
+                onClose={handleCloseFilePreview}
+                onSend={handleSendFile}
+                loading={sendingFile}
+            />
         </div>
     );
 }

@@ -1,8 +1,19 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { debounce } from '../../utils/debounce';
-import { Plus, X, Search as SearchIcon, LogOut, User } from 'lucide-react';
+import React, { useState, Fragment, useRef, useEffect, useMemo, useCallback } from 'react';
+import { Search, MoreVertical, X, Phone, Video, Archive, Trash2, Bell, BellOff, User, Volume2, VolumeX, Plus, LogOut, Search as SearchIcon } from 'lucide-react';
 import UserSearch from '../chat/UserSearch';
 import { apiService } from '@/services/apiService';
+import api from '@/utils/api';
+import { useProfile } from '@/contexts/ProfileContext';
+import { Message } from '@/types/message';
+
+// Simple debounce implementation
+const debounce = <T extends (...args: any[]) => void>(func: T, delay: number): ((...args: Parameters<T>) => void) => {
+    let timeoutId: NodeJS.Timeout;
+    return (...args: Parameters<T>) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => func(...args), delay);
+    };
+};
 
 const UserSkeleton = () => (
     <div className="group relative flex w-full items-center gap-3 border-b border-[#f0f2f5] px-3 py-4">
@@ -30,14 +41,15 @@ interface SidebarProps {
     username: string;
     users: { [key: string]: string };
     selectedUser: string | null;
-    setSelectedUser: (user: string) => void;
+    setSelectedUser: (user: string | null) => void;
     searchQuery: string;
     setSearchQuery: (query: string) => void;
-    messages: any[];
     conversations: any[];
+    messages: Message[];
     unreadCounts?: { [key: string]: number };
     onLogout?: () => void;
     onEditProfile?: () => void;
+    onConversationCreated?: (conversation: any) => void;
     isLoading?: boolean; // Add loading prop
 }
 
@@ -48,16 +60,22 @@ export default function Sidebar({
     setSelectedUser,
     searchQuery,
     setSearchQuery,
-    messages,
     conversations,
-    unreadCounts = {},
+    messages,
+    unreadCounts,
     onLogout,
     onEditProfile,
-    isLoading = false, // Default to false
+    onConversationCreated,
+    isLoading = false,
 }: SidebarProps) {
+    const { profile } = useProfile();
     const [showGlobalSearch, setShowGlobalSearch] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
+    const [contextMenuUser, setContextMenuUser] = useState<string | null>(null);
+    const [mutedUsers, setMutedUsers] = useState<Set<string>>(new Set());
+    const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+    const contextMenuRef = useRef<HTMLDivElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -65,10 +83,42 @@ export default function Sidebar({
             if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
                 setShowMenu(false);
             }
+            if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+                setContextMenuUser(null);
+                setContextMenuPosition(null);
+            }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    const handleContextMenu = (e: React.MouseEvent, user: string) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setContextMenuUser(user);
+        setContextMenuPosition({ x: e.clientX, y: e.clientY });
+    };
+
+    const toggleMute = (user: string) => {
+        setMutedUsers(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(user)) {
+                newSet.delete(user);
+            } else {
+                newSet.add(user);
+            }
+            return newSet;
+        });
+        setContextMenuUser(null);
+        setContextMenuPosition(null);
+    };
+
+    const deleteChat = (user: string) => {
+        // Implement delete chat functionality
+        console.log('Delete chat:', user);
+        setContextMenuUser(null);
+        setContextMenuPosition(null);
+    };
 
     const debouncedSetSearchQuery = useMemo(
         () => debounce((value: string) => setSearchQuery(value), 300),
@@ -87,12 +137,12 @@ export default function Sidebar({
             const userDataStr = localStorage.getItem('user_data') || '';
             const userData = userDataStr ? JSON.parse(userDataStr) : null;
             const userId = userData?.id;
-            
+
             if (!userId) {
                 alert('Session expired. Please log in again.');
                 return;
             }
-            
+
             if (user.id === userId) {
                 alert('Cannot start a chat with yourself.');
                 return;
@@ -108,41 +158,52 @@ export default function Sidebar({
 
     // Get unique conversation partners from conversations
     const conversationPartners = useMemo(() => {
-        const partners = new Set<string>();
+        const partners = new Map<string, { id: string; username: string; avatar?: string }>();
         conversations.forEach(conv => {
             conv.participants.forEach((p: any) => {
                 if (p.user.username !== username) {
-                    partners.add(p.user.username);
+                    partners.set(p.user.username, {
+                        id: p.user.id,
+                        username: p.user.username,
+                        avatar: p.user.avatar
+                    });
                 }
             });
         });
-        return Array.from(partners);
+        return Array.from(partners.values());
     }, [conversations, username]);
 
     const filteredUsers = conversationPartners
-        .filter(u => u.toLowerCase().includes(searchQuery.toLowerCase()));
+        .filter(u => u.username.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const getLastMessage = (user: string) => {
-        // First try to get last message from conversations data
-        const userConversation = conversations.find(conv => 
+        const userConversation = conversations.find(conv =>
             conv.participants.some((p: any) => p.user.username === user)
         );
-        
+
         if (userConversation?.messages?.length > 0) {
-            return userConversation.messages[0];
+            const lastMsg = userConversation.messages[0];
+            return {
+                ...lastMsg,
+                message: lastMsg.content || lastMsg.message,
+                from: lastMsg.sender?.username || lastMsg.from,
+                to: lastMsg.sender?.username === username ? user : username
+            };
         }
-        
-        // Fallback to messages array
-        return messages.filter(m => (m.from === user && m.to === username) || (m.from === username && m.to === user)).pop();
+        const userMessages = messages.filter((m: Message) => (m.from === user && m.to === username) || (m.from === username && m.to === user));
+        return userMessages.pop();
     };
 
     return (
         <div className="flex h-full w-full flex-col bg-white overflow-hidden">
-            {/* Sidebar Header */}
             <header className="flex h-[60px] items-center justify-between bg-[#f0f2f5] px-4 py-2">
                 <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-300 cursor-pointer">
-                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`} alt="avatar" className="h-full w-full object-cover" />
+                    <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-300 cursor-pointer" onClick={() => onEditProfile?.()}>
+                        {profile?.avatar ? (
+                            <img src={profile.avatar} alt="avatar" className="h-full w-full object-cover" />
+                        ) : (
+                            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`} alt="avatar" className="h-full w-full object-cover" />
+                        )}
                     </div>
                     <span className="text-[#111b21] font-medium">{username}</span>
                 </div>
@@ -229,7 +290,7 @@ export default function Sidebar({
                 <div className="px-4 py-2 text-[13px] font-bold text-[#00a884] uppercase tracking-wider">
                     Recent Chats
                 </div>
-                
+
                 {/* Show skeleton loaders when loading */}
                 {isLoading ? (
                     <>
@@ -245,28 +306,34 @@ export default function Sidebar({
                     </div>
                 ) : (
                     filteredUsers.map((user) => {
-                        const lastMsg = getLastMessage(user);
-                        const unreadCount = unreadCounts[user] || 0;
+                        const lastMsg = getLastMessage(user.username);
+                        const unreadCount = unreadCounts?.[user.username] || 0;
 
                         return (
-                            <button
-                                key={user}
-                                onClick={() => setSelectedUser(user)}
-                                className={`group relative flex w-full items-center gap-3 border-b border-[#f0f2f5] px-3 py-4 transition-colors ${selectedUser === user ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'}`}
+                            <div
+                                key={user.username}
+                                className={`group relative flex w-full items-center gap-3 border-b border-[#f0f2f5] px-3 py-4 transition-colors ${selectedUser === user.username ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'}`}
                             >
-                                {selectedUser === user && (
+                                {selectedUser === user.username && (
                                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#00a884]"></div>
                                 )}
                                 <div className="relative h-12 w-12 flex-shrink-0">
                                     <div className="h-full w-full overflow-hidden rounded-full bg-slate-200">
-                                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user}`} alt={user} className="h-full w-full object-cover" />
+                                        <img 
+                                            src={user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`} 
+                                            alt={user.username} 
+                                            className="h-full w-full object-cover" 
+                                        />
                                     </div>
                                     <div className="absolute right-0 bottom-0 h-3 w-3 rounded-full border-2 border-white bg-[#25d366]"></div>
                                 </div>
-                                <div className="flex flex-1 flex-col overflow-hidden text-left">
+                                <div 
+                                    className="flex flex-1 flex-col overflow-hidden text-left cursor-pointer"
+                                    onClick={() => setSelectedUser(user.username)}
+                                >
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2 overflow-hidden">
-                                            <span className="truncate font-semibold text-[#111b21]">{user}</span>
+                                            <span className="truncate font-semibold text-[#111b21]">{user.username}</span>
                                         </div>
                                         {lastMsg && (
                                             <span className={`text-[12px] ${unreadCount > 0 ? 'text-[#00a884] font-semibold' : 'text-[#667781]'}`}>
@@ -285,11 +352,77 @@ export default function Sidebar({
                                         )}
                                     </div>
                                 </div>
-                            </button>
+                                <button
+                                    onClick={(e) => handleContextMenu(e, user.username)}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-black/5 rounded-full"
+                                >
+                                    <MoreVertical size={16} className="text-[#667781]" />
+                                </button>
+                            </div>
                         );
                     })
                 )}
             </div>
+
+            {/* Context Menu */}
+            {contextMenuUser && contextMenuPosition && (
+                <div
+                    ref={contextMenuRef}
+                    className="fixed z-50 min-w-[200px] rounded-lg bg-white py-1 shadow-lg border border-gray-200"
+                    style={{
+                        top: `${contextMenuPosition.y}px`,
+                        left: `${contextMenuPosition.x}px`
+                    }}
+                >
+                    <button
+                        onClick={() => toggleMute(contextMenuUser)}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                        {mutedUsers.has(contextMenuUser) ? (
+                            <>
+                                <Bell size={16} />
+                                <span>Unmute notifications</span>
+                            </>
+                        ) : (
+                            <>
+                                <BellOff size={16} />
+                                <span>Mute notifications</span>
+                            </>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => {
+                            // Implement view profile
+                            console.log('View profile:', contextMenuUser);
+                            setContextMenuUser(null);
+                            setContextMenuPosition(null);
+                        }}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                        <User size={16} />
+                        <span>View profile</span>
+                    </button>
+                    <button
+                        onClick={() => {
+                            // Implement archive chat
+                            console.log('Archive chat:', contextMenuUser);
+                            setContextMenuUser(null);
+                            setContextMenuPosition(null);
+                        }}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                        <Archive size={16} />
+                        <span>Archive chat</span>
+                    </button>
+                    <button
+                        onClick={() => deleteChat(contextMenuUser)}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                        <Trash2 size={16} />
+                        <span>Delete chat</span>
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

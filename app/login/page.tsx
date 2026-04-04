@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { Eye, EyeOff, MessageCircle, Lock, Mail, User } from 'lucide-react';
 import { frontendAuth } from '@/utils/frontendAuth';
+import api from '@/utils/api';
 
 interface LoginFormData {
     identifier: string;
@@ -12,60 +13,46 @@ interface LoginFormData {
 }
 
 function LoginForm() {
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const router = useRouter();
     const searchParams = useSearchParams();
 
+    useEffect(() => {
+        if (frontendAuth.isAuthenticated()) {
+            const returnTo = searchParams?.get('returnTo') || '/chat';
+            router.push(returnTo);
+        }
+    }, [router, searchParams]);
+
     const {
         register,
         handleSubmit,
-        formState: { errors },
-        setValue,
+        formState: { errors, isSubmitting },
+        setError: setFormError,
     } = useForm<LoginFormData>();
 
     const onSubmit = async (data: LoginFormData) => {
-        setLoading(true);
-        setError('');
-
         try {
-            const response = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(data),
-            });
+            const response = await api.post('/auth/login', data);
+            const responseData = response.data;
 
-            const responseData = await response.json();
+            frontendAuth.setSession(
+                responseData.accessToken,
+                responseData.refreshToken,
+                responseData.user
+            );
 
-            if (response.ok) {
-                // Store session data using frontend auth utility
-                frontendAuth.setSession(
-                    responseData.accessToken,
-                    responseData.refreshToken,
-                    responseData.user
-                );
-                
-                console.log('✅ Login successful:', responseData.user.username);
-                
-                router.push('/chat');
-                router.refresh(); 
-            } else {
-                setError(responseData.message || 'Login failed');
-            }
-        } catch (error) {
-            setError('Network error. Please try again.');
-        } finally {
-            setLoading(false);
+            const returnTo = searchParams?.get('returnTo') || '/chat';
+            router.push(returnTo);
+        } catch (error: any) {
+            const errorMessage = error?.response?.data?.message || 'Login failed';
+            setFormError('root', { type: 'manual', message: errorMessage });
         }
     };
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
             <div className="w-full max-w-md">
-                {/* Logo and Brand */}
                 <div className="text-center mb-8">
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
                         <MessageCircle className="w-8 h-8 text-white" />
@@ -74,7 +61,6 @@ function LoginForm() {
                     <p className="text-gray-600">Connect with friends securely</p>
                 </div>
 
-                {/* Login Card */}
                 <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
                     <div className="mb-6">
                         <h2 className="text-xl font-semibold text-gray-900 mb-2">Welcome Back</h2>
@@ -82,7 +68,6 @@ function LoginForm() {
                     </div>
 
                     <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
-                        {/* Identifier Field */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                 Username or Email
@@ -97,9 +82,8 @@ function LoginForm() {
                                         required: 'Username or email is required',
                                     })}
                                     type="text"
-                                    className={`block w-full pl-10 pr-3 py-3 border ${
-                                        errors.identifier ? 'border-red-300' : 'border-gray-300'
-                                    } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
+                                    className={`block w-full pl-10 pr-3 py-3 border ${errors.identifier ? 'border-red-300' : 'border-gray-300'
+                                        } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
                                     placeholder="Enter your username or email"
                                 />
                             </div>
@@ -126,9 +110,8 @@ function LoginForm() {
                                         },
                                     })}
                                     type={showPassword ? 'text' : 'password'}
-                                    className={`block w-full pl-10 pr-10 py-3 border ${
-                                        errors.password ? 'border-red-300' : 'border-gray-300'
-                                    } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
+                                    className={`block w-full pl-10 pr-10 py-3 border ${errors.password ? 'border-red-300' : 'border-gray-300'
+                                        } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
                                     placeholder="Enter your password"
                                 />
                                 <button
@@ -148,20 +131,18 @@ function LoginForm() {
                             )}
                         </div>
 
-                        {/* Error Message */}
-                        {error && (
+                        {errors.root && (
                             <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                                <p className="text-sm text-red-600">{error}</p>
+                                <p className="text-sm text-red-600">{errors.root.message}</p>
                             </div>
                         )}
 
-                        {/* Submit Button */}
                         <button
                             type="submit"
-                            disabled={loading}
+                            disabled={isSubmitting}
                             className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
-                            {loading ? (
+                            {isSubmitting ? (
                                 <div className="flex items-center justify-center">
                                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                                     Signing in...
@@ -172,7 +153,6 @@ function LoginForm() {
                         </button>
                     </form>
 
-                    {/* Footer */}
                     <div className="mt-6 text-center">
                         <p className="text-sm text-gray-600">
                             Don't have an account?{' '}
@@ -183,7 +163,6 @@ function LoginForm() {
                     </div>
                 </div>
 
-                {/* Security Note */}
                 <div className="mt-6 text-center">
                     <p className="text-xs text-gray-500">
                         🔒 Secured with HTTP-only cookies

@@ -5,10 +5,10 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export const uploadAudio = async (blob: Blob, fileName: string) => {
+export const uploadAudio = async (blob: Blob, fileName: string, userId: string) => {
     const { data, error } = await supabase.storage
         .from('audio-messages')
-        .upload(`${fileName}.wav`, blob, {
+        .upload(`${userId}/${fileName}.wav`, blob, {
             contentType: 'audio/wav',
         });
 
