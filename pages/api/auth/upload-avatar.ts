@@ -31,12 +31,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         const buffer = Buffer.concat(chunks);
         
-        // Validate file size (5MB max)
-        if (buffer.length > 5 * 1024 * 1024) {
-            return res.status(400).json({ error: 'File size too large. Maximum 5MB allowed.' });
+        // Validate file size (10MB max)
+        if (buffer.length > 10 * 1024 * 1024) {
+            return res.status(400).json({ error: 'File size too large. Maximum 10MB allowed.' });
         }
 
-        // Validate file type (basic check for image signatures)
         const imageSignatures = {
             'image/jpeg': [0xFF, 0xD8, 0xFF],
             'image/png': [0x89, 0x50, 0x4E, 0x47],
