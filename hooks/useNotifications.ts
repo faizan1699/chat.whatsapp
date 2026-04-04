@@ -3,7 +3,7 @@ import { Message } from '@/types/message';
 
 interface UseNotificationsReturn {
     requestPermission: () => Promise<void>;
-    showNotification: (data: Message, username: string, selectedUser: string | null, isWindowFocused: boolean) => void;
+    showNotification: (data: Message, username: string, selectedUser: string | null) => void;
     permission: NotificationPermission;
 }
 
@@ -46,12 +46,20 @@ export function useNotifications(): UseNotificationsReturn {
         };
     }, []);
 
-    const showNotification = (data: Message, username: string, selectedUser: string | null, isWindowFocused: boolean) => {
+    const showNotification = (data: Message, username: string, selectedUser: string | null) => {
         if (!('Notification' in window)) {
             return;
         }
 
         if (permission !== 'granted') {
+            return;
+        }
+
+        if (!isWindowFocusedRef.current) {
+            return;
+        }
+
+        if (selectedUser === data.from) {
             return;
         }
 
@@ -71,7 +79,7 @@ export function useNotifications(): UseNotificationsReturn {
         };
 
         if (isMobile && 'vibrate' in navigator) {
-            navigator.vibrate([2000, 100,]);
+            navigator.vibrate([2000, 100]);
         }
 
         const notification = new Notification(notificationTitle, options);

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Fragment, useEffect, useRef, useState } from 'react';
 import MessageItem from './MessageItem';
 import DateSeparator from './DateSeparator';
 import StickyTimestamp from './StickyTimestamp';
@@ -147,7 +147,7 @@ export default function MessageList({
             {isLoading && messages.length === 0 ? (
                 <ChatSkeleton />
             ) : (
-                <>
+                <Fragment>
                     <StickyTimestamp 
                         messages={messages}
                         username={username}
@@ -160,7 +160,7 @@ export default function MessageList({
                         {messagesWithSeparators}
                         <div ref={messagesEndRef} />
                     </div>
-                </>
+                </Fragment>
             )}
         </div>
     );

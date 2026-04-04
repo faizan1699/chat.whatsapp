@@ -198,10 +198,8 @@ export default function ChatPage() {
                 });
             });
 
-            // Update last received message for notifications
             setLastReceivedMessage(data);
 
-            // Update unread count if message is not from current user
             if (data.from !== username && data.to === username) {
                 setUnreadCounts(prev => ({
                     ...prev,
@@ -209,7 +207,7 @@ export default function ChatPage() {
                 }));
 
                 if (selectedUser !== data.from) {
-                    showNotificationMessage(data, username, selectedUser, isWindowFocused);
+                    showNotificationMessage(data, username, selectedUser);
                 }
             }
         });
@@ -1002,7 +1000,8 @@ export default function ChatPage() {
                     to: selectedUser,
                     message: tempContent,
                     timestamp: new Date(savedMsg.timestamp),
-                    status: 'sent'
+                    status: 'sent',
+                    replyToMessageId: replyingTo?.id
                 } : m
             ));
 
@@ -1025,7 +1024,8 @@ export default function ChatPage() {
                     } : undefined,
                     groupId: null,
                     chunkIndex: null,
-                    totalChunks: null
+                    totalChunks: null,
+                    replyToMessageId: replyingTo?.id
                 });
             }
 
@@ -1137,10 +1137,15 @@ export default function ChatPage() {
                     isEdited: false,
                     isDeleted: false,
                     isPinned: false,
-                    replyTo: null,
+                    replyTo: replyingTo ? {
+                        id: replyingTo.id,
+                        from: replyingTo.from,
+                        message: replyingTo.message
+                    } : undefined,
                     groupId: null,
                     chunkIndex: null,
-                    totalChunks: null
+                    totalChunks: null,
+                    replyToMessageId: replyingTo?.id
                 });
             }
 
