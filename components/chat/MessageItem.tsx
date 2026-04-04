@@ -173,8 +173,8 @@ export default function MessageItem({
             <div className={`flex flex-col max-w-[85%] md:max-w-[65%] lg:max-w-[60%] xl:max-w-[55%] ${isMe ? 'items-end' : 'items-start'}`}>
                 <div
                     className={`flex flex-col px-2 py-1 shadow-sm relative w-full min-w-0 cursor-pointer ${isMe
-                            ? 'rounded-l-lg rounded-br-lg bg-[#d9fdd3] text-[#111b21] ml-10'
-                            : 'rounded-r-lg rounded-bl-lg bg-white text-[#111b21] mr-10'
+                        ? 'rounded-l-lg rounded-br-lg bg-[#d9fdd3] text-[#111b21] ml-10'
+                        : 'rounded-r-lg rounded-bl-lg bg-white text-[#111b21] mr-10'
                         } ${message.status === 'failed' ? 'bg-red-50 border border-red-200' : ''} ${isHighlighted ? 'highlight-message' : ''}`}
                     onClick={() => {
                         if (message.isPinned && message.id) {
@@ -229,7 +229,15 @@ export default function MessageItem({
                                 </button>
                                 <div className="relative">
                                     <button
-                                        onClick={() => setShowDeleteMenu(!showDeleteMenu)}
+                                        onClick={() => {
+                                            if (!isMe) {
+                                                if (message.id) {
+                                                    onDelete?.(message.id, 'me');
+                                                }
+                                            } else {
+                                                setShowDeleteMenu(!showDeleteMenu);
+                                            }
+                                        }}
                                         className="p-1.5 hover:bg-red-50 rounded-full text-red-500 transition-colors"
                                         title="Delete"
                                     >

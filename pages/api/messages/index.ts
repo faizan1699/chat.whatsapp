@@ -64,13 +64,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             if (error) throw error;
 
             const filteredMessages = messages.filter(message => {
-                // If is_deleted_from_me doesn't exist or is empty, include message
                 if (!message.is_deleted_from_me || message.is_deleted_from_me.length === 0) {
                     return true;
                 }
-                
-                // If current user's ID is in is_deleted_from_me array, exclude message
-                return !message.is_deleted_from_me.includes(session.userId);
+
+                let deletedFromMe = message.is_deleted_from_me;
+                if (typeof deletedFromMe === 'object' && deletedFromMe !== null && !Array.isArray(deletedFromMe)) {
+                    deletedFromMe = Object.values(deletedFromMe);
+                } else if (!Array.isArray(deletedFromMe)) {
+                    deletedFromMe = [deletedFromMe];
+                }
+
+                return !deletedFromMe.includes(session.userId);
             });
 
             res.status(200).json({
@@ -187,7 +192,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         try {
-            // Add user ID to is_deleted_from_me array instead of deleting the message
             const { data: message } = await supabaseAdmin
                 .from('messages')
                 .select('is_deleted_from_me')
@@ -195,7 +199,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 .single();
 
             let deletedFromMe = message?.is_deleted_from_me || [];
-            // Handle case where is_deleted_from_me might be an object
             if (typeof deletedFromMe === 'object' && !Array.isArray(deletedFromMe)) {
                 deletedFromMe = Object.values(deletedFromMe);
             }

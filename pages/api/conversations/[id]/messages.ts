@@ -51,13 +51,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         if (error) throw error;
 
-        const senderIds = Array.from(new Set((messages || []).map((m) => m.sender_id)));
+        const filteredMessages = (messages || []).filter(message => {
+            if (!message.is_deleted_from_me || message.is_deleted_from_me.length === 0) {
+                return true;
+            }
+            
+            let deletedFromMe = message.is_deleted_from_me;
+            if (typeof deletedFromMe === 'object' && deletedFromMe !== null && !Array.isArray(deletedFromMe)) {
+                deletedFromMe = Object.values(deletedFromMe);
+            } else if (!Array.isArray(deletedFromMe)) {
+                deletedFromMe = [deletedFromMe];
+            }
+            
+            return !deletedFromMe.includes(session.userId);
+        });
+
+        const senderIds = Array.from(new Set(filteredMessages.map((m) => m.sender_id)));
         const { data: senders } = senderIds.length
             ? await supabaseAdmin.from('users').select('id, username, avatar').in('id', senderIds)
             : { data: [] };
         const senderMap = Object.fromEntries((senders || []).map((s) => [s.id, s]));
 
-        const mapped = (messages || []).map((m) => ({
+        const mapped = filteredMessages.map((m) => ({
             ...m,
             conversationId: m.conversation_id,
             senderId: m.sender_id,

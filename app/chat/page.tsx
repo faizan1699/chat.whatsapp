@@ -419,6 +419,7 @@ export default function ChatPage() {
                         'Authorization': `Bearer ${token}`
                     }
                 });
+                if (response.ok) {
                     const messagesData = await response.json();
 
                     const cookies = getClientCookies();
@@ -1067,11 +1068,11 @@ export default function ChatPage() {
             const session = frontendAuth.getSession();
             const userId = session?.user?.id;
             let token = frontendAuth.getAccessToken();
-            
+
             if (!userId) {
                 throw new Error('User not authenticated');
             }
-            
+
             const response = await fetch('/api/messages', {
                 method: 'PUT',
                 headers: {
@@ -1103,7 +1104,7 @@ export default function ChatPage() {
                             to: selectedUser
                         }),
                     });
-                    
+
                     if (!retryResponse.ok) {
                         throw new Error('Failed to update message after token refresh');
                     }
