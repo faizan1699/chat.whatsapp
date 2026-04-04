@@ -13,7 +13,6 @@ interface SessionPayload extends JWTPayload {
     type: 'access';
 }
 
-// Authentication middleware
 async function authenticate(req: NextApiRequest): Promise<SessionPayload | null> {
     try {
         const authHeader = req.headers.authorization;
@@ -114,9 +113,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
     } else if (req.method === 'PUT') {
         const { messageId, content, from, to } = req.body;
-
-        // Verify that the authenticated user is the one editing the message
-        if (from !== session.userId) {
+        
+        // First, get the message to check who owns it
+        const { data: existingMessage, error: fetchError } = await supabaseAdmin
+            .from('messages')
+            .select('sender_id')
+            .eq('id', messageId)
+            .single();
+            
+        if (fetchError || !existingMessage) {
+            return res.status(404).json({ error: 'Message not found' });
+        }
+        
+        if (existingMessage.sender_id !== session.userId) {
             return res.status(403).json({ error: 'Forbidden: Cannot edit messages as another user' });
         }
 
@@ -134,15 +143,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             if (error) throw error;
 
-            // Emit socket event for real-time update
             if (to && from && (res.socket as SocketWithIO)?.server?.io) {
                 const io = (res.socket as SocketWithIO).server.io!;
 
-                // Find recipient's socket and send update
                 const allusers = (io as any)._nsps?.get('/')?.sockets || new Map();
 
                 Object.values(allusers).forEach((socket: any) => {
-                    if (socket.username === to) {
+                    if (socket.username === to || socket.username === from) {
                         socket.emit('message-edited', {
                             id: message.id,
                             message: content,
@@ -166,7 +173,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } else if (req.method === 'DELETE') {
         const { messageId, from } = req.body;
 
-        // Verify that the authenticated user is the one deleting the message
         if (from !== session.userId) {
             return res.status(403).json({ error: 'Forbidden: Cannot delete messages as another user' });
         }

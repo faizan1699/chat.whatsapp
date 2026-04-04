@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, Fragment } from 'react';
-import { Pin, Reply, Edit, Trash2, MoreVertical, Mic, Send, X, Eye, EyeOff, Phone, Video, Download, Volume2, Pause, Play, Pencil, ArrowUp, PinOff } from 'lucide-react';
+import { Pin, Reply, Edit, Trash2, MoreVertical, Mic, Send, X, Eye, EyeOff, Phone, Video, Download, Volume2, Pause, Play, Pencil, ArrowUp, PinOff, CheckCheck, Check } from 'lucide-react';
 import CheckIcon from './CheckIcon';
 import { Message } from '@/types/message';
 
@@ -204,7 +204,7 @@ export default function MessageItem({
                         </div>
                     )}
 
-                    <div className={`absolute top-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity ${isMe ? 'right-full mr-[10px]' : 'left-full ml-[10px]'}`}>
+                    <div className={`absolute top-1 z-10 ${showActions ? 'opacity-100' : 'opacity-0'} transition-opacity ${isMe ? 'right-full mr-[10px]' : 'left-full ml-[10px]'}`}>
                         {!message.isDeleted && (
                             <div className="flex gap-1 bg-white shadow-md rounded-full p-1 border border-[#f0f2f5]">
                                 <button
@@ -420,8 +420,7 @@ export default function MessageItem({
                                         <span className="flex items-center">
                                             {message.status === 'read' && recipientOnline ? (
                                                 <Fragment>
-                                                    <CheckIcon color="#53bdeb" />
-                                                    <CheckIcon color="#53bdeb" className="ml-0.5" />
+                                                    <CheckCheck size={12} color="#53bdeb" className="ml-0.5" />
                                                 </Fragment>
                                             ) : message.status === 'delivered' && recipientOnline ? (
                                                 <Fragment>
@@ -430,11 +429,10 @@ export default function MessageItem({
                                                 </Fragment>
                                             ) : message.status === 'sent' && recipientOnline ? (
                                                 <Fragment>
-                                                    <CheckIcon color="#667781" />
-                                                    <CheckIcon color="#667781" className="ml-0.5" />
+                                                    <CheckCheck size={14} />
                                                 </Fragment>
                                             ) : (
-                                                <CheckIcon color="#667781" />
+                                                <Check size={12} />
                                             )}
                                         </span>
                                     )}

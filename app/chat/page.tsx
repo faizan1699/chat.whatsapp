@@ -106,12 +106,10 @@ export default function ChatPage() {
     const chunkBufferRef = useRef<Record<string, Message[]>>({});
     const pinsDropdownRef = useRef<HTMLDivElement>(null);
 
-    // Sync refs with state
     useEffect(() => {
         selectedUserRef.current = selectedUser;
     }, [selectedUser]);
 
-    // Handle click outside for pinned dropdown
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (pinsDropdownRef.current && !pinsDropdownRef.current.contains(event.target as Node)) {
@@ -596,8 +594,8 @@ export default function ChatPage() {
                             m.id === msg.id ? { ...m, status: 'sending' } : m
                         ));
 
-                        const cookies = getClientCookies();
-                        const userId = (cookies['user-id'] as string) || SecureSession.getUserId();
+                        const session = frontendAuth.getSession();
+                        const userId = session?.user?.id;
 
                         let currentConversation = conversations.find(c =>
                             c.participants.some((p: any) => p.user.username === msg.to)
@@ -627,10 +625,12 @@ export default function ChatPage() {
                         }
 
                         if (currentConversation && userId) {
+                            const token = frontendAuth.getAccessToken();
                             const response = await fetch('/api/messages', {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
                                 },
                                 body: JSON.stringify({
                                     conversationId: currentConversation.id,
@@ -1058,30 +1058,55 @@ export default function ChatPage() {
         setInputMessage('');
 
         try {
+            const session = frontendAuth.getSession();
+            const userId = session?.user?.id;
+            let token = frontendAuth.getAccessToken();
+            
+            if (!userId) {
+                throw new Error('User not authenticated');
+            }
+            
             const response = await fetch('/api/messages', {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({
                     messageId: editingMessage.id,
                     content: tempContent,
-                    from: username,
+                    from: userId,
                     to: selectedUser
                 }),
             });
 
-            if (!response.ok) {
+            if (response.status === 401) {
+                const refreshed = await frontendAuth.refreshSession();
+                if (refreshed) {
+                    token = frontendAuth.getAccessToken();
+                    const retryResponse = await fetch('/api/messages', {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            messageId: editingMessage.id,
+                            content: tempContent,
+                            from: userId,
+                            to: selectedUser
+                        }),
+                    });
+                    
+                    if (!retryResponse.ok) {
+                        throw new Error('Failed to update message after token refresh');
+                    }
+                } else {
+                    throw new Error('Session expired, please login again');
+                }
+            } else if (!response.ok) {
                 throw new Error('Failed to update message');
             }
-
-            const updatedMsg = await response.json();
-            setMessages(prev => prev.map(msg =>
-                msg.id === editingMessage.id
-                    ? { ...msg, message: tempContent, isEdited: true }
-                    : msg
-            ));
-
         } catch (error) {
             setEditingMessage(editingMessage);
             setInputMessage(tempContent);
@@ -1188,7 +1213,7 @@ export default function ChatPage() {
         try {
             const cookies = getClientCookies();
             const userId = window.localStorage.getItem('user-id');
-            
+
             if (!userId) {
                 alert('User not authenticated');
                 return;
@@ -1198,7 +1223,7 @@ export default function ChatPage() {
                 setMessages(prev => prev.map(m =>
                     m.id === id ? { ...m, isHidden: true } : m
                 ));
-                
+
                 try {
                     const response = await fetch(`/api/messages/${id}`, {
                         method: 'DELETE',
@@ -1210,11 +1235,11 @@ export default function ChatPage() {
                             userId: userId
                         }),
                     });
-                    
+
                     if (!response.ok) {
                         throw new Error('Failed to hide message');
                     }
-                    
+
                 } catch (apiError) {
                     setMessages(prev => prev.map(m =>
                         m.id === id ? { ...m, isHidden: false } : m
@@ -1222,12 +1247,12 @@ export default function ChatPage() {
                     alert('Failed to hide message. Please try again.');
                     return;
                 }
-                
+
             } else {
                 setMessages(prev => prev.map(m =>
                     m.id === id ? { ...m, isDeleted: true, message: '[This message was deleted]', audioUrl: undefined } : m
                 ));
-                
+
                 try {
                     const response = await fetch(`/api/messages/${id}`, {
                         method: 'DELETE',
@@ -1239,11 +1264,11 @@ export default function ChatPage() {
                             userId: userId
                         }),
                     });
-                    
+
                     if (!response.ok) {
                         throw new Error('Failed to delete message from server');
                     }
-                    
+
                 } catch (apiError) {
                     setMessages(prev => prev.map(m =>
                         m.id === id ? { ...m, isDeleted: false, message: m.message, audioUrl: m.audioUrl } : m
@@ -1251,7 +1276,7 @@ export default function ChatPage() {
                     alert('Failed to delete message. Please try again.');
                     return;
                 }
-                
+
                 if (socketRef.current && selectedUser) {
                     socketRef.current?.emit('delete-message', { id, to: selectedUser });
                 }

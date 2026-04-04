@@ -9,7 +9,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === 'DELETE') {
         try {
             if (type === 'everyone' && userId) {
-                // Delete for everyone - set deletedBy and clear content
                 await supabaseAdmin
                     .from('messages')
                     .update({
@@ -19,7 +18,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                     })
                     .eq('id', id);
             } else if (type === 'me' && userId) {
-                // Hide for me - add user to hiddenBy array
                 const { data: message } = await supabaseAdmin
                     .from('messages')
                     .select('hiddenBy')
@@ -38,7 +36,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                     })
                     .eq('id', id);
             } else {
-                // Legacy delete - just mark as deleted
                 await supabaseAdmin
                     .from('messages')
                     .update({
