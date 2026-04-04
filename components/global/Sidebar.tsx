@@ -4,6 +4,7 @@ import UserSearch from '../chat/UserSearch';
 import { apiService } from '@/services/apiService';
 import api from '@/utils/api';
 import { useProfile } from '@/contexts/ProfileContext';
+import { Message } from '@/types/message';
 
 // Simple debounce implementation
 const debounce = <T extends (...args: any[]) => void>(func: T, delay: number): ((...args: Parameters<T>) => void) => {
@@ -44,7 +45,7 @@ interface SidebarProps {
     searchQuery: string;
     setSearchQuery: (query: string) => void;
     conversations: any[];
-    messages: { [key: string]: any[] };
+    messages: Message[];
     unreadCounts?: { [key: string]: number };
     onLogout?: () => void;
     onEditProfile?: () => void;
@@ -185,8 +186,8 @@ export default function Sidebar({
                 to: lastMsg.sender?.username === username ? user : username
             };
         }
-        const userMessages = messages[user] || [];
-        return userMessages.filter(m => (m.from === user && m.to === username) || (m.from === username && m.to === user)).pop();
+        const userMessages = messages.filter((m: Message) => (m.from === user && m.to === username) || (m.from === username && m.to === user));
+        return userMessages.pop();
     };
 
     return (

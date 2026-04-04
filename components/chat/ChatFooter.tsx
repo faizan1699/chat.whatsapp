@@ -4,6 +4,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Smile, Paperclip, Send, Mic, X, Check } from 'lucide-react';
 import { Message, ReplyTo } from '@/types/message';
 import VoiceRecorder from '../audio/VoiceRecorder';
+import FileUpload from './FileUpload';
+import FileMessage from './FileMessage';
 import dynamic from 'next/dynamic';
 import { EmojiStyle, Theme, PickerProps } from 'emoji-picker-react';
 
@@ -27,6 +29,20 @@ interface ChatFooterProps {
     editingMessage?: Message | null;
     onCancelReply?: () => void;
     onCancelEdit?: () => void;
+    attachedFile?: {
+        url: string;
+        filename: string;
+        size: number;
+        type: string;
+        isImage: boolean;
+    } | null;
+    setAttachedFile: (file: {
+        url: string;
+        filename: string;
+        size: number;
+        type: string;
+        isImage: boolean;
+    } | null) => void;
 }
 
 export default function ChatFooter({
@@ -38,7 +54,9 @@ export default function ChatFooter({
     replyingTo,
     editingMessage,
     onCancelReply,
-    onCancelEdit
+    onCancelEdit,
+    attachedFile,
+    setAttachedFile
 }: ChatFooterProps) {
 
     const [isVoiceRecording, setIsVoiceRecording] = useState(false);
@@ -154,9 +172,10 @@ export default function ChatFooter({
                             >
                                 <Smile className="w-5 h-5 md:w-6 md:h-6" />
                             </button>
-                            <button className="hover:bg-black/5 p-1.5 md:p-2 rounded-full transition-colors">
-                                <Paperclip className="w-5 h-5 md:w-6 md:h-6" />
-                            </button>
+                            <FileUpload 
+                                onFileSelect={setAttachedFile}
+                                disabled={isVoiceRecording}
+                            />
                         </div>
                         <form onSubmit={(e) => {
                             if (editingMessage && onUpdateMessage) {
@@ -165,6 +184,17 @@ export default function ChatFooter({
                                 onSendMessage(e);
                             }
                         }} className="flex flex-1 items-end gap-1 md:gap-2 min-w-0 relative py-1">
+                            {/* File Preview */}
+                            {attachedFile && (
+                                <div className="absolute -top-2 left-0 right-0 z-10">
+                                    <FileMessage
+                                        file={attachedFile}
+                                        removable={true}
+                                        onRemove={() => setAttachedFile(null)}
+                                    />
+                                </div>
+                            )}
+                            
                             <div className="flex-1 relative flex items-center">
                                 <textarea
                                     ref={textareaRef}

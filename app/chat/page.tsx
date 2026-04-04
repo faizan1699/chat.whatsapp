@@ -85,6 +85,13 @@ export default function ChatPage() {
     const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
     const [showEditProfile, setShowEditProfile] = useState(false);
     const [lastReceivedMessage, setLastReceivedMessage] = useState<Message | null>(null);
+    const [attachedFile, setAttachedFile] = useState<{
+        url: string;
+        filename: string;
+        size: number;
+        type: string;
+        isImage: boolean;
+    } | null>(null);
 
     useEffect(() => {
         if (highlightedMessageId) {
@@ -1586,6 +1593,8 @@ export default function ChatPage() {
                                 editingMessage={editingMessage}
                                 onCancelReply={() => setReplyingTo(null)}
                                 onCancelEdit={handleCancelEdit}
+                                attachedFile={attachedFile}
+                                setAttachedFile={setAttachedFile}
                             />
                         </Fragment>
                     ) : (

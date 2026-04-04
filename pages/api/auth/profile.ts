@@ -31,9 +31,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'PATCH') {
-        const { username, avatar } = req.body;
+        const { username, email, phone, avatar } = req.body;
         const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
         if (typeof username === 'string' && username.length >= 2) updates.username = username;
+        if (typeof email === 'string' && email.length > 0) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                return res.status(400).json({ error: 'Invalid email format' });
+            }
+            updates.email = email;
+        }
+        if (typeof phone === 'string' && phone.length > 0) updates.phone_number = phone;
         if (typeof avatar === 'string') updates.avatar = avatar;
 
         if (Object.keys(updates).length <= 1) {
@@ -45,14 +53,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 .from('users')
                 .update(updates)
                 .eq('id', authUser.userId)
-                .select('id, username, avatar')
+                .select('id, username, email, phone_number, avatar')
                 .single();
 
             if (error) {
                 if (error.code === '23505') return res.status(400).json({ error: 'Username already taken' });
                 throw error;
             }
-            return res.status(200).json(data);
+            return res.status(200).json({
+                id: data.id,
+                username: data.username,
+                email: data.email,
+                phone: data.phone_number,
+                avatar: data.avatar,
+            });
         } catch (err) {
             return res.status(500).json({ error: 'Failed to update profile' });
         }
