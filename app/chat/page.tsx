@@ -1211,28 +1211,25 @@ export default function ChatPage() {
 
     const handleDeleteMessage = async (id: string, type: 'me' | 'everyone') => {
         try {
-            const cookies = getClientCookies();
-            const userId = window.localStorage.getItem('user-id');
+            const session = frontendAuth.getSession();
+            const user = frontendAuth.getUser();
 
-            if (!userId) {
+            if (!session || !user) {
                 alert('User not authenticated');
                 return;
             }
 
             if (type === 'me') {
-                setMessages(prev => prev.map(m =>
-                    m.id === id ? { ...m, isHidden: true } : m
-                ));
-
                 try {
                     const response = await fetch(`/api/messages/${id}`, {
                         method: 'DELETE',
                         headers: {
                             'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.accessToken}`,
                         },
                         body: JSON.stringify({
                             type: 'me',
-                            userId: userId
+                            userId: user.id
                         }),
                     });
 
@@ -1240,10 +1237,8 @@ export default function ChatPage() {
                         throw new Error('Failed to hide message');
                     }
 
+                    setMessages(prev => prev.filter(m => m.id !== id));
                 } catch (apiError) {
-                    setMessages(prev => prev.map(m =>
-                        m.id === id ? { ...m, isHidden: false } : m
-                    ));
                     alert('Failed to hide message. Please try again.');
                     return;
                 }
@@ -1258,10 +1253,11 @@ export default function ChatPage() {
                         method: 'DELETE',
                         headers: {
                             'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.accessToken}`,
                         },
                         body: JSON.stringify({
                             type: 'everyone',
-                            userId: userId
+                            userId: user.id
                         }),
                     });
 
@@ -1300,14 +1296,6 @@ export default function ChatPage() {
 
         setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isPinned } : m));
         socketRef.current?.emit('pin-message', { id: msg.id, isPinned, to: selectedUser });
-    };
-
-    const handleHideMessage = (id: string) => {
-        setMessages(prev => prev.map(m => m.id === id ? { ...m, isHidden: true } : m));
-    };
-
-    const handleUnhideMessage = (id: string) => {
-        setMessages(prev => prev.map(m => m.id === id ? { ...m, isHidden: false } : m));
     };
 
     const handleRefreshMessages = () => {
@@ -1570,8 +1558,6 @@ export default function ChatPage() {
                                 onDelete={handleDeleteMessage}
                                 onPin={handlePinMessage}
                                 onEdit={handleEditMessage}
-                                onHide={handleHideMessage}
-                                onUnhide={handleUnhideMessage}
                                 highlightedMessageId={highlightedMessageId}
                                 onScrollToMessage={handleScrollToMessage}
                             />

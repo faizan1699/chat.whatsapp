@@ -19,8 +19,6 @@ interface MessageListProps {
     onPin: (msg: Message) => void;
     onEdit: (msg: Message) => void;
     onReact?: (messageId: string, emoji: string) => void;
-    onHide?: (id: string) => void;
-    onUnhide?: (id: string) => void;
     highlightedMessageId?: string | null;
     onScrollToMessage?: (messageId: string) => void;
 }
@@ -37,8 +35,6 @@ export default function MessageList({
     onPin,
     onEdit,
     onReact,
-    onHide,
-    onUnhide,
     highlightedMessageId,
     onScrollToMessage
 }: MessageListProps) {
@@ -133,8 +129,6 @@ export default function MessageList({
                 onDelete={(id: string) => onDelete?.(id, 'me')}
                 onPin={onPin}
                 onEdit={onEdit}
-                onHide={onHide}
-                onUnhide={onUnhide}
                 isHighlighted={highlightedMessageId === msg.id}
                 highlightKey={highlightKey}
                 onScrollToMessage={onScrollToMessage}

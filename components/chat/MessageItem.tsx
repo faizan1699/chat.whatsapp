@@ -15,8 +15,6 @@ interface MessageItemProps {
     onPin?: (msg: Message) => void;
     onEdit?: (msg: Message) => void;
     onUpdateMessage?: (msg: Message) => void;
-    onHide?: (id: string) => void;
-    onUnhide?: (id: string) => void;
     isHighlighted?: boolean;
     highlightKey?: number;
     failedMessagesCount?: number;
@@ -32,8 +30,7 @@ export default function MessageItem({
     onDelete,
     onPin,
     onEdit,
-    onHide,
-    onUnhide,
+    onUpdateMessage,
     isHighlighted,
     highlightKey,
     failedMessagesCount,
@@ -230,23 +227,6 @@ export default function MessageItem({
                                 >
                                     {message.isPinned ? <PinOff size={16} /> : <Pin size={16} />}
                                 </button>
-                                {!isMe && (
-                                    <button
-                                        onClick={() => {
-                                            if (message.id) {
-                                                if (message.isHidden) {
-                                                    onUnhide?.(message.id);
-                                                } else {
-                                                    onHide?.(message.id);
-                                                }
-                                            }
-                                        }}
-                                        className={`p-1.5 hover:bg-black/5 rounded-full transition-colors ${message.isHidden ? 'text-[#00a884]' : 'text-[#667781]'}`}
-                                        title={message.isHidden ? 'Unhide message' : 'Hide message'}
-                                    >
-                                        {message.isHidden ? <Eye size={16} /> : <EyeOff size={16} />}
-                                    </button>
-                                )}
                                 <div className="relative">
                                     <button
                                         onClick={() => setShowDeleteMenu(!showDeleteMenu)}
@@ -311,18 +291,7 @@ export default function MessageItem({
                     </div>
 
                     <div className="flex flex-col min-w-0 flex-1">
-                        {message.isHidden ? (
-                            <div className="flex items-center gap-2 py-1 text-[#667781] italic text-[13px]">
-                                <EyeOff size={14} className="opacity-60" />
-                                <span>This message is hidden</span>
-                                <button
-                                    onClick={() => message.id && onUnhide?.(message.id)}
-                                    className="text-[#00a884] hover:underline text-[12px] ml-auto"
-                                >
-                                    Show
-                                </button>
-                            </div>
-                        ) : message.isDeleted ? (
+                        {message.isDeleted ? (
                             <div className="flex items-center gap-2 py-1 text-[#667781] italic text-[13px]">
                                 <span className="opacity-60 text-[12px]">🚫</span>
                                 <span>This message was deleted</span>

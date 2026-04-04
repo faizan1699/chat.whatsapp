@@ -63,8 +63,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             if (error) throw error;
 
+            console.log('Raw messages from DB:', JSON.stringify(messages[0], null, 2));
+
+            // Filter out messages that are hidden by the current user
+            const filteredMessages = messages.filter(message => {
+                console.log('Processing message:', message.id, 'hiddenBy:', message.hiddenBy);
+                console.log('All message fields:', Object.keys(message));
+                
+                if (!message.hiddenBy) return true;
+                
+                let hiddenByArray = [];
+                try {
+                    hiddenByArray = Array.isArray(message.hiddenBy) 
+                        ? message.hiddenBy 
+                        : JSON.parse(message.hiddenBy);
+                } catch (error) {
+                    console.error('Error parsing hiddenBy:', error);
+                    return true;
+                }
+                
+                console.log('Parsed hiddenByArray:', hiddenByArray, 'session.userId:', session.userId);
+                
+                // Don't include messages that are hidden by the current user
+                return !hiddenByArray.includes(session.userId);
+            });
+
             res.status(200).json({
-                messages: messages.reverse(), // Return in chronological order
+                messages: filteredMessages.reverse(), // Return in chronological order
                 hasMore: messages.length === Number(limit)
             });
         } catch (error) {
