@@ -1484,7 +1484,7 @@ export default function ChatPage() {
                     />
                 </ResizableSidebar>
 
-                <main className={`flex flex-1 flex-col bg-[#efeae2] relative ${!selectedUser ? 'hidden md:flex' : 'flex'}`}>
+                <main className={`flex flex-1 flex-col bg-[#efeae2] relative pt-[60px] md:pt-0 ${!selectedUser ? 'hidden md:flex' : 'flex'}`}>
                     {selectedUser ? (
                         <Fragment>
                             <ChatHeader

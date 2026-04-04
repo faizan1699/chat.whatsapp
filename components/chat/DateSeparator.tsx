@@ -36,7 +36,7 @@ export default function DateSeparator({ date }: DateSeparatorProps) {
 
     return (
         <div 
-            className="flex items-center justify-center my-4 mt-8"
+            className="flex items-center justify-center"
             data-date-separator={date.toDateString()}
         >
             <div className="px-3 py-1 rounded-full">

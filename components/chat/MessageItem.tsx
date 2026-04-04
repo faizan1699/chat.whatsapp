@@ -192,15 +192,12 @@ export default function MessageItem({
                                 className="mb-1 border-l-4 border-[#06cf9c] bg-black/5 p-2 rounded text-[12px] opacity-80 cursor-pointer hover:bg-black/10 transition-colors"
                                 title="Go to original message"
                             >
-                                <div className="flex items-center gap-2 mb-1">
+                                <div className="flex items-center gap-2">
                                     <Reply size={16} className="text-[#06cf9c]" />
-                                    <div>
-                                        <p className="font-bold text-[#06cf9c]">{message.replyTo.from === message.from ? 'You' : message.replyTo.from}</p>
+                                    <div className='flex items-center'>
+                                        <p className="font-bold text-[#06cf9c]">{message.replyTo.from === message.from ? 'You' : message.replyTo.from + " " + "- "}</p>
                                         <p className="truncate text-[#54656f]">{message.replyTo.message}</p>
                                     </div>
-                                    {message.replyToMessageId && (
-                                        <div className="text-xs text-[#06cf9c] italic">Replying</div>
-                                    )}
                                 </div>
                             </div>
                         )}

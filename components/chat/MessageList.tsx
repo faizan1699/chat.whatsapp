@@ -148,7 +148,7 @@ export default function MessageList({
                         selectedUser={selectedUser}
                     />
                     <div 
-                        className="chat-messages-container relative z-10 flex h-full flex-col overflow-y-auto p-4 space-y-2"
+                        className="chat-messages-container relative z-10 flex h-full flex-col overflow-y-auto p-4"
                         onScroll={handleScroll}
                     >
                         {messagesWithSeparators}

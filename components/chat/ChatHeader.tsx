@@ -28,7 +28,7 @@ export default function ChatHeader({ selectedUser, onBack, onStartVideoCall, onS
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
     return (
-        <header className="sticky top-0 z-30 flex h-[60px] w-full flex-shrink-0 items-center justify-between bg-[#f0f2f5] px-4 py-2 border-l border-[#d1d7db]">
+        <header className="fixed top-0 left-0 right-0 z-30 flex h-[60px] w-full flex-shrink-0 items-center justify-between bg-[#f0f2f5] px-4 py-2 border-l border-[#d1d7db] md:sticky md:top-0 md:left-auto md:right-auto">
             <div className="flex items-center gap-3">
                 <button className="md:hidden text-[#54656f]" onClick={onBack}>
                     <ArrowLeft size={24} />

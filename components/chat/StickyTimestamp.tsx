@@ -140,7 +140,7 @@ export default function StickyTimestamp({ messages, username, selectedUser }: St
     if (!visibleDate) return null;
 
     return (
-        <div className={`sticky top-0 z-20 bg-[#efeae2] py-2 px-4 transition-all duration-200 ${isSticky ? 'shadow-sm border-b border-[#d9d9d9]' : ''
+        <div className={`sticky top-4 z-20 px-4 transition-all duration-200 ${isSticky ? 'shadow-sm border-b border-[#d9d9d9]' : ''
             }`}>
             <div className="flex items-center justify-center">
                 <div className="bg-[#e9edef] px-3 py-1 rounded-full">

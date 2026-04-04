@@ -55,7 +55,7 @@ export function useNotifications(): UseNotificationsReturn {
             return;
         }
 
-        if (!isWindowFocusedRef.current) {
+        if (isWindowFocusedRef.current) {
             return;
         }
 
@@ -82,20 +82,38 @@ export function useNotifications(): UseNotificationsReturn {
             navigator.vibrate([2000, 100]);
         }
 
-        const notification = new Notification(notificationTitle, options);
-
-        notification.onclick = () => {
-            window.focus();
-            notification.close();
-        };
-
-        notification.onerror = (error) => {};
-
-        setTimeout(() => {
-            if (notification.close) {
-                notification.close();
+        if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+            navigator.serviceWorker.ready.then((registration) => {
+                registration.showNotification(notificationTitle, options);
+            }).catch(() => {
+                try {
+                    const notification = new Notification(notificationTitle, options);
+                    setTimeout(() => {
+                        if (notification.close) {
+                            notification.close();
+                        }
+                    }, 5000);
+                } catch (error) {
+                    console.warn('Notification failed:', error);
+                }
+            });
+        } else {
+            try {
+                const notification = new Notification(notificationTitle, options);
+                notification.onclick = () => {
+                    window.focus();
+                    notification.close();
+                };
+                notification.onerror = (error) => {};
+                setTimeout(() => {
+                    if (notification.close) {
+                        notification.close();
+                    }
+                }, 5000);
+            } catch (error) {
+                console.warn('Notification failed:', error);
             }
-        }, 5000);
+        }
     };
 
     return {
