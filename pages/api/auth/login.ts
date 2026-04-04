@@ -147,7 +147,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 id: user.id,
                 username: user.username,
                 email: user.email,
-                phoneNumber: user.phone_number
+                phone: user.phone_number,
+                avatar: user.avatar
             }
         });
 

@@ -2,6 +2,8 @@ import React, { useState, Fragment, useRef, useEffect, useMemo, useCallback } fr
 import { Search, MoreVertical, X, Phone, Video, Archive, Trash2, Bell, BellOff, User, Volume2, VolumeX, Plus, LogOut, Search as SearchIcon } from 'lucide-react';
 import UserSearch from '../chat/UserSearch';
 import { apiService } from '@/services/apiService';
+import api from '@/utils/api';
+import { useProfile } from '@/contexts/ProfileContext';
 
 // Simple debounce implementation
 const debounce = <T extends (...args: any[]) => void>(func: T, delay: number): ((...args: Parameters<T>) => void) => {
@@ -65,6 +67,7 @@ export default function Sidebar({
     onConversationCreated,
     isLoading = false,
 }: SidebarProps) {
+    const { profile } = useProfile();
     const [showGlobalSearch, setShowGlobalSearch] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
@@ -182,15 +185,20 @@ export default function Sidebar({
                 to: lastMsg.sender?.username === username ? user : username
             };
         }
-        return messages.filter(m => (m.from === user && m.to === username) || (m.from === username && m.to === user)).pop();
+        const userMessages = messages[user] || [];
+        return userMessages.filter(m => (m.from === user && m.to === username) || (m.from === username && m.to === user)).pop();
     };
 
     return (
         <div className="flex h-full w-full flex-col bg-white overflow-hidden">
             <header className="flex h-[60px] items-center justify-between bg-[#f0f2f5] px-4 py-2">
                 <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-300 cursor-pointer">
-                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`} alt="avatar" className="h-full w-full object-cover" />
+                    <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-300 cursor-pointer" onClick={() => onEditProfile?.()}>
+                        {profile?.avatar ? (
+                            <img src={profile.avatar} alt="avatar" className="h-full w-full object-cover" />
+                        ) : (
+                            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`} alt="avatar" className="h-full w-full object-cover" />
+                        )}
                     </div>
                     <span className="text-[#111b21] font-medium">{username}</span>
                 </div>
@@ -294,7 +302,7 @@ export default function Sidebar({
                 ) : (
                     filteredUsers.map((user) => {
                         const lastMsg = getLastMessage(user);
-                        const unreadCount = unreadCounts[user] || 0;
+                        const unreadCount = unreadCounts?.[user] || 0;
 
                         return (
                             <div

@@ -22,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 id: data.id,
                 username: data.username,
                 email: data.email,
-                phoneNumber: data.phone_number,
+                phone: data.phone_number,
                 avatar: data.avatar,
             });
         } catch (err) {
