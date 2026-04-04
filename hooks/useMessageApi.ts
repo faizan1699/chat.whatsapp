@@ -105,13 +105,6 @@ export const useMessageApi = () => {
     conversations: Conversation[],
     replyingTo?: Message | null
   ): Promise<Message> => {
-    console.log('🚀 sendMessage hook called with:', {
-      content,
-      selectedUser,
-      username,
-      conversationsCount: conversations.length,
-      replyingTo: replyingTo?.id || null
-    });
     
     setLoading(true);
     setError(null);

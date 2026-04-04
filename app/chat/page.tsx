@@ -411,8 +411,14 @@ export default function ChatPage() {
             }
 
             if (currentConversation) {
-                const response = await fetch(`/api/conversations/${currentConversation.id}/messages`);
-                if (response.ok) {
+                const token = frontendAuth.getAccessToken();
+                const response = await fetch(`/api/conversations/${currentConversation.id}/messages`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
                     const messagesData = await response.json();
 
                     const cookies = getClientCookies();

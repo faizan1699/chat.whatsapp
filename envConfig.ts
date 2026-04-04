@@ -53,4 +53,8 @@ export default env({
     type: 'string',
     required: false,
   },
+  DATABASE_URL: {
+    type: 'string',
+    required: true,
+  },
 });

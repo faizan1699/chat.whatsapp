@@ -22,7 +22,7 @@ async function authenticate(req: NextApiRequest): Promise<SessionPayload | null>
 
         const token = authHeader.substring(7);
         const { payload } = await jwtVerify(token, secret) as { payload: SessionPayload };
-        
+
         if (payload.type !== 'access') {
             return null;
         }
@@ -49,7 +49,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'GET') {
         const { conversationId, limit = 50, offset = 0 } = req.query;
-        
+
         try {
             let query = supabaseAdmin
                 .from('messages')
@@ -63,33 +63,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             if (error) throw error;
 
-            console.log('Raw messages from DB:', JSON.stringify(messages[0], null, 2));
-
-            // Filter out messages that are hidden by the current user
             const filteredMessages = messages.filter(message => {
-                console.log('Processing message:', message.id, 'hiddenBy:', message.hiddenBy);
-                console.log('All message fields:', Object.keys(message));
-                
-                if (!message.hiddenBy) return true;
-                
-                let hiddenByArray = [];
-                try {
-                    hiddenByArray = Array.isArray(message.hiddenBy) 
-                        ? message.hiddenBy 
-                        : JSON.parse(message.hiddenBy);
-                } catch (error) {
-                    console.error('Error parsing hiddenBy:', error);
+                // If is_deleted_from_me doesn't exist or is empty, include message
+                if (!message.is_deleted_from_me || message.is_deleted_from_me.length === 0) {
                     return true;
                 }
                 
-                console.log('Parsed hiddenByArray:', hiddenByArray, 'session.userId:', session.userId);
-                
-                // Don't include messages that are hidden by the current user
-                return !hiddenByArray.includes(session.userId);
+                // If current user's ID is in is_deleted_from_me array, exclude message
+                return !message.is_deleted_from_me.includes(session.userId);
             });
 
             res.status(200).json({
-                messages: filteredMessages.reverse(), // Return in chronological order
+                messages: filteredMessages.reverse(),
                 hasMore: messages.length === Number(limit)
             });
         } catch (error) {
@@ -99,7 +84,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } else if (req.method === 'POST') {
         const { conversationId, senderId, content, isVoice, audioUrl, audioDuration, to, from } = req.body;
 
-        // Verify that the authenticated user is the sender
         if (senderId !== session.userId) {
             return res.status(403).json({ error: 'Forbidden: Cannot send messages as another user' });
         }
@@ -138,18 +122,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
     } else if (req.method === 'PUT') {
         const { messageId, content, from, to } = req.body;
-        
+
         // First, get the message to check who owns it
         const { data: existingMessage, error: fetchError } = await supabaseAdmin
             .from('messages')
             .select('sender_id')
             .eq('id', messageId)
             .single();
-            
+
         if (fetchError || !existingMessage) {
             return res.status(404).json({ error: 'Message not found' });
         }
-        
+
         if (existingMessage.sender_id !== session.userId) {
             return res.status(403).json({ error: 'Forbidden: Cannot edit messages as another user' });
         }
@@ -203,12 +187,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         try {
-            const { error } = await supabaseAdmin
+            // Add user ID to is_deleted_from_me array instead of deleting the message
+            const { data: message } = await supabaseAdmin
                 .from('messages')
-                .delete()
-                .eq('id', messageId);
+                .select('is_deleted_from_me')
+                .eq('id', messageId)
+                .single();
 
-            if (error) throw error;
+            let deletedFromMe = message?.is_deleted_from_me || [];
+            // Handle case where is_deleted_from_me might be an object
+            if (typeof deletedFromMe === 'object' && !Array.isArray(deletedFromMe)) {
+                deletedFromMe = Object.values(deletedFromMe);
+            }
+            if (!Array.isArray(deletedFromMe)) {
+                deletedFromMe = [];
+            }
+            if (!deletedFromMe.includes(session.userId)) {
+                deletedFromMe.push(session.userId);
+            }
+
+            await supabaseAdmin
+                .from('messages')
+                .update({
+                    is_deleted_from_me: deletedFromMe
+                })
+                .eq('id', messageId);
 
             res.status(200).json({ message: 'Message deleted successfully' });
         } catch (error) {

@@ -58,7 +58,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 return res.status(404).json({ error: 'Message not found' });
             }
             
-            // Verify that the authenticated user is the sender of the message
             if (existingMessage.sender_id !== session.userId) {
                 return res.status(403).json({ error: 'Forbidden: Cannot delete messages from another user' });
             }
@@ -73,28 +72,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                     })
                     .eq('id', id);
             } else if (type === 'me' && userId) {
+                // For 'Delete for me', add the user's ID to the is_deleted_from_me array
                 const { data: message } = await supabaseAdmin
                     .from('messages')
-                    .select('hiddenBy')
+                    .select('is_deleted_from_me')
                     .eq('id', id)
                     .single();
 
-                let hiddenBy = [];
-                try {
-                    hiddenBy = message?.hiddenBy ? Array.isArray(message.hiddenBy) ? message.hiddenBy : JSON.parse(message.hiddenBy) : [];
-                } catch (error) {
-                    console.error('Error parsing hiddenBy:', error);
-                    hiddenBy = [];
+                let deletedFromMe = message?.is_deleted_from_me || [];
+                
+                // Ensure it's an array
+                if (!Array.isArray(deletedFromMe)) {
+                    deletedFromMe = [];
                 }
-
-                if (!hiddenBy.includes(userId)) {
-                    hiddenBy.push(userId);
+                
+                if (!deletedFromMe.includes(userId)) {
+                    deletedFromMe.push(userId);
                 }
 
                 await supabaseAdmin
                     .from('messages')
                     .update({
-                        hiddenBy: hiddenBy
+                        is_deleted_from_me: deletedFromMe
                     })
                     .eq('id', id);
             } else {
