@@ -17,6 +17,7 @@ import FullPageLoader from '@/components/global/FullPageLoader';
 import { SecureSession } from '@/utils/secureSession';
 import { useMessageApi } from '@/hooks/useMessageApi';
 import { useSocket } from '@/hooks/useSocket';
+import { useNotifications } from '@/hooks/useNotifications';
 import { storageHelpers, chatStorage } from '@/utils/storage';
 import { supabaseAdmin } from '@/utils/supabase-server';
 import api from '@/utils/api';
@@ -65,6 +66,8 @@ export default function ChatPage() {
         loading: messageLoading,
         error: messageError
     } = useMessageApi();
+
+    const { showNotification: showNotificationMessage, permission: notificationPermission } = useNotifications();
 
     const [isCallActive, setIsCallActive] = useState<boolean>(false);
     const [incomingCall, setIncomingCall] = useState<{ from: string; to: string; offer: RTCSessionDescriptionInit; isAudioOnly?: boolean } | null>(null);
@@ -206,7 +209,7 @@ export default function ChatPage() {
                 }));
 
                 if (selectedUser !== data.from) {
-                    showNotification(data);
+                    showNotificationMessage(data, username, selectedUser, isWindowFocused);
                 }
             }
         });
@@ -936,51 +939,6 @@ export default function ChatPage() {
         }
     };
 
-    const showNotification = (data: Message) => {
-
-        if (!('Notification' in window)) {
-            return;
-        }
-
-        if (Notification.permission !== 'granted') {
-            return;
-        }
-
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-        const isIncoming = data.from !== username;
-        const notificationTitle = isIncoming ? `New message from ${data.from}` : 'Message sent';
-        const notificationBody = isIncoming ? data.message : `You: ${data.message}`;
-
-        const options: NotificationOptions = {
-            body: notificationBody,
-            icon: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.from}`,
-            tag: 'chat-msg',
-            requireInteraction: isMobile,
-            silent: false,
-            badge: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.from}`
-        };
-
-        if (isMobile && 'vibrate' in navigator) {
-            navigator.vibrate([2000, 100, 2005]);
-        }
-
-        const notification = new Notification(notificationTitle, options);
-
-        notification.onclick = () => {
-            window.focus();
-            setSelectedUser(data.from);
-            notification.close();
-        };
-
-        notification.onerror = (error) => {};
-
-        setTimeout(() => {
-            if (notification.close) {
-                notification.close();
-            }
-        }, 5000);
-    };
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
