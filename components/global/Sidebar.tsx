@@ -1,8 +1,16 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { debounce } from '../../utils/debounce';
-import { Plus, X, Search as SearchIcon, LogOut, User } from 'lucide-react';
+import React, { useState, Fragment, useRef, useEffect, useMemo, useCallback } from 'react';
+import { Search, MoreVertical, X, Phone, Video, Archive, Trash2, Bell, BellOff, User, Volume2, VolumeX, Plus, LogOut, Search as SearchIcon } from 'lucide-react';
 import UserSearch from '../chat/UserSearch';
 import { apiService } from '@/services/apiService';
+
+// Simple debounce implementation
+const debounce = <T extends (...args: any[]) => void>(func: T, delay: number): ((...args: Parameters<T>) => void) => {
+    let timeoutId: NodeJS.Timeout;
+    return (...args: Parameters<T>) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => func(...args), delay);
+    };
+};
 
 const UserSkeleton = () => (
     <div className="group relative flex w-full items-center gap-3 border-b border-[#f0f2f5] px-3 py-4">
@@ -30,14 +38,15 @@ interface SidebarProps {
     username: string;
     users: { [key: string]: string };
     selectedUser: string | null;
-    setSelectedUser: (user: string) => void;
+    setSelectedUser: (user: string | null) => void;
     searchQuery: string;
     setSearchQuery: (query: string) => void;
-    messages: any[];
     conversations: any[];
+    messages: { [key: string]: any[] };
     unreadCounts?: { [key: string]: number };
     onLogout?: () => void;
     onEditProfile?: () => void;
+    onConversationCreated?: (conversation: any) => void;
     isLoading?: boolean; // Add loading prop
 }
 
@@ -48,16 +57,21 @@ export default function Sidebar({
     setSelectedUser,
     searchQuery,
     setSearchQuery,
-    messages,
     conversations,
-    unreadCounts = {},
+    messages,
+    unreadCounts,
     onLogout,
     onEditProfile,
-    isLoading = false, // Default to false
+    onConversationCreated,
+    isLoading = false,
 }: SidebarProps) {
     const [showGlobalSearch, setShowGlobalSearch] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
+    const [contextMenuUser, setContextMenuUser] = useState<string | null>(null);
+    const [mutedUsers, setMutedUsers] = useState<Set<string>>(new Set());
+    const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+    const contextMenuRef = useRef<HTMLDivElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -65,10 +79,42 @@ export default function Sidebar({
             if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
                 setShowMenu(false);
             }
+            if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+                setContextMenuUser(null);
+                setContextMenuPosition(null);
+            }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    const handleContextMenu = (e: React.MouseEvent, user: string) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setContextMenuUser(user);
+        setContextMenuPosition({ x: e.clientX, y: e.clientY });
+    };
+
+    const toggleMute = (user: string) => {
+        setMutedUsers(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(user)) {
+                newSet.delete(user);
+            } else {
+                newSet.add(user);
+            }
+            return newSet;
+        });
+        setContextMenuUser(null);
+        setContextMenuPosition(null);
+    };
+
+    const deleteChat = (user: string) => {
+        // Implement delete chat functionality
+        console.log('Delete chat:', user);
+        setContextMenuUser(null);
+        setContextMenuPosition(null);
+    };
 
     const debouncedSetSearchQuery = useMemo(
         () => debounce((value: string) => setSearchQuery(value), 300),
@@ -251,9 +297,8 @@ export default function Sidebar({
                         const unreadCount = unreadCounts[user] || 0;
 
                         return (
-                            <button
+                            <div
                                 key={user}
-                                onClick={() => setSelectedUser(user)}
                                 className={`group relative flex w-full items-center gap-3 border-b border-[#f0f2f5] px-3 py-4 transition-colors ${selectedUser === user ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'}`}
                             >
                                 {selectedUser === user && (
@@ -265,7 +310,10 @@ export default function Sidebar({
                                     </div>
                                     <div className="absolute right-0 bottom-0 h-3 w-3 rounded-full border-2 border-white bg-[#25d366]"></div>
                                 </div>
-                                <div className="flex flex-1 flex-col overflow-hidden text-left">
+                                <div 
+                                    className="flex flex-1 flex-col overflow-hidden text-left cursor-pointer"
+                                    onClick={() => setSelectedUser(user)}
+                                >
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2 overflow-hidden">
                                             <span className="truncate font-semibold text-[#111b21]">{user}</span>
@@ -287,11 +335,77 @@ export default function Sidebar({
                                         )}
                                     </div>
                                 </div>
-                            </button>
+                                <button
+                                    onClick={(e) => handleContextMenu(e, user)}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-black/5 rounded-full"
+                                >
+                                    <MoreVertical size={16} className="text-[#667781]" />
+                                </button>
+                            </div>
                         );
                     })
                 )}
             </div>
+
+            {/* Context Menu */}
+            {contextMenuUser && contextMenuPosition && (
+                <div
+                    ref={contextMenuRef}
+                    className="fixed z-50 min-w-[200px] rounded-lg bg-white py-1 shadow-lg border border-gray-200"
+                    style={{
+                        top: `${contextMenuPosition.y}px`,
+                        left: `${contextMenuPosition.x}px`
+                    }}
+                >
+                    <button
+                        onClick={() => toggleMute(contextMenuUser)}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                        {mutedUsers.has(contextMenuUser) ? (
+                            <>
+                                <Bell size={16} />
+                                <span>Unmute notifications</span>
+                            </>
+                        ) : (
+                            <>
+                                <BellOff size={16} />
+                                <span>Mute notifications</span>
+                            </>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => {
+                            // Implement view profile
+                            console.log('View profile:', contextMenuUser);
+                            setContextMenuUser(null);
+                            setContextMenuPosition(null);
+                        }}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                        <User size={16} />
+                        <span>View profile</span>
+                    </button>
+                    <button
+                        onClick={() => {
+                            // Implement archive chat
+                            console.log('Archive chat:', contextMenuUser);
+                            setContextMenuUser(null);
+                            setContextMenuPosition(null);
+                        }}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                        <Archive size={16} />
+                        <span>Archive chat</span>
+                    </button>
+                    <button
+                        onClick={() => deleteChat(contextMenuUser)}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                        <Trash2 size={16} />
+                        <span>Delete chat</span>
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
