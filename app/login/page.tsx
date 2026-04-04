@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { Eye, EyeOff, MessageCircle, Lock, Mail, User } from 'lucide-react';
 import { frontendAuth } from '@/utils/frontendAuth';
+import api from '@/utils/api';
 
 interface LoginFormData {
     identifier: string;
@@ -12,11 +13,21 @@ interface LoginFormData {
 }
 
 function LoginForm() {
+    
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const router = useRouter();
     const searchParams = useSearchParams();
+
+    // Check if user is already logged in and redirect to chat
+    useEffect(() => {
+        if (frontendAuth.isAuthenticated()) {
+            console.log('✅ User already logged in, redirecting to chat...');
+            router.push('/chat');
+            router.refresh();
+        }
+    }, [router]);
 
     const {
         register,
@@ -37,21 +48,14 @@ function LoginForm() {
                 },
                 body: JSON.stringify(data),
             });
-
             const responseData = await response.json();
-
             if (response.ok) {
-                // Store session data using frontend auth utility
                 frontendAuth.setSession(
                     responseData.accessToken,
                     responseData.refreshToken,
                     responseData.user
                 );
-                
-                console.log('✅ Login successful:', responseData.user.username);
-                
                 router.push('/chat');
-                router.refresh(); 
             } else {
                 setError(responseData.message || 'Login failed');
             }
@@ -97,9 +101,8 @@ function LoginForm() {
                                         required: 'Username or email is required',
                                     })}
                                     type="text"
-                                    className={`block w-full pl-10 pr-3 py-3 border ${
-                                        errors.identifier ? 'border-red-300' : 'border-gray-300'
-                                    } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
+                                    className={`block w-full pl-10 pr-3 py-3 border ${errors.identifier ? 'border-red-300' : 'border-gray-300'
+                                        } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
                                     placeholder="Enter your username or email"
                                 />
                             </div>
@@ -126,9 +129,8 @@ function LoginForm() {
                                         },
                                     })}
                                     type={showPassword ? 'text' : 'password'}
-                                    className={`block w-full pl-10 pr-10 py-3 border ${
-                                        errors.password ? 'border-red-300' : 'border-gray-300'
-                                    } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
+                                    className={`block w-full pl-10 pr-10 py-3 border ${errors.password ? 'border-red-300' : 'border-gray-300'
+                                        } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
                                     placeholder="Enter your password"
                                 />
                                 <button

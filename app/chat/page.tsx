@@ -1327,7 +1327,10 @@ export default function ChatPage() {
     };
 
     const handleClearData = () => {
+
         SecureSession.clearSession();
+        frontendAuth.clearSession();
+        localStorage.clear();
         setUsername('');
         setSelectedUser(null);
         setMessages([]);
@@ -1336,7 +1339,7 @@ export default function ChatPage() {
             socketRef.current.disconnect();
             socketRef.current = null;
         }
-        router.push('/');
+        router.push('/login');
     };
 
     const handleClearChat = () => {

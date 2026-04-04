@@ -52,7 +52,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
-        // Create access token (1 hour)
+        // Create access token (30 days - 1 month)
         const accessPayload: SessionPayload = {
             userId: user.id,
             username: user.username,
@@ -62,7 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const accessToken = await new SignJWT(accessPayload)
             .setProtectedHeader({ alg: 'HS256' })
             .setIssuedAt()
-            .setExpirationTime('1h')
+            .setExpirationTime('30d') // Changed from 1h to 30d (1 month)
             .sign(secret);
 
         // Create refresh token (30 days)
@@ -86,7 +86,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 httpOnly: true,
                 secure: isProduction,
                 sameSite: 'strict',
-                maxAge: 60 * 60, // 1 hour
+                maxAge: 60 * 60 * 24 * 30, // 30 days (1 month)
                 path: '/',
             }),
             serialize('refresh_token', refreshToken, {

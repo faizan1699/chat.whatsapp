@@ -38,8 +38,13 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
                 email: newProfile.email,
                 phone: newProfile.phone || ''
             }));
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to fetch profile:', error);
+            // If auth error, clear session and localStorage
+            if (error?.response?.status === 401) {
+                localStorage.clear();
+                setProfile(null);
+            }
         } finally {
             setLoading(false);
         }
@@ -60,7 +65,9 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         // Load profile from localStorage first
         const storedProfile = localStorage.getItem('user_data');
-        if (storedProfile) {
+        const accessToken = localStorage.getItem('session_token');
+        
+        if (storedProfile && accessToken) {
             const parsedProfile = JSON.parse(storedProfile);
             // Get avatar from localStorage or set empty
             setProfile({
@@ -70,8 +77,12 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
             setLoading(false);
         }
         
-        // Then refresh from server
-        refreshProfile();
+        // Then refresh from server if we have a token
+        if (accessToken) {
+            refreshProfile();
+        } else {
+            setLoading(false);
+        }
     }, []);
 
     return (
