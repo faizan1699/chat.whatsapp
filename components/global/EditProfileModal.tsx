@@ -10,8 +10,12 @@ import { useProfile } from '@/contexts/ProfileContext';
 
 const profileSchema = z.object({
     username: z.string().min(2, 'Username must be at least 2 characters'),
-    email: z.string().email('Invalid email address').optional().or(z.literal('')),
-    phone: z.string().optional(),
+    email: z.string().email('Invalid email address').optional().or(z.literal('')).readonly(),
+    phone: z.string().optional().refine((phone) => {
+        if (!phone || phone.trim() === '') return true; // Allow empty phone
+        // Basic phone validation - can be enhanced
+        return phone.length >= 10;
+    }, 'Phone number must be at least 10 digits'),
     avatar: z.string().optional(),
 });
 
@@ -113,15 +117,36 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
     const onProfileSubmit = async (data: ProfileFormData) => {
         setProfileLoading(true);
         profileForm.clearErrors('root');
+        
         try {
-            const res = await api.patch('/auth/profile', {
-                username: data.username,
-                email: data.email || undefined,
-                phone: data.phone || undefined,
-                avatar: data.avatar || undefined,
-            });
+            // Compare with current profile and only send changed fields (excluding email)
+            const currentValues = {
+                username: profile?.username || '',
+                phone: profile?.phone || '',
+                avatar: profile?.avatar || '',
+            };
             
-            // Refresh profile from server to get latest data
+            const changedFields: Record<string, any> = {};
+            
+            // Only include fields that have actually changed (excluding email)
+            if (data.username !== currentValues.username) {
+                changedFields.username = data.username;
+            }
+            if (data.phone !== currentValues.phone) {
+                changedFields.phone = data.phone || undefined;
+            }
+            if (data.avatar !== currentValues.avatar) {
+                changedFields.avatar = data.avatar || undefined;
+            }
+            
+            if (Object.keys(changedFields).length === 0) {
+                profileForm.setError('root', { type: 'manual', message: 'No changes made' });
+                setProfileLoading(false);
+                return;
+            }
+            
+            const res = await api.patch('/auth/profile', changedFields);
+            
             await refreshProfile();
             
             onSuccess(res.data?.username);
@@ -252,9 +277,11 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                                         {...profileForm.register('email')}
                                         type="email"
                                         placeholder="your@email.com"
-                                        className="w-full rounded-lg border border-[#e9edef] px-10 py-2.5 outline-none focus:border-[#00a884]"
+                                        disabled
+                                        className="w-full rounded-lg border border-[#e9edef] px-10 py-2.5 outline-none focus:border-[#00a884] bg-gray-100 cursor-not-allowed"
                                     />
                                 </div>
+                                <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
                                 {profileForm.formState.errors.email && (
                                     <p className="text-xs text-red-500 mt-1">{profileForm.formState.errors.email.message}</p>
                                 )}
@@ -273,6 +300,7 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                                 {profileForm.formState.errors.phone && (
                                     <p className="text-xs text-red-500 mt-1">{profileForm.formState.errors.phone.message}</p>
                                 )}
+                                <p className="text-xs text-gray-500 mt-1">Optional: Enter a unique phone number (min 10 digits)</p>
                             </div>
                             <div>
                                 <label className="text-[13px] font-medium text-[#00a884] uppercase tracking-wider">Avatar URL (optional)</label>

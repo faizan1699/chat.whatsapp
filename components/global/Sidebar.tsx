@@ -158,19 +158,23 @@ export default function Sidebar({
 
     // Get unique conversation partners from conversations
     const conversationPartners = useMemo(() => {
-        const partners = new Set<string>();
+        const partners = new Map<string, { id: string; username: string; avatar?: string }>();
         conversations.forEach(conv => {
             conv.participants.forEach((p: any) => {
                 if (p.user.username !== username) {
-                    partners.add(p.user.username);
+                    partners.set(p.user.username, {
+                        id: p.user.id,
+                        username: p.user.username,
+                        avatar: p.user.avatar
+                    });
                 }
             });
         });
-        return Array.from(partners);
+        return Array.from(partners.values());
     }, [conversations, username]);
 
     const filteredUsers = conversationPartners
-        .filter(u => u.toLowerCase().includes(searchQuery.toLowerCase()));
+        .filter(u => u.username.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const getLastMessage = (user: string) => {
         const userConversation = conversations.find(conv =>
@@ -302,30 +306,34 @@ export default function Sidebar({
                     </div>
                 ) : (
                     filteredUsers.map((user) => {
-                        const lastMsg = getLastMessage(user);
-                        const unreadCount = unreadCounts?.[user] || 0;
+                        const lastMsg = getLastMessage(user.username);
+                        const unreadCount = unreadCounts?.[user.username] || 0;
 
                         return (
                             <div
-                                key={user}
-                                className={`group relative flex w-full items-center gap-3 border-b border-[#f0f2f5] px-3 py-4 transition-colors ${selectedUser === user ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'}`}
+                                key={user.username}
+                                className={`group relative flex w-full items-center gap-3 border-b border-[#f0f2f5] px-3 py-4 transition-colors ${selectedUser === user.username ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'}`}
                             >
-                                {selectedUser === user && (
+                                {selectedUser === user.username && (
                                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#00a884]"></div>
                                 )}
                                 <div className="relative h-12 w-12 flex-shrink-0">
                                     <div className="h-full w-full overflow-hidden rounded-full bg-slate-200">
-                                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user}`} alt={user} className="h-full w-full object-cover" />
+                                        <img 
+                                            src={user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`} 
+                                            alt={user.username} 
+                                            className="h-full w-full object-cover" 
+                                        />
                                     </div>
                                     <div className="absolute right-0 bottom-0 h-3 w-3 rounded-full border-2 border-white bg-[#25d366]"></div>
                                 </div>
                                 <div 
                                     className="flex flex-1 flex-col overflow-hidden text-left cursor-pointer"
-                                    onClick={() => setSelectedUser(user)}
+                                    onClick={() => setSelectedUser(user.username)}
                                 >
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2 overflow-hidden">
-                                            <span className="truncate font-semibold text-[#111b21]">{user}</span>
+                                            <span className="truncate font-semibold text-[#111b21]">{user.username}</span>
                                         </div>
                                         {lastMsg && (
                                             <span className={`text-[12px] ${unreadCount > 0 ? 'text-[#00a884] font-semibold' : 'text-[#667781]'}`}>
@@ -345,7 +353,7 @@ export default function Sidebar({
                                     </div>
                                 </div>
                                 <button
-                                    onClick={(e) => handleContextMenu(e, user)}
+                                    onClick={(e) => handleContextMenu(e, user.username)}
                                     className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-black/5 rounded-full"
                                 >
                                     <MoreVertical size={16} className="text-[#667781]" />

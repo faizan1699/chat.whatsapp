@@ -31,22 +31,84 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'PATCH') {
-        const { username, email, phone, avatar } = req.body;
+        const { username, phone, avatar } = req.body;
+        console.log('Profile update request:', { username, phone, avatar: avatar ? 'provided' : 'not provided' });
+        
         const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-        if (typeof username === 'string' && username.length >= 2) updates.username = username;
-        if (typeof email === 'string' && email.length > 0) {
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(email)) {
-                return res.status(400).json({ error: 'Invalid email format' });
-            }
-            updates.email = email;
+        
+        // Get current user data first
+        const { data: currentUser, error: currentUserError } = await supabaseAdmin
+            .from('users')
+            .select('username, phone_number')
+            .eq('id', authUser.userId)
+            .single();
+        
+        if (currentUserError || !currentUser) {
+            console.error('Error fetching current user:', currentUserError);
+            return res.status(500).json({ error: 'Failed to fetch current user data' });
         }
-        if (typeof phone === 'string' && phone.length > 0) updates.phone_number = phone;
+        
+        // Check if username is being updated
+        const isUsernameUpdating = typeof username === 'string' && username.length >= 2;
+        
+        if (isUsernameUpdating) {
+            // Only check for duplicate if username is actually changing
+            if (username !== currentUser.username) {
+                const { data: existingUser, error: existingUserError } = await supabaseAdmin
+                    .from('users')
+                    .select('id')
+                    .eq('username', username)
+                    .single();
+                
+                if (existingUserError && existingUserError.code !== 'PGRST116') { // PGRST116 = no rows returned
+                    console.error('Error checking existing username:', existingUserError);
+                    return res.status(500).json({ error: 'Failed to validate username' });
+                }
+                
+                if (existingUser) {
+                    return res.status(400).json({ error: 'Username already taken' });
+                }
+            }
+            
+            updates.username = username;
+        }
+        
+        const isPhoneUpdating = typeof phone === 'string' && phone.length > 0;
+        
+        if (isPhoneUpdating) {
+            // Only check for duplicate if phone is actually changing
+            console.log('Phone validation - current:', currentUser.phone_number, 'new:', phone);
+            if (phone !== currentUser.phone_number) {
+                const { data: existingPhone, error: existingPhoneError } = await supabaseAdmin
+                    .from('users')
+                    .select('id')
+                    .eq('phone_number', phone)
+                    .single();
+                
+                console.log('Phone check result:', { existingPhone, existingPhoneError });
+                
+                if (existingPhoneError && existingPhoneError.code !== 'PGRST116') { // PGRST116 = no rows returned
+                    console.error('Error checking existing phone:', existingPhoneError);
+                    return res.status(500).json({ error: 'Failed to validate phone number' });
+                }
+                
+                if (existingPhone) {
+                    console.log('Phone number already exists for user ID:', existingPhone.id);
+                    return res.status(400).json({ error: 'This phone number is already registered to another account. Please use a different phone number.' });
+                }
+            }
+            
+            updates.phone_number = phone;
+        }
+        
         if (typeof avatar === 'string') updates.avatar = avatar;
 
         if (Object.keys(updates).length <= 1) {
+            console.log('No updates to apply:', updates);
             return res.status(400).json({ error: 'Nothing to update' });
         }
+
+        console.log('Applying updates:', updates);
 
         try {
             const { data, error } = await supabaseAdmin
@@ -57,8 +119,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 .single();
 
             if (error) {
-                if (error.code === '23505') return res.status(400).json({ error: 'Username already taken' });
-                throw error;
+                return res.status(400).json({ error: error.message || 'Update failed' });
+            }
+            
+            if (!data) {
+                return res.status(404).json({ error: 'User not found after update' });
             }
             return res.status(200).json({
                 id: data.id,
