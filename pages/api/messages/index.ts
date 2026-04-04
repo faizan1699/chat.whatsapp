@@ -1,11 +1,14 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../utils/supabase-server';
+import { createClient } from '@supabase/supabase-js';
 import { Server as ServerIO } from 'socket.io';
 import { Server as NetServer } from 'http';
 import { Socket as NetSocket } from 'net';
 import { jwtVerify, JWTPayload } from 'jose';
 
 const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback_secret_dont_use_in_production');
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 interface SessionPayload extends JWTPayload {
     userId: string;
@@ -87,14 +90,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             res.status(500).json({ error: 'Failed to fetch messages' });
         }
     } else if (req.method === 'POST') {
-        const { conversationId, senderId, content, isVoice, audioUrl, audioDuration, to, from } = req.body;
+        const { conversationId, senderId, content, isVoice, audioUrl, audioDuration, to, from, file } = req.body;
 
         if (senderId !== session.userId) {
             return res.status(403).json({ error: 'Forbidden: Cannot send messages as another user' });
         }
 
         try {
-            const { data: message, error } = await supabaseAdmin
+            // Create supabase client with auth context
+            const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+                global: {
+                    headers: {
+                        Authorization: `Bearer ${req.headers.authorization?.split(' ')[1]}`
+                    }
+                }
+            });
+
+            const { data: message, error } = await supabase
                 .from('messages')
                 .insert({
                     conversation_id: conversationId,
@@ -104,6 +116,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                     audio_url: audioUrl || null,
                     audio_duration: audioDuration ?? null,
                     status: 'sent',
+                    file: file || null
                 })
                 .select('*')
                 .single();
@@ -120,6 +133,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 isVoiceMessage: message.is_voice_message,
                 audioUrl: message.audio_url,
                 audioDuration: message.audio_duration,
+                file: message.file,
             });
         } catch (error) {
             console.error('Message API error:', error);

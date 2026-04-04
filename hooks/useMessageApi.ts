@@ -194,7 +194,7 @@ export const useMessageApi = () => {
       );
 
       const fileName = `voice-${Date.now()}-${userId}`;
-      const publicUrl = await uploadAudio(audioBlob, fileName);
+      const publicUrl = await uploadAudio(audioBlob, fileName, userId);
 
       const response = await axios.post('/api/messages', {
         conversationId: currentConversation.id,
