@@ -5,9 +5,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Mail, Lock, Loader2, Check } from 'lucide-react';
-import api from '@/utils/api';
-import { hasCookieAcceptance, getCookiePreferences } from '@/utils/cookieConsent';
-import { frontendAuth } from '@/utils/frontendAuth';
+import { useAuthHook } from '@/hooks/useAuthHook';
+import FormErrorMessage from './FormErrorMessage';
 
 const schema = z.object({
     identifier: z.string().min(1, 'Email or username is required'),
@@ -23,62 +22,47 @@ interface LoginFormProps {
     onForgotPassword: () => void;
 }
 
-export default function LoginForm({ onSuccess, onSwitchToRegister, onForgotPassword }: LoginFormProps) {
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+export default function LoginForm({ 
+    onSuccess, 
+    onSwitchToRegister, 
+    onForgotPassword 
+}: LoginFormProps) {
 
-    const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
-        resolver: zodResolver(schema),
-        defaultValues: {
-            termsAccepted: false,
-        },
-    });
+    const {
+        loginWithProfile,
+        loading,
+        error
+    } = useAuthHook();
+
+    const {
+        register,
+        handleSubmit,
+        formState: {
+            errors
+        } } = useForm<FormData>({
+            resolver: zodResolver(schema),
+            defaultValues: {
+                termsAccepted: true,
+            },
+        });
 
     const onSubmit = async (data: FormData) => {
-        setIsLoading(true);
-        setError(null);
         try {
-            const cookieConsent = hasCookieAcceptance() ? getCookiePreferences() : null;
-
-            const response = await api.post('/auth/login', {
+            const { loginResponse } = await loginWithProfile({
                 identifier: data.identifier,
                 password: data.password,
                 termsAccepted: data.termsAccepted,
-                cookieConsent: cookieConsent,
             });
-            
-            const responseData = response.data;
-            const user = responseData?.user;
-            
-            if (user?.username && responseData?.accessToken && responseData?.refreshToken) {
-                frontendAuth.setSession(
-                    responseData.accessToken,
-                    responseData.refreshToken,
-                    {
-                        id: user.id,
-                        username: user.username,
-                        email: user.email,
-                        phone: user.phoneNumber || ''
-                    }
-                );
-                                
-                try {
-                    const profileResponse = await api.get('/auth/profile');
-                } catch (profileError) {
-                    // Don't fail the login if profile fetch fails
-                }
-                
-                onSuccess({ username: user.username, userId: user.id });
-            } else if (user?.username) {
-                // Fallback for backward compatibility
+
+            const user = loginResponse?.user;
+
+            if (user?.username) {
                 onSuccess({ username: user.username, userId: user.id });
             } else {
                 onSuccess({ username: data.identifier });
             }
         } catch (err: any) {
-            setError(err.response?.data?.message || 'Login failed. Check your credentials.');
-        } finally {
-            setIsLoading(false);
+            console.error('Login failed:', err.message);
         }
     };
 
@@ -104,7 +88,7 @@ export default function LoginForm({ onSuccess, onSwitchToRegister, onForgotPassw
                             placeholder="your@email.com or username"
                         />
                     </div>
-                    {errors.identifier && <p className="text-xs text-red-500">{errors.identifier.message}</p>}
+                    {errors.identifier && <FormErrorMessage error={errors.identifier} />}
                 </div>
 
                 <div className="space-y-1.5">
@@ -118,7 +102,7 @@ export default function LoginForm({ onSuccess, onSwitchToRegister, onForgotPassw
                             placeholder="••••••••"
                         />
                     </div>
-                    {errors.password && <p className="text-xs text-red-500">{errors.password.message}</p>}
+                    {errors.password && <FormErrorMessage error={errors.password} />}
                     <button
                         type="button"
                         onClick={onForgotPassword}
@@ -147,15 +131,15 @@ export default function LoginForm({ onSuccess, onSwitchToRegister, onForgotPassw
                             </a>
                         </label>
                     </div>
-                    {errors.termsAccepted && <p className="text-xs text-red-500">{errors.termsAccepted.message}</p>}
+                    {errors.termsAccepted && <FormErrorMessage error={errors.termsAccepted} />}
                 </div>
 
                 <button
                     type="submit"
-                    disabled={isLoading}
+                    disabled={loading}
                     className="w-full bg-[#00a884] hover:bg-[#008069] text-white font-bold py-3.5 rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70"
                 >
-                    {isLoading ? <Loader2 className="animate-spin" size={20} /> : 'Sign In'}
+                    {loading ? <Loader2 className="animate-spin" size={20} /> : 'Sign In'}
                 </button>
 
                 <p className="text-center text-sm text-[#667781]">

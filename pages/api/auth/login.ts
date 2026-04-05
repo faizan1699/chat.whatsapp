@@ -52,7 +52,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
-        // Create access token (30 days - 1 month)
         const accessPayload: SessionPayload = {
             userId: user.id,
             username: user.username,
@@ -62,10 +61,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const accessToken = await new SignJWT(accessPayload)
             .setProtectedHeader({ alg: 'HS256' })
             .setIssuedAt()
-            .setExpirationTime('30d') // Changed from 1h to 30d (1 month)
+            .setExpirationTime('30d')
             .sign(secret);
 
-        // Create refresh token (30 days)
         const refreshPayload: RefreshTokenPayload = {
             userId: user.id,
             username: user.username,
@@ -78,7 +76,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             .setExpirationTime('30d')
             .sign(refreshSecret);
 
-        // Set cookies using NextResponse
         const isProduction = process.env.NODE_ENV === 'production';
 
         res.setHeader('Set-Cookie', [
@@ -86,14 +83,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 httpOnly: true,
                 secure: isProduction,
                 sameSite: 'strict',
-                maxAge: 60 * 60 * 24 * 30, // 30 days (1 month)
+                maxAge: 60 * 60 * 24 * 30,
                 path: '/',
             }),
             serialize('refresh_token', refreshToken, {
                 httpOnly: true,
                 secure: isProduction,
                 sameSite: 'strict',
-                maxAge: 60 * 60 * 24 * 30, // 30 days
+                maxAge: 60 * 60 * 24 * 30,
                 path: '/',
             }),
             serialize('user-id', user.id, {
@@ -121,13 +118,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             updateData.termsAcceptedAt = termsAccepted ? new Date().toISOString() : null;
         }
 
-        // Update cookie consent if provided
         if (cookieConsent !== undefined) {
             updateData.cookieConsent = cookieConsent;
             updateData.cookieConsentAt = new Date().toISOString();
         }
 
-        // Update user record with consent information (skip if columns don't exist)
         if (Object.keys(updateData).length > 1) {
             try {
                 await supabaseAdmin
@@ -143,13 +138,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             message: 'Logged in successfully',
             accessToken,
             refreshToken,
-            user: {
-                id: user.id,
-                username: user.username,
-                email: user.email,
-                phone: user.phone_number,
-                avatar: user.avatar
-            }
         });
 
     } catch (error: unknown) {
