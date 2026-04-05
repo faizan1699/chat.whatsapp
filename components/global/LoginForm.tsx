@@ -38,7 +38,6 @@ export default function LoginForm({ onSuccess, onSwitchToRegister, onForgotPassw
         setIsLoading(true);
         setError(null);
         try {
-            // Get cookie consent data if available
             const cookieConsent = hasCookieAcceptance() ? getCookiePreferences() : null;
 
             const response = await api.post('/auth/login', {
@@ -52,7 +51,6 @@ export default function LoginForm({ onSuccess, onSwitchToRegister, onForgotPassw
             const user = responseData?.user;
             
             if (user?.username && responseData?.accessToken && responseData?.refreshToken) {
-                // Store session in localStorage for frontendAuth
                 frontendAuth.setSession(
                     responseData.accessToken,
                     responseData.refreshToken,
@@ -63,15 +61,10 @@ export default function LoginForm({ onSuccess, onSwitchToRegister, onForgotPassw
                         phone: user.phoneNumber || ''
                     }
                 );
-                
-                console.log('✅ Session stored in localStorage');
-                
-                // Auto-fetch user profile after successful login
+                                
                 try {
                     const profileResponse = await api.get('/auth/profile');
-                    console.log('✅ Profile fetched successfully:', profileResponse.data);
                 } catch (profileError) {
-                    console.error('⚠️ Failed to fetch profile after login:', profileError);
                     // Don't fail the login if profile fetch fails
                 }
                 

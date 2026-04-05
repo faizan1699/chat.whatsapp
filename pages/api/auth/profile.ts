@@ -1,9 +1,52 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../utils/supabase-server';
-import { getAuthUser } from '../../../utils/auth';
+import { jwtVerify, JWTPayload } from 'jose';
+import { parse } from 'cookie';
+
+const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback_secret_dont_use_in_production');
+
+interface SessionPayload extends JWTPayload {
+    userId: string;
+    username: string;
+    type: 'access';
+}
+
+async function getAuthUser(req: NextApiRequest): Promise<SessionPayload | null> {
+    let accessToken: string | undefined;
+
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+        accessToken = authHeader.substring(7);
+    } 
+    else {
+        const cookieHeader = req.headers.cookie;
+        if (!cookieHeader) {
+            return null;
+        }
+
+        const cookies = parse(cookieHeader);
+        accessToken = cookies['access_token'];
+    }
+    
+    if (!accessToken) {
+        return null;
+    }
+
+    try {
+        const { payload } = await jwtVerify(accessToken, secret) as { payload: SessionPayload };
+        
+        if (payload.type !== 'access') {
+            return null;
+        }
+        
+        return payload;
+    } catch {
+        return null;
+    }
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    const authUser = getAuthUser(req);
+    const authUser = await getAuthUser(req);
     if (!authUser) {
         return res.status(401).json({ error: 'Please login' });
     }
