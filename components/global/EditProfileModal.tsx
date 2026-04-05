@@ -7,6 +7,8 @@ import * as z from 'zod';
 import { X, User, Loader2, Lock, Mail, Phone, Camera, Upload } from 'lucide-react';
 import api from '@/utils/api';
 import { useProfile } from '@/contexts/ProfileContext';
+import { useImageCropper } from '@/hooks/useImageCropper';
+import GlobalImageCropper from './GlobalImageCropper';
 
 const profileSchema = z.object({
     username: z.string().min(2, 'Username must be at least 2 characters'),
@@ -38,9 +40,22 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
     const { profile, updateProfile, refreshProfile } = useProfile();
     const [activeTab, setActiveTab] = useState<'profile' | 'password'>('profile');
     const [profileLoading, setProfileLoading] = useState(false);
-    const [previewImage, setPreviewImage] = useState<string>('');
-    const [uploadingImage, setUploadingImage] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    
+    const {
+        selectedImage,
+        croppedImage,
+        showCropper,
+        crop,
+        zoom,
+        setCrop,
+        setZoom,
+        handleImageSelect,
+        handleCropComplete,
+        handleCropConfirm,
+        handleCropCancel,
+        resetCropper
+    } = useImageCropper();
 
     const profileForm = useForm<ProfileFormData>({
         resolver: zodResolver(profileSchema),
@@ -57,57 +72,25 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                 phone: profile.phone || '',
                 avatar: profile.avatar || '',
             });
-            setPreviewImage(profile.avatar || '');
         }
     }, [isOpen, profile, profileForm]);
 
-    const handleImageUpload = async (file: File) => {
-        if (!file) return;
-        
-        // Validate file type
-        if (!file.type.startsWith('image/')) {
-            alert('Please select an image file');
-            return;
+    useEffect(() => {
+        if (croppedImage) {
+            profileForm.setValue('avatar', croppedImage);
         }
-        
-        if (file.size > 10 * 1024 * 1024) {
-            alert('Image size should be less than 10MB');
-            return;
-        }
-
-        setUploadingImage(true);
-        
-        try {
-            // Create preview and convert to base64
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const base64String = reader.result as string;
-                setPreviewImage(base64String);
-                profileForm.setValue('avatar', base64String);
-            };
-            reader.readAsDataURL(file);
-            
-        } catch (error) {
-            console.error('Upload failed:', error);
-            alert('Failed to process image');
-            // Reset preview on error
-            const currentAvatar = profileForm.getValues('avatar');
-            setPreviewImage(currentAvatar || '');
-        } finally {
-            setUploadingImage(false);
-        }
-    };
+    }, [croppedImage, profileForm]);
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            handleImageUpload(file);
+            handleImageSelect(file);
         }
     };
 
     const removeImage = () => {
-        setPreviewImage('');
         profileForm.setValue('avatar', '');
+        resetCropper();
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
@@ -212,9 +195,9 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                             <div className="flex justify-center">
                                 <div className="relative">
                                     <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-200 border-4 border-[#f0f2f5]">
-                                        {previewImage ? (
+                                        {profileForm.watch('avatar') ? (
                                             <img 
-                                                src={previewImage} 
+                                                src={profileForm.watch('avatar')} 
                                                 alt="Profile" 
                                                 className="w-full h-full object-cover"
                                             />
@@ -234,16 +217,11 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                                     <button
                                         type="button"
                                         onClick={() => fileInputRef.current?.click()}
-                                        disabled={uploadingImage}
-                                        className="absolute bottom-0 right-0 bg-[#00a884] hover:bg-[#008069] text-white rounded-full p-2 shadow-lg disabled:opacity-70"
+                                        className="absolute bottom-0 right-0 bg-[#00a884] hover:bg-[#008069] text-white rounded-full p-2 shadow-lg"
                                     >
-                                        {uploadingImage ? (
-                                            <Loader2 className="animate-spin" size={16} />
-                                        ) : (
-                                            <Camera size={16} />
-                                        )}
+                                        <Camera size={16} />
                                     </button>
-                                    {previewImage && (
+                                    {profileForm.watch('avatar') && (
                                         <button
                                             type="button"
                                             onClick={removeImage}
@@ -379,6 +357,22 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                     )}
                 </div>
             </div>
+            
+            {/* Image Cropper */}
+            {showCropper && (
+                <GlobalImageCropper
+                    image={selectedImage || ''}
+                    crop={crop}
+                    zoom={zoom}
+                    onCropChange={setCrop}
+                    onZoomChange={setZoom}
+                    onCropComplete={handleCropComplete}
+                    onConfirm={handleCropConfirm}
+                    onCancel={handleCropCancel}
+                    title="Crop Profile Picture"
+                    aspectRatio={1}
+                />
+            )}
         </div>
     );
 }

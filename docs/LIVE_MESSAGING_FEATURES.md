@@ -1225,4 +1225,4 @@ const useMessageCache = () => {
 };
 ```
 
-This comprehensive live messaging documentation covers all the essential features and implementations needed for a modern, real-time messaging application similar to WhatsApp Web.
+This comprehensive live messaging documentation covers all the essential features and implementations needed for a modern, real-time messaging application similar to Next Chat Web.

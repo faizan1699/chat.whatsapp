@@ -7,7 +7,7 @@ interface UserProfile {
     id: string;
     username: string;
     email: string;
-    phone: string;
+    phone: string; // Changed from phoneNumber to phone
     avatar: string;
 }
 

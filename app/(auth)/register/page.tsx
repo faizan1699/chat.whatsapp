@@ -6,7 +6,9 @@ import { useForm } from 'react-hook-form';
 import { Eye, EyeOff, MessageCircle, Lock, Mail, User, Camera, Upload, Check } from 'lucide-react';
 import { frontendAuth } from '@/utils/frontendAuth';
 import api from '@/utils/api';
-import ImageCropper from '@/components/global/ImageCropper';
+import { useImageCropper } from '@/hooks/useImageCropper';
+import Cropper from 'react-easy-crop';
+import GlobalImageCropper from '@/components/global/GlobalImageCropper';
 
 interface RegisterFormData {
     username: string;
@@ -24,11 +26,23 @@ function RegisterForm() {
     const [avatarPreview, setAvatarPreview] = useState<string>('');
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [verificationSent, setVerificationSent] = useState(false);
-    const [croppedAvatar, setCroppedAvatar] = useState<string>('');
-    const [showCropper, setShowCropper] = useState(false);
-    const [tempAvatar, setTempAvatar] = useState<string>('');
     const router = useRouter();
     const searchParams = useSearchParams();
+
+    const {
+        selectedImage,
+        croppedImage,
+        showCropper,
+        crop,
+        zoom,
+        setCrop,
+        setZoom,
+        handleImageSelect,
+        handleCropComplete,
+        handleCropConfirm,
+        handleCropCancel,
+        resetCropper
+    } = useImageCropper();
 
     // Check if user is already logged in and redirect to chat
     useEffect(() => {
@@ -39,6 +53,8 @@ function RegisterForm() {
         }
     }, [router]);
 
+    
+  
     const {
         register,
         handleSubmit,
@@ -54,32 +70,10 @@ function RegisterForm() {
     const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                setFormError('avatar', { type: 'manual', message: 'Image size should be less than 5MB' });
-                return;
-            }
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const result = e.target?.result as string;
-                setTempAvatar(result);
-                setShowCropper(true);
-            };
-            reader.readAsDataURL(file);
+            handleImageSelect(file);
         }
     };
 
-    const handleCropComplete = (croppedImage: string) => {
-        setCroppedAvatar(croppedImage);
-        setAvatarPreview(croppedImage);
-        setValue('avatar', croppedImage);
-        setShowCropper(false);
-    };
-
-    const handleCropCancel = () => {
-        setShowCropper(false);
-        setTempAvatar('');
-    };
 
     const onBasicInfoSubmit = async (data: RegisterFormData) => {
         try {
@@ -118,7 +112,6 @@ function RegisterForm() {
                 email: watch('email'),
             });
 
-            // Show success message
             setFormError('verificationCode', { 
                 type: 'manual', 
                 message: 'New verification code sent to your email' 
@@ -134,7 +127,7 @@ function RegisterForm() {
             const response = await api.post('/auth/complete-registration', {
                 username: data.username,
                 email: data.email,
-                avatar: croppedAvatar || data.avatar,
+                avatar: croppedImage || data.avatar,
             });
 
             const responseData = response.data;
@@ -162,8 +155,15 @@ function RegisterForm() {
         }
     };
 
+      useEffect(() => {
+        if (croppedImage) {
+            setAvatarPreview(croppedImage);
+            setValue('avatar', croppedImage);
+        }
+    }, [croppedImage, setValue]);
+
     const renderStep1 = () => (
-        <div className="space-y-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                     Username
@@ -185,7 +185,7 @@ function RegisterForm() {
                             },
                         })}
                         type="text"
-                        className={`block w-full pl-10 pr-3 py-3 border ${errors.username ? 'border-red-300' : 'border-gray-300'
+                        className={`block w-full pl-10 pr-3 py-3 bg-gray-50 border ${errors.username ? 'border-red-300' : 'border-gray-300'
                             } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
                         placeholder="Choose a username"
                     />
@@ -212,7 +212,7 @@ function RegisterForm() {
                             },
                         })}
                         type="email"
-                        className={`block w-full pl-10 pr-3 py-3 border ${errors.email ? 'border-red-300' : 'border-gray-300'
+                        className={`block w-full pl-10 pr-3 py-3 bg-gray-50 border ${errors.email ? 'border-red-300' : 'border-gray-300'
                             } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
                         placeholder="Enter your email"
                     />
@@ -238,7 +238,7 @@ function RegisterForm() {
                             },
                         })}
                         type="tel"
-                        className={`block w-full pl-10 pr-3 py-3 border ${errors.phone ? 'border-red-300' : 'border-gray-300'
+                        className={`block w-full pl-10 pr-3 py-3 bg-gray-50 border ${errors.phone ? 'border-red-300' : 'border-gray-300'
                             } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
                         placeholder="+1234567890"
                     />
@@ -265,7 +265,7 @@ function RegisterForm() {
                             },
                         })}
                         type={showPassword ? 'text' : 'password'}
-                        className={`block w-full pl-10 pr-10 py-3 border ${errors.password ? 'border-red-300' : 'border-gray-300'
+                        className={`block w-full pl-10 pr-10 py-3 bg-gray-50 border ${errors.password ? 'border-red-300' : 'border-gray-300'
                             } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
                         placeholder="Create a password"
                     />
@@ -286,7 +286,7 @@ function RegisterForm() {
                 )}
             </div>
 
-            <div>
+            <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                     Confirm Password
                 </label>
@@ -300,7 +300,7 @@ function RegisterForm() {
                             validate: (value) => value === password || 'Passwords do not match',
                         })}
                         type={showConfirmPassword ? 'text' : 'password'}
-                        className={`block w-full pl-10 pr-10 py-3 border ${errors.confirmPassword ? 'border-red-300' : 'border-gray-300'
+                        className={`block w-full pl-10 pr-10 py-3 bg-gray-50 border ${errors.confirmPassword ? 'border-red-300' : 'border-gray-300'
                             } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
                         placeholder="Confirm your password"
                     />
@@ -378,13 +378,6 @@ function RegisterForm() {
 
     const renderStep3 = () => (
         <div className="space-y-5">
-            <div className="text-center">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Add Profile Picture</h3>
-                <p className="text-gray-600 mb-4">
-                    This is optional - you can skip this step
-                </p>
-            </div>
-
             <div className="flex justify-center">
                 <div className="relative">
                     <div className="w-32 h-32 rounded-full overflow-hidden bg-gray-200 border-4 border-gray-300">
@@ -429,47 +422,44 @@ function RegisterForm() {
     );
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
-            <div className="w-full max-w-md">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+            <div className="w-full max-w-md md:max-w-lg lg:max-w-xl bg-white rounded-xl shadow-lg p-8">
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
-                        <MessageCircle className="w-8 h-8 text-white" />
+                    <div className="mx-auto w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mb-4">
+                        <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                        </svg>
                     </div>
-                    <h1 className="text-2xl font-bold text-gray-900 mb-2">Video Calling App</h1>
+                    <h1 className="text-2xl font-bold text-gray-800 mb-2">Video Calling App</h1>
                     <p className="text-gray-600">Create your account</p>
                 </div>
 
-                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
-                    <div className="mb-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-semibold text-gray-900">
-                                {step === 1 && 'Create Account'}
-                                {step === 2 && 'Verify Email'}
-                                {step === 3 && 'Profile Picture'}
-                            </h2>
-                            <div className="flex items-center space-x-2">
-                                {[1, 2, 3].map((s) => (
-                                    <div
-                                        key={s}
-                                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                                            s <= step
-                                                ? 'bg-blue-600 text-white'
-                                                : 'bg-gray-200 text-gray-500'
-                                        }`}
-                                    >
-                                        {s < step ? <Check size={16} /> : s}
-                                    </div>
-                                ))}
-                            </div>
+                <div className="mb-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-xl font-semibold text-gray-800">Create Account</h2>
+                        <div className="flex items-center space-x-2">
+                            {[1, 2, 3].map((s) => (
+                                <div
+                                    key={s}
+                                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
+                                        s <= step
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-gray-200 text-gray-600'
+                                    }`}
+                                >
+                                    {s}
+                                </div>
+                            ))}
                         </div>
-                        <p className="text-sm text-gray-600">
-                            {step === 1 && 'Fill in your details to get started'}
-                            {step === 2 && 'Enter the 6-digit code sent to your email'}
-                            {step === 3 && 'Add a profile picture (optional)'}
-                        </p>
                     </div>
+                    <p className="text-sm text-gray-600">
+                        {step === 1 && 'Fill in your details to get started'}
+                        {step === 2 && 'Enter the 6-digit code sent to your email'}
+                        {step === 3 && 'Add a profile picture (optional)'}
+                    </p>
+                </div>
 
-                    <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
+                <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
                         {step === 1 && renderStep1()}
                         {step === 2 && renderStep2()}
                         {step === 3 && renderStep3()}
@@ -489,7 +479,10 @@ function RegisterForm() {
                         >
                             {isSubmitting ? (
                                 <div className="flex items-center justify-center">
-                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
                                     {step === 1 && 'Creating Account...'}
                                     {step === 2 && 'Verifying...'}
                                     {step === 3 && 'Completing...'}
@@ -504,7 +497,7 @@ function RegisterForm() {
                         </button>
                     </form>
 
-                    <div className="mt-6 text-center">
+                    <div className="text-center">
                         <p className="text-sm text-gray-600">
                             Already have an account?{' '}
                             <a href="/login" className="text-blue-600 hover:text-blue-700 font-medium">
@@ -512,24 +505,30 @@ function RegisterForm() {
                             </a>
                         </p>
                     </div>
+
+                    <div className="text-center">
+                        <p className="text-xs text-gray-500">
+                            🔒 Secured with HTTP-only cookies
+                        </p>
+                    </div>
                 </div>
 
-                <div className="mt-6 text-center">
-                    <p className="text-xs text-gray-500">
-                        🔒 Secured with HTTP-only cookies
-                    </p>
-                </div>
+                {/* Image Cropper Modal */}
+                {showCropper && selectedImage && (
+                    <GlobalImageCropper
+                        image={selectedImage}
+                        crop={crop}
+                        zoom={zoom}
+                        onCropChange={setCrop}
+                        onZoomChange={setZoom}
+                        onCropComplete={handleCropComplete}
+                        onConfirm={handleCropConfirm}
+                        onCancel={handleCropCancel}
+                        title="Crop Profile Picture"
+                        aspectRatio={1}
+                    />
+                )}
             </div>
-
-            {/* Image Cropper Modal */}
-            {showCropper && (
-                <ImageCropper
-                    image={tempAvatar}
-                    onCropComplete={handleCropComplete}
-                    onClose={handleCropCancel}
-                />
-            )}
-        </div>
     );
 }
 

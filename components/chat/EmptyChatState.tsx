@@ -11,13 +11,13 @@ export default function EmptyChatState() {
                 <div className="mb-10 w-[400px]">
                     <img
                         src="https://static.whatsapp.net/rsrc.php/v3/y6/r/wa69ar96s3m.png"
-                        alt="WhatsApp Web"
+                        alt="Next Chat Web"
                         className="mx-auto"
                     />
                 </div>
 
                 <h1 className="mb-4 text-3xl font-light text-[#41525d]">
-                    WhatsApp Web
+                    Next Chat Web
                 </h1>
 
                 <p className="max-w-[500px] text-sm leading-relaxed text-[#667781]">

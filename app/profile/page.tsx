@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, Mail, Phone, Calendar, Clock, Shield } from 'lucide-react';
+import { ArrowLeft, User, Mail, Phone, Calendar, Clock, Shield, Edit2, Save, X, Camera } from 'lucide-react';
 import { useProfile } from '@/contexts/ProfileContext';
+import { frontendAuth } from '@/utils/frontendAuth';
 import api from '@/utils/api';
-import EditProfileModal from '@/components/global/EditProfileModal';
+import { useImageCropper } from '@/hooks/useImageCropper';
+import GlobalImageCropper from '@/components/global/GlobalImageCropper';
 
 interface UserProfile {
     id: string;
@@ -24,9 +26,35 @@ export default function ProfilePage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isOwnProfile, setIsOwnProfile] = useState(true);
-    const [showEditModal, setShowEditModal] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editLoading, setEditLoading] = useState(false);
+    const [editForm, setEditForm] = useState({
+        username: '',
+        phone: '',
+        avatar: ''
+    });
+
+    const {
+        selectedImage,
+        croppedImage,
+        showCropper,
+        crop,
+        zoom,
+        setCrop,
+        setZoom,
+        handleImageSelect,
+        handleCropComplete,
+        handleCropConfirm,
+        handleCropCancel,
+        resetCropper
+    } = useImageCropper();
 
     useEffect(() => {
+        if (!frontendAuth.isAuthenticated()) {
+            router.push('/login');
+            return;
+        }
+
         const urlParams = new URLSearchParams(window.location.search);
         const username = urlParams.get('user');
         
@@ -41,10 +69,75 @@ export default function ProfilePage() {
                     createdAt: new Date().toISOString(),
                     lastSeen: new Date().toISOString()
                 });
+                setEditForm({
+                    username: ownProfile.username || '',
+                    phone: ownProfile.phone || '',
+                    avatar: ownProfile.avatar || ''
+                });
             }
             setLoading(false);
         }
-    }, [ownProfile]);
+    }, [ownProfile, router]);
+
+    useEffect(() => {
+        if (croppedImage) {
+            setEditForm(prev => ({ ...prev, avatar: croppedImage }));
+        }
+    }, [croppedImage]);
+
+    const handleEditToggle = () => {
+        if (isEditing) {
+            // Reset form on cancel
+            if (ownProfile) {
+                setEditForm({
+                    username: ownProfile.username || '',
+                    phone: ownProfile.phone || '',
+                    avatar: ownProfile.avatar || ''
+                });
+            }
+            resetCropper();
+        }
+        setIsEditing(!isEditing);
+    };
+
+    const handleSaveProfile = async () => {
+        setEditLoading(true);
+        try {
+            const changedFields: Record<string, any> = {};
+            
+            if (editForm.username !== ownProfile?.username) {
+                changedFields.username = editForm.username;
+            }
+            if (editForm.phone !== ownProfile?.phone) {
+                changedFields.phone = editForm.phone || undefined;
+            }
+            if (editForm.avatar !== ownProfile?.avatar) {
+                changedFields.avatar = editForm.avatar || undefined;
+            }
+            
+            if (Object.keys(changedFields).length === 0) {
+                setIsEditing(false);
+                setEditLoading(false);
+                return;
+            }
+            
+            const res = await api.patch('/auth/profile', changedFields);
+            await refreshProfile();
+            setIsEditing(false);
+        } catch (err: any) {
+            console.error('Failed to update profile:', err);
+            alert(err.response?.data?.error || 'Failed to update profile');
+        } finally {
+            setEditLoading(false);
+        }
+    };
+
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            handleImageSelect(file);
+        }
+    };
 
     const fetchUserProfile = async (username: string) => {
         try {
@@ -123,11 +216,42 @@ export default function ProfilePage() {
         );
     }
 
+    if (!viewingProfile && !loading && !ownProfileLoading) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
+                        <h3 className="text-red-800 font-semibold mb-2">Profile Not Found</h3>
+                        <p className="text-red-600 mb-4">
+                            {error || 'The profile you are looking for does not exist or you may not have permission to view it.'}
+                        </p>
+                        <div className="space-y-3">
+                            <button
+                                onClick={() => router.push('/chat')}
+                                className="w-full bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors"
+                            >
+                                Go to Chat
+                            </button>
+                            <button
+                                onClick={() => router.back()}
+                                className="w-full bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors"
+                            >
+                                Go Back
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Additional safety check
     if (!viewingProfile) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
                 <div className="text-center">
-                    <p className="text-gray-600">Profile not found</p>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading profile...</p>
                 </div>
             </div>
         );
@@ -146,9 +270,16 @@ export default function ProfilePage() {
                             >
                                 <ArrowLeft className="h-5 w-5 text-gray-600" />
                             </button>
-                            <h1 className="text-xl font-semibold text-gray-900">
-                                {isOwnProfile ? 'My Profile' : `${viewingProfile.username}'s Profile`}
-                            </h1>
+                            <div className="flex items-center space-x-2">
+                                <h1 className="text-xl font-semibold text-gray-900">
+                                    {isOwnProfile ? 'My Profile' : `${viewingProfile.username}'s Profile`}
+                                </h1>
+                                {isOwnProfile && isEditing && (
+                                    <span className="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                                        Editing Mode
+                                    </span>
+                                )}
+                            </div>
                         </div>
                         {isOwnProfile && (
                             <button
@@ -169,9 +300,9 @@ export default function ProfilePage() {
                     <div className="bg-gradient-to-r from-green-500 to-green-600 p-8">
                         <div className="flex flex-col items-center text-center">
                             <div className="relative">
-                                {viewingProfile.avatar ? (
+                                {editForm.avatar ? (
                                     <img
-                                        src={viewingProfile.avatar}
+                                        src={editForm.avatar}
                                         alt={viewingProfile.username}
                                         className="w-32 h-32 rounded-full border-4 border-white shadow-lg object-cover"
                                     />
@@ -180,7 +311,24 @@ export default function ProfilePage() {
                                         <User className="h-16 w-16 text-gray-400" />
                                     </div>
                                 )}
-                                {isOwnProfile && (
+                                {isOwnProfile && isEditing && (
+                                    <>
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={handleImageUpload}
+                                            className="hidden"
+                                            id="avatar-upload"
+                                        />
+                                        <label
+                                            htmlFor="avatar-upload"
+                                            className="absolute bottom-0 right-0 bg-white rounded-full p-2 border-2 border-white cursor-pointer hover:bg-gray-100"
+                                        >
+                                            <Camera className="h-4 w-4 text-gray-600" />
+                                        </label>
+                                    </>
+                                )}
+                                {isOwnProfile && !isEditing && (
                                     <div className="absolute bottom-0 right-0 bg-green-500 rounded-full p-2 border-2 border-white">
                                         <Shield className="h-4 w-4 text-white" />
                                     </div>
@@ -195,51 +343,83 @@ export default function ProfilePage() {
                         </div>
                     </div>
 
-                    {/* Profile Details */}
                     <div className="p-8">
                         <div className="space-y-6">
-                            {/* Username */}
-                            <div className="flex items-center space-x-4">
+                            <div className="flex items-start space-x-4">
                                 <div className="flex-shrink-0">
                                     <div className="bg-gray-100 rounded-lg p-3">
                                         <User className="h-6 w-6 text-gray-600" />
                                     </div>
                                 </div>
                                 <div className="flex-1">
-                                    <p className="text-sm font-medium text-gray-500">Username</p>
-                                    <p className="text-lg font-medium text-gray-900">{viewingProfile.username}</p>
+                                    <label className="text-sm font-medium text-gray-500 block mb-1">
+                                        Username
+                                    </label>
+                                    {isOwnProfile && isEditing ? (
+                                        <div className="space-y-1">
+                                            <input
+                                                type="text"
+                                                value={editForm.username}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, username: e.target.value }))}
+                                                placeholder="Enter your username"
+                                                className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors"
+                                                minLength={2}
+                                            />
+                                            <p className="text-xs text-gray-500">Username must be at least 2 characters</p>
+                                        </div>
+                                    ) : (
+                                        <p className="text-lg font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{viewingProfile.username}</p>
+                                    )}
                                 </div>
                             </div>
 
                             {/* Email */}
                             {viewingProfile.email && (
-                                <div className="flex items-center space-x-4">
+                                <div className="flex items-start space-x-4">
                                     <div className="flex-shrink-0">
                                         <div className="bg-gray-100 rounded-lg p-3">
                                             <Mail className="h-6 w-6 text-gray-600" />
                                         </div>
                                     </div>
                                     <div className="flex-1">
-                                        <p className="text-sm font-medium text-gray-500">Email</p>
-                                        <p className="text-lg font-medium text-gray-900">{viewingProfile.email}</p>
+                                        <label className="text-sm font-medium text-gray-500 block mb-1">
+                                            Email Address
+                                        </label>
+                                        <div className="space-y-1">
+                                            <p className="text-lg font-medium text-gray-900 bg-gray-50 px-3 rounded-lg">{viewingProfile.email}</p>
+                                        </div>
                                     </div>
                                 </div>
                             )}
 
-                            {/* Phone */}
-                            {viewingProfile.phone && (
-                                <div className="flex items-center space-x-4">
-                                    <div className="flex-shrink-0">
-                                        <div className="bg-gray-100 rounded-lg p-3">
-                                            <Phone className="h-6 w-6 text-gray-600" />
-                                        </div>
-                                    </div>
-                                    <div className="flex-1">
-                                        <p className="text-sm font-medium text-gray-500">Phone</p>
-                                        <p className="text-lg font-medium text-gray-900">{viewingProfile.phone}</p>
+                            <div className="flex items-start space-x-4">
+                                <div className="flex-shrink-0">
+                                    <div className="bg-gray-100 rounded-lg p-3">
+                                        <Phone className="h-6 w-6 text-gray-600" />
                                     </div>
                                 </div>
-                            )}
+                                <div className="flex-1">
+                                    <label className="text-sm font-medium text-gray-500 block mb-1">
+                                        Phone Number
+                                    </label>
+                                    {isOwnProfile && isEditing ? (
+                                        <div className="space-y-1">
+                                            <input
+                                                type="tel"
+                                                value={editForm.phone}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
+                                                placeholder="+1234567890 (optional)"
+                                                className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors"
+                                            />
+                                            <p className="text-xs text-gray-500">Optional: Enter a unique phone number (min 10 digits)</p>
+                                        </div>
+                                    ) : (
+                                        <p className="text-lg font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-lg min-h-[44px] flex items-center">
+                                            {viewingProfile.phone || 'Not provided'}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
 
                             {/* Member Since */}
                             <div className="flex items-center space-x-4">
@@ -278,20 +458,47 @@ export default function ProfilePage() {
                         <div className="mt-8 pt-8 border-t">
                             <div className="flex flex-col sm:flex-row gap-4">
                                 {isOwnProfile ? (
-                                    <>
-                                        <button
-                                            onClick={() => setShowEditModal(true)}
-                                            className="flex-1 bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 transition-colors font-medium"
-                                        >
-                                            Edit Profile
-                                        </button>
-                                        <button
-                                            onClick={() => router.push('/chat')}
-                                            className="flex-1 bg-gray-100 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-200 transition-colors font-medium"
-                                        >
-                                            Back to Chat
-                                        </button>
-                                    </>
+                                    isEditing ? (
+                                        <>
+                                            <button
+                                                onClick={handleSaveProfile}
+                                                disabled={editLoading}
+                                                className="flex-1 bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-70"
+                                            >
+                                                {editLoading ? (
+                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                                ) : (
+                                                    <>
+                                                        <Save size={16} />
+                                                        Save Changes
+                                                    </>
+                                                )}
+                                            </button>
+                                            <button
+                                                onClick={handleEditToggle}
+                                                className="flex-1 bg-gray-100 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-200 transition-colors font-medium flex items-center justify-center gap-2"
+                                            >
+                                                <X size={16} />
+                                                Cancel
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <button
+                                                onClick={handleEditToggle}
+                                                className="flex-1 bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 transition-colors font-medium flex items-center justify-center gap-2"
+                                            >
+                                                <Edit2 size={16} />
+                                                Edit Profile
+                                            </button>
+                                            <button
+                                                onClick={() => router.push('/chat')}
+                                                className="flex-1 bg-gray-100 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                                            >
+                                                Back to Chat
+                                            </button>
+                                        </>
+                                    )
                                 ) : (
                                     <>
                                         <button
@@ -314,12 +521,19 @@ export default function ProfilePage() {
                 </div>
             </div>
 
-            {/* Edit Profile Modal */}
-            {isOwnProfile && (
-                <EditProfileModal
-                    isOpen={showEditModal}
-                    onClose={() => setShowEditModal(false)}
-                    onSuccess={handleEditProfileSuccess}
+            {/* Image Cropper */}
+            {showCropper && (
+                <GlobalImageCropper
+                    image={selectedImage || ''}
+                    crop={crop}
+                    zoom={zoom}
+                    onCropChange={setCrop}
+                    onZoomChange={setZoom}
+                    onCropComplete={handleCropComplete}
+                    onConfirm={handleCropConfirm}
+                    onCancel={handleCropCancel}
+                    title="Crop Profile Picture"
+                    aspectRatio={1}
                 />
             )}
         </div>

@@ -1479,6 +1479,15 @@ export default function ChatPage() {
         }
     };
 
+    // Helper function to get selected user's avatar from conversations
+    const getSelectedUserAvatar = (selectedUsername: string) => {
+        const conversation = conversations.find(conv => 
+            conv.participants.some((p: any) => p.user.username === selectedUsername)
+        );
+        const participant = conversation?.participants.find((p: any) => p.user.username === selectedUsername);
+        return participant?.user.avatar;
+    };
+
     const currentChatMessages = messages.filter(
         (msg: Message) => {
             const shouldInclude = (msg.from === username && msg.to === selectedUser) ||
@@ -1519,6 +1528,7 @@ export default function ChatPage() {
                         <Fragment>
                             <ChatHeader
                                 selectedUser={selectedUser}
+                                selectedUserAvatar={getSelectedUserAvatar(selectedUser)}
                                 onBack={() => setSelectedUser(null)}
                                 onStartVideoCall={() => startCall(false)}
                                 onStartAudioCall={() => startCall(true)}

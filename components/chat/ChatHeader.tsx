@@ -5,6 +5,7 @@ import { Search, MoreVertical, Video, Phone, ArrowLeft, X, Trash2, RefreshCw } f
 
 interface ChatHeaderProps {
     selectedUser: string;
+    selectedUserAvatar?: string;
     onBack: () => void;
     onStartVideoCall: () => void;
     onStartAudioCall: () => void;
@@ -13,7 +14,7 @@ interface ChatHeaderProps {
     onRefreshMessages?: () => void;
 }
 
-export default function ChatHeader({ selectedUser, onBack, onStartVideoCall, onStartAudioCall, onClearChat, onClearAllMessages, onRefreshMessages }: ChatHeaderProps) {
+export default function ChatHeader({ selectedUser, selectedUserAvatar, onBack, onStartVideoCall, onStartAudioCall, onClearChat, onClearAllMessages, onRefreshMessages }: ChatHeaderProps) {
     const [showMenu, setShowMenu] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -34,7 +35,11 @@ export default function ChatHeader({ selectedUser, onBack, onStartVideoCall, onS
                     <ArrowLeft size={24} />
                 </button>
                 <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-300">
-                    <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedUser}`} alt={selectedUser} className="h-full w-full object-cover" />
+                    <img 
+                        src={selectedUserAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedUser}`} 
+                        alt={selectedUser} 
+                        className="h-full w-full object-cover" 
+                    />
                 </div>
                 <div className="flex flex-col">
                     <span className="text-[#111b21] font-medium">{selectedUser}</span>

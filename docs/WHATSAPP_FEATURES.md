@@ -1,8 +1,8 @@
-# 📱 WhatsApp Web Features Analysis & Implementation
+# 📱 Next Chat Web Features Analysis & Implementation
 
 ## 🎯 Target Features Overview
 
-This document outlines the WhatsApp Web features to be implemented in our Next.js WebRTC application, categorized by priority and complexity.
+This document outlines the Next Chat Web features to be implemented in our Next.js WebRTC application, categorized by priority and complexity.
 
 ## 🌟 Core Messaging Features
 
@@ -147,7 +147,7 @@ This document outlines the WhatsApp Web features to be implemented in our Next.j
 ## 🚀 Advanced Features
 
 ### 📋 To Implement
-- **WhatsApp Web Integration**: Connect with WhatsApp
+- **Next Chat Web Integration**: Connect with WhatsApp
 - **Multi-Device Support**: Use on multiple devices
 - **Chat Backup**: Cloud backup functionality
 - **Chat Migration**: Transfer between devices

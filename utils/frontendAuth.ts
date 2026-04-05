@@ -4,7 +4,8 @@ export interface UserData {
     id: string;
     username: string;
     email: string;
-    phoneNumber: string;
+    phone: string; // Changed from phoneNumber to phone to match API response
+    avatar?: string;
 }
 
 export interface StoredSession {
