@@ -17,7 +17,7 @@ async function getAuthUser(req: NextApiRequest): Promise<SessionPayload | null> 
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith('Bearer ')) {
         accessToken = authHeader.substring(7);
-    } 
+    }
     else {
         const cookieHeader = req.headers.cookie;
         if (!cookieHeader) {
@@ -27,18 +27,18 @@ async function getAuthUser(req: NextApiRequest): Promise<SessionPayload | null> 
         const cookies = parse(cookieHeader);
         accessToken = cookies['access_token'];
     }
-    
+
     if (!accessToken) {
         return null;
     }
 
     try {
         const { payload } = await jwtVerify(accessToken, secret) as { payload: SessionPayload };
-        
+
         if (payload.type !== 'access') {
             return null;
         }
-        
+
         return payload;
     } catch {
         return null;
@@ -218,7 +218,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 }
             }
 
-            const metaUpdates: any = { updatedAt: new Date().toISOString() };
+            const metaUpdates: any = { updated_at: new Date().toISOString() };
             if (bio !== undefined) metaUpdates.bio = bio;
             if (dateOfBirth !== undefined) metaUpdates.dateOfBirth = dateOfBirth;
             if (fatherName !== undefined) metaUpdates.fatherName = fatherName;
@@ -247,8 +247,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                     .from('users_meta')
                     .insert({
                         user_id: authUser.userId,
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString(),
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
                         ...metaUpdates
                     })
                     .select('bio, dateOfBirth, fatherName, address, cnic, gender')
@@ -323,11 +323,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 .single();
 
             const meta = currentMeta || {};
-            
-            // Use hobbies from meta if they exist
-            const finalHobbies: any[] = (meta.hobbies && Array.isArray(meta.hobbies)) ? meta.hobbies : [];
 
-            console.log("Final hobbies:", finalHobbies);
+            let finalHobbies: any[] = [];
+            if (meta.hobbies) {
+                try {
+                    let hobbyIds: string[] = [];
+                    if (typeof meta.hobbies === 'string') {
+                        hobbyIds = JSON.parse(meta.hobbies);
+                    } else if (Array.isArray(meta.hobbies)) {
+                        hobbyIds = meta.hobbies.map((h: any) => typeof h === 'string' ? h : h.id);
+                    }
+                    
+                    if (hobbyIds.length > 0) {
+                        const { data: hobbiesData } = await supabaseAdmin
+                            .from('hobby')
+                            .select('id, name')
+                            .in('id', hobbyIds);
+                        
+                        finalHobbies = hobbiesData || [];
+                    }
+                } catch (err) {
+                    console.error('Error processing hobbies in PATCH:', err);
+                    finalHobbies = [];
+                }
+            }
+
+            console.log("finalHobbiesfinalHobbiesfinalHobbiesfinalHobbies", finalHobbies)
 
             return res.status(200).json({
                 id: userData.id,

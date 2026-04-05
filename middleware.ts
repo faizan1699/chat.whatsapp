@@ -30,7 +30,6 @@ export async function middleware(request: NextRequest) {
     if (!session) {
       // Redirect to login with return URL
       const loginUrl = new URL('/login', request.url);
-      loginUrl.searchParams.set('returnTo', pathname);
       return NextResponse.redirect(loginUrl);
     }
   }

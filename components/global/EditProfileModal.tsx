@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { X, User, Loader2, Lock, Mail, Phone, Camera, Upload } from 'lucide-react';
 import api from '@/utils/api';
-import { useProfile } from '@/contexts/ProfileContext';
+import { useProfile } from '@/hooks/useReduxProfile';
 import { useImageCropper } from '@/hooks/useImageCropper';
 import GlobalImageCropper from './GlobalImageCropper';
 

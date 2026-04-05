@@ -1,7 +1,6 @@
 import api from '../utils/api';
 
 export const apiService = {
-    // User APIs
     searchUser: async (query: string) => {
         const response = await api.get(`/users/search?q=${query}`);
         return response.data;
@@ -12,7 +11,16 @@ export const apiService = {
         return response.data;
     },
 
-    // Conversation APIs
+    getUserProfile: async (username: string) => {
+        const response = await api.get(`/users/${username}`);
+        return response.data;
+    },
+
+    updateProfile: async (profileData: any) => {
+        const response = await api.patch('/auth/profile', profileData);
+        return response.data;
+    },
+
     getConversations: async (userId: string) => {
         const response = await api.get(`/conversations?userId=${userId}`);
         return response.data;

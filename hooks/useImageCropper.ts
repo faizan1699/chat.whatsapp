@@ -17,6 +17,7 @@ interface UseImageCropperReturn {
     handleCropCancel: () => void;
     resetCropper: () => void;
     convertBlobToBase64: (blob: Blob) => Promise<string>;
+    setShowCropper: (show: boolean) => void;
 }
 
 const createImage = (url: string): Promise<HTMLImageElement> =>
@@ -122,7 +123,6 @@ export function useImageCropper(): UseImageCropperReturn {
             URL.revokeObjectURL(croppedImageUrl);
             setSelectedImage(null);
         } catch (error) {
-            console.error('Error cropping image:', error);
             alert('Failed to crop image');
         }
     }, [croppedAreaPixels, selectedImage, convertBlobToBase64]);
@@ -137,13 +137,19 @@ export function useImageCropper(): UseImageCropperReturn {
     }, [selectedImage]);
 
     const resetCropper = useCallback(() => {
+        if (selectedImage) {
+            URL.revokeObjectURL(selectedImage);
+        }
+        if (croppedImage) {
+            URL.revokeObjectURL(croppedImage);
+        }
         setSelectedImage(null);
         setCroppedImage(null);
         setShowCropper(false);
         setCrop({ x: 0, y: 0 });
         setZoom(1);
         setCroppedAreaPixels(null);
-    }, []);
+    }, [selectedImage, croppedImage]);
 
     return {
         selectedImage,
@@ -151,6 +157,7 @@ export function useImageCropper(): UseImageCropperReturn {
         showCropper,
         crop,
         zoom,
+        setShowCropper,
         setCrop,
         setZoom,
         handleImageSelect,

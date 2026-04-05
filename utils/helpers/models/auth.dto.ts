@@ -61,6 +61,8 @@ export class UserProfileDTO {
   address?: string | null = null;
   cnic?: string | null = null;
   gender?: string | null = null;
+  lastSeen?: string = '';
+  createdAt?: string = '';
   hobbies?: Array<{
     id: string;
     name: string;

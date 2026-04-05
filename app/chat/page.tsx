@@ -64,6 +64,7 @@ export default function ChatPage() {
     const {
         sendMessage,
         sendVoiceMessage,
+        getOrCreateConversation,
         loading: messageLoading,
         error: messageError
     } = useMessageApi();
@@ -385,35 +386,17 @@ export default function ChatPage() {
                 c.participants.some((p: any) => p.user.username === selectedUsername)
             );
 
-
             if (!currentConversation) {
                 const cookies = getClientCookies();
                 const userId = cookies['user-id'] || SecureSession.getUserId();
 
                 if (userId) {
-                    const { data: selectedUserData } = await supabaseAdmin
-                        .from('users')
-                        .select('id')
-                        .eq('username', selectedUsername)
-                        .maybeSingle();
-
-
-                    if (selectedUserData) {
-                        const response = await fetch('/api/conversations', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                participantIds: [userId, selectedUserData.id]
-                            }),
-                        });
-
-                        if (response.ok) {
-                            currentConversation = await response.json();
-                            setConversations(prev => [...prev, currentConversation]);
-                        }
-                    }
+                    currentConversation = await getOrCreateConversation(
+                        conversations,
+                        selectedUsername,
+                        userId
+                    );
+                    setConversations(prev => [...prev, currentConversation]);
                 }
             }
 

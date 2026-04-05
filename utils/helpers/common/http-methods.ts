@@ -22,9 +22,22 @@ interface ApiResponse<T = any> {
   };
 }
 
-// Get authentication headers
 const getHeaders = () => {
-  const token = localStorage.getItem('access_token');
+  // First try localStorage, then try cookies
+  let token = localStorage.getItem('access_token');
+  
+  // If not in localStorage, try to get from cookies
+  if (!token && typeof document !== 'undefined') {
+    const cookies = document.cookie.split(';');
+    for (const cookie of cookies) {
+      const [name, value] = cookie.trim().split('=');
+      if (name === 'access_token') {
+        token = value;
+        break;
+      }
+    }
+  }
+  
   const headers: any = {
     'Content-Type': 'application/json',
   };

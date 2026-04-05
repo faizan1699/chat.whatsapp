@@ -15,6 +15,7 @@ interface GlobalImageCropperProps {
     onCancel: () => void;
     title?: string;
     aspectRatio?: number;
+    resetCropper?: () => void;
 }
 
 export default function GlobalImageCropper({
@@ -27,6 +28,7 @@ export default function GlobalImageCropper({
     onConfirm,
     onCancel,
     title = "Crop Image",
+    resetCropper,
     aspectRatio = 1
 }: GlobalImageCropperProps) {
     return (

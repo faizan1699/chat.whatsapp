@@ -4,37 +4,10 @@ import { createClient } from '@supabase/supabase-js';
 import { Server as ServerIO } from 'socket.io';
 import { Server as NetServer } from 'http';
 import { Socket as NetSocket } from 'net';
-import { jwtVerify, JWTPayload } from 'jose';
-import { secret } from '../../../lib/jwt-config';
+import { authenticate } from '../../../utils/apiAuth';
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
-interface SessionPayload extends JWTPayload {
-    userId: string;
-    username: string;
-    type: 'access';
-}
-
-async function authenticate(req: NextApiRequest): Promise<SessionPayload | null> {
-    try {
-        const authHeader = req.headers.authorization;
-        if (!authHeader?.startsWith('Bearer ')) {
-            return null;
-        }
-
-        const token = authHeader.substring(7);
-        const { payload } = await jwtVerify(token, secret) as { payload: SessionPayload };
-
-        if (payload.type !== 'access') {
-            return null;
-        }
-
-        return payload;
-    } catch (error) {
-        console.error('Authentication error:', error);
-        return null;
-    }
-}
 
 interface SocketWithIO extends NetSocket {
     server: NetServer & {

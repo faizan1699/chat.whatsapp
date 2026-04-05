@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, MoreVertical, Video, Phone, ArrowLeft, X, Trash2, RefreshCw } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 interface ChatHeaderProps {
     selectedUser: string;
@@ -17,6 +18,11 @@ interface ChatHeaderProps {
 export default function ChatHeader({ selectedUser, selectedUserAvatar, onBack, onStartVideoCall, onStartAudioCall, onClearChat, onClearAllMessages, onRefreshMessages }: ChatHeaderProps) {
     const [showMenu, setShowMenu] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
+    const router = useRouter();
+
+    const handleProfileClick = () => {
+        router.push(`/profile?user=${selectedUser}`);
+    };
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -34,20 +40,26 @@ export default function ChatHeader({ selectedUser, selectedUserAvatar, onBack, o
                 <button className="md:hidden text-[#54656f]" onClick={onBack}>
                     <ArrowLeft size={24} />
                 </button>
-                <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-300">
-                    <img 
-                        src={selectedUserAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedUser}`} 
-                        alt={selectedUser} 
-                        className="h-full w-full object-cover" 
-                    />
-                </div>
-                <div className="flex flex-col">
-                    <span className="text-[#111b21] font-medium">{selectedUser}</span>
-                    <div className="flex items-center gap-1">
-                        <div className="w-2 h-2 rounded-full bg-[#00a884]"></div>
-                        <span className="text-[12px] text-[#667781]">online</span>
+                <button 
+                    onClick={handleProfileClick}
+                    className="flex items-center gap-3 hover:bg-black/5 p-1 rounded-lg transition-colors"
+                    title="View Profile"
+                >
+                    <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-300">
+                        <img 
+                            src={selectedUserAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedUser}`} 
+                            alt={selectedUser} 
+                            className="h-full w-full object-cover" 
+                        />
                     </div>
-                </div>
+                    <div className="flex flex-col">
+                        <span className="text-[#111b21] font-medium">{selectedUser}</span>
+                        <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 rounded-full bg-[#00a884]"></div>
+                            <span className="text-[12px] text-[#667781]">online</span>
+                        </div>
+                    </div>
+                </button>
             </div>
             <div className="flex items-center gap-2 text-[#54656f]">
                 {onRefreshMessages && (
@@ -65,9 +77,6 @@ export default function ChatHeader({ selectedUser, selectedUserAvatar, onBack, o
                     <X size={20} className="group-hover:text-red-500 transition-colors" />
                 </button>
                 <div className="w-[1px] h-6 bg-[#d1d7db] mx-1"></div>
-                {/* <button className="hover:bg-black/5 p-2 rounded-full transition-colors">
-                    <Search size={20} />
-                </button> */}
               
                 <div className="relative" ref={menuRef}>
                     <button 

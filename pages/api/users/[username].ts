@@ -1,7 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../utils/supabase-server';
+import { authenticate } from '../../../utils/apiAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+    // const session = await authenticate(req);
+    // if (!session) {
+    //     return res.status(401).json({ error: 'Unauthorized' });
+    // }
+
     if (req.method !== 'GET') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
@@ -23,25 +29,44 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return res.status(404).json({ error: 'User not found' });
         }
 
-        // Get user bio from users_meta table
         const { data: meta_data, error: metaError } = await supabaseAdmin
             .from('users_meta')
-            .select('bio, hobbies')
+            .select('*')
             .eq('user_id', user.id)
             .single();
 
         const bio = metaError ? '' : (meta_data?.bio || '');
-
-        // Get user hobbies from hobbies array in users_meta
-        let hobbies: any[] = [];
-        if (meta_data && meta_data.hobbies && Array.isArray(meta_data.hobbies) && meta_data.hobbies.length > 0) {
-            const { data: hobbiesData } = await supabaseAdmin
-                .from('hobby')
-                .select('id, name')
-                .in('id', meta_data.hobbies);
-            
-            hobbies = hobbiesData || [];
+        const meta: any = metaError ? {} : (meta_data || {});
+        
+        let hobbyIds: string[] = [];
+        if (meta.hobbies) {
+            try {
+                if (typeof meta.hobbies === 'string') {
+                    hobbyIds = JSON.parse(meta.hobbies);
+                } else if (Array.isArray(meta.hobbies)) {
+                    hobbyIds = meta.hobbies;
+                }
+            } catch (err) {
+                hobbyIds = [];
+            }
         }
+        
+        delete meta.hobbies;
+
+        let hobbiesWithNames: any[] = [];
+        if (hobbyIds.length > 0) {
+            try {
+                const { data: hobbiesData } = await supabaseAdmin
+                    .from('hobby')
+                    .select('id, name')
+                    .in('id', hobbyIds);
+
+                hobbiesWithNames = hobbiesData || [];
+            } catch (err) {
+                console.error('Error fetching hobby details:', err);
+            }
+        }
+
 
         return res.status(200).json({
             id: user.id,
@@ -50,9 +75,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             phone: user.phone_number,
             avatar: user.avatar,
             bio: bio,
-            hobbies: hobbies,
+            hobbies: hobbiesWithNames,
             createdAt: user.created_at,
-            lastSeen: user.last_seen
+            lastSeen: user.last_seen,
+            ...meta
         });
     } catch (error) {
         console.error('Error fetching user profile:', error);

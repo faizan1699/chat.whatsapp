@@ -35,18 +35,9 @@ const RegisterForm = () => {
         confirmPassword: false
     });
     const [avatarPreview, setAvatarPreview] = useState<string>('');
-    const [verificationSent, setVerificationSent] = useState(false);
     const [step, setStep] = useState(1);
     const router = useRouter();
-    const searchParams = useSearchParams();
     const { register: registerUser, loading, error } = useAuthHook();
-    const [formData, setFormData] = useState<RegisterFormData>({
-        username: '',
-        email: '',
-        password: '',
-        phoneNumber: '',
-        termsAccepted: false
-    });
 
     const {
         selectedImage,
@@ -97,8 +88,7 @@ const RegisterForm = () => {
     const onSubmit = async (data: RegisterFormData) => {
         try {
             await registerUser(data);
-            const returnTo = searchParams?.get('returnTo') || '/chat';
-            router.push(returnTo);
+            router.push("/login");
         } catch (error) {
             console.error('Registration failed:', error);
         }

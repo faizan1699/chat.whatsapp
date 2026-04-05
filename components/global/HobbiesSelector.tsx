@@ -6,6 +6,7 @@ import { debounce } from '@/utils/debounce';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { HOBBIES_APIS } from '@/libs/apis';
 import { showCustomToast } from './CustomToast';
+import DropdownArrow from '@/assets/svg/DropdownArrow';
 
 interface Hobby {
     id: string;
@@ -47,15 +48,11 @@ const HobbiesSelector = ({
 
     const debouncedSearch = useCallback(
         debounce((query: string) => {
-            if (query.trim() === '') {
-                setSearchResults([]);
-                return;
-            }
-
-            const filtered = hobbies.filter(hobby =>
-                hobby.name.toLowerCase().includes(query.toLowerCase()) &&
-                !selectedHobbies.includes(hobby.id)
-            );
+            const filtered = hobbies.filter(hobby => {
+                const matchesSearch = !query.trim() || hobby.name.toLowerCase().includes(query.toLowerCase());
+                const notSelected = !selectedHobbies.includes(hobby.id);
+                return matchesSearch && notSelected;
+            });
             setSearchResults(filtered);
         }, 300),
         [hobbies, selectedHobbies]
@@ -186,55 +183,78 @@ const HobbiesSelector = ({
             )}
 
             <div className="flex gap-2">
-                <div className="relative flex-1" ref={dropdownRef}>
-                    <input
-                        type="text"
-                        value={searchTerm}
-                        onChange={handleSearchChange}
-                        onFocus={() => setShowDropdown(true)}
-                        onClick={() => setShowDropdown(true)}
-                        placeholder="Search or select a hobby..."
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    />
+                <div className="relative flex-1 group" ref={dropdownRef}>
+                    <button
+                        type="button"
+                        onClick={() => setShowDropdown(!showDropdown)}
+                        className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors text-left flex justify-between items-center"
+                    >
+                        <span className="text-gray-500">
+                            {searchTerm || 'Search or select a hobby...'}
+                        </span>
+                        <DropdownArrow 
+                            isOpen={showDropdown} 
+                            className="text-gray-400" 
+                        />
+                    </button>
 
                     {showDropdown && (
-                        <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                            {searchResults.length > 0 ? (
-                                searchResults.map((hobby: Hobby , index) => {
-                                    const isSelected = selectedHobbies.includes(hobby.id);
-                                    return (
+                        <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg">
+                            {/* Search input */}
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={handleSearchChange}
+                                placeholder="Search items"
+                                autoComplete="off"
+                                className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors"
+                                autoFocus
+                            />
+                            
+                            {/* Dropdown content */}
+                            <div className="max-h-60 overflow-y-auto">
+                                {searchResults.length > 0 ? (
+                                    searchResults.map((hobby: Hobby, index) => {
+                                        const isSelected = selectedHobbies.includes(hobby.id);
+                                        return (
+                                            <button
+                                                key={index}
+                                                type="button"
+                                                onClick={() => {
+                                                    if (!isSelected && selectedHobbies.length < 15) {
+                                                        handleHobbyToggle(hobby.id);
+                                                        setSearchTerm('');
+                                                    }
+                                                }}
+                                                className={`w-full px-3 py-2 text-left hover:bg-gray-100 transition-colors flex items-center justify-between ${isSelected ? 'bg-green-50' : ''}`}
+                                            >
+                                                <span className="text-gray-900">{hobby.name}</span>
+                                                {isSelected ? <Tag size={14} className="text-green-600" /> : <div className="w-4" />}
+                                            </button>
+                                        );
+                                    })
+                                ) : searchTerm.trim() && selectedHobbies.length < 15 ? (
+                                    <div className="p-3">
+                                        <p className="text-sm text-gray-500 mb-2">No hobbies found. Add "{searchTerm}" as a new hobby?</p>
                                         <button
-                                            key={index}
                                             type="button"
-                                            onClick={() => {
-                                                if (!isSelected && selectedHobbies.length < 15) {
-                                                    handleHobbyToggle(hobby.id);
-                                                }
-                                            }}
-                                            className={`w-full px-3 py-2 text-left hover:bg-gray-100 transition-colors flex items-center justify-between ${isSelected ? 'bg-green-50' : ''}`}
+                                            onClick={handleAddFromSearch}
+                                            disabled={addingHobby}
+                                            className="w-full px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
                                         >
-                                            <span className="flex-1">{hobby.name}</span>
-                                            {isSelected ? <Tag size={14} className="text-green-600" /> : <div className="w-4" />}
+                                            {addingHobby ? 'Adding...' : `Add "${searchTerm}"`}
                                         </button>
-                                    );
-                                })
-                            ) : searchTerm.trim() && selectedHobbies.length < 15 ? (
-                                <div className="p-3">
-                                    <p className="text-sm text-gray-500 mb-2">No hobbies found. Add "{searchTerm}" as a new hobby?</p>
-                                    <button
-                                        type="button"
-                                        onClick={handleAddFromSearch}
-                                        disabled={addingHobby}
-                                        className="w-full px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
-                                    >
-                                        {addingHobby ? 'Adding...' : `Add "${searchTerm}"`}
-                                    </button>
-                                </div>
-                            ) : searchTerm.trim() ? (
-                                <div className="p-3">
-                                    <p className="text-sm text-gray-500">Maximum 15 hobbies reached. Remove some hobbies to add new ones.</p>
-                                </div>
-                            ) : null}
+                                    </div>
+                                ) : searchTerm.trim() ? (
+                                    <div className="p-3">
+                                        <p className="text-sm text-gray-500">Maximum 15 hobbies reached. Remove some hobbies to add new ones.</p>
+                                    </div>
+                                ) : (
+                                    <div className="p-3">
+                                        <p className="text-sm text-gray-500">All available hobbies are already selected.</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>

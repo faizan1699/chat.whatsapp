@@ -50,8 +50,7 @@ function LoginForm() {
    
     useEffect(() => {
             if (frontendAuth.isAuthenticated()) {
-                const returnTo = searchParams?.get('returnTo') || '/chat';
-                router.push(returnTo);
+                router.push("/chat");
             }
         }, [router, searchParams]);
 

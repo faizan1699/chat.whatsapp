@@ -3,7 +3,7 @@ import { MoreVertical, X, Archive, Trash2, Bell, BellOff, User, Plus, LogOut, Se
 import { useRouter } from 'next/navigation';
 import UserSearch from '../chat/UserSearch';
 import { apiService } from '@/services/apiService';
-import { useProfile } from '@/contexts/ProfileContext';
+import { useProfile } from '@/hooks/useReduxProfile';
 import { Message } from '@/types/message';
 
 const debounce = <T extends (...args: any[]) => void>(func: T, delay: number): ((...args: Parameters<T>) => void) => {
@@ -114,8 +114,6 @@ export default function Sidebar({
     };
 
     const deleteChat = (user: string) => {
-        // Implement delete chat functionality
-        console.log('Delete chat:', user);
         setContextMenuUser(null);
         setContextMenuPosition(null);
     };
@@ -132,7 +130,6 @@ export default function Sidebar({
     };
 
     const handleSelectGlobalUser = async (user: any) => {
-        // Here we initiate a conversation via API
         try {
             const userDataStr = localStorage.getItem('user_data') || '';
             const userData = userDataStr ? JSON.parse(userDataStr) : null;
@@ -148,7 +145,7 @@ export default function Sidebar({
                 return;
             }
 
-            const conversation = await apiService.createConversation([userId, user.id]);
+            await apiService.createConversation([userId, user.id]);
             setSelectedUser(user.username);
             setShowGlobalSearch(false);
         } catch (error) {
@@ -156,7 +153,6 @@ export default function Sidebar({
         }
     };
 
-    // Get unique conversation partners from conversations
     const conversationPartners = useMemo(() => {
         const partners = new Map<string, { id: string; username: string; avatar?: string }>();
         conversations.forEach(conv => {
@@ -197,8 +193,11 @@ export default function Sidebar({
     return (
         <div className="flex h-full w-full flex-col bg-white overflow-hidden">
             <header className="flex h-[60px] items-center justify-between bg-[#f0f2f5] px-4 py-2">
-                <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-300 cursor-pointer" onClick={() => router.push('/profile')}>
+                <div
+                    className="flex items-center gap-3"
+                    onClick={() => router.push(`/profile?user=${username}`)}
+                >
+                    <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-300 cursor-pointer">
                         {profile?.avatar ? (
                             <img src={profile.avatar} alt="avatar" className="h-full w-full object-cover" />
                         ) : (
@@ -319,15 +318,15 @@ export default function Sidebar({
                                 )}
                                 <div className="relative h-12 w-12 flex-shrink-0">
                                     <div className="h-full w-full overflow-hidden rounded-full bg-slate-200">
-                                        <img 
-                                            src={user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`} 
-                                            alt={user.username} 
-                                            className="h-full w-full object-cover" 
+                                        <img
+                                            src={user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`}
+                                            alt={user.username}
+                                            className="h-full w-full object-cover"
                                         />
                                     </div>
                                     <div className="absolute right-0 bottom-0 h-3 w-3 rounded-full border-2 border-white bg-[#25d366]"></div>
                                 </div>
-                                <div 
+                                <div
                                     className="flex flex-1 flex-col overflow-hidden text-left cursor-pointer"
                                     onClick={() => setSelectedUser(user.username)}
                                 >
