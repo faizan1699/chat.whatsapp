@@ -27,16 +27,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             const meta: any = metaError ? {} : (meta_data || {});
 
-            // Get hobby names for IDs stored in meta.hobbies
-            let hobbies: any[] = [];
-            if (meta.hobbies && Array.isArray(meta.hobbies) && meta.hobbies.length > 0) {
-                const { data: hobbiesData } = await supabaseAdmin
-                    .from('hobby')
-                    .select('id, name')
-                    .in('id', meta.hobbies);
-                
-                hobbies = hobbiesData || [];
+            // Get hobbies from meta.hobbies if it exists
+            let hobbyIds: string[] = [];
+            if (meta.hobbies) {
+                try {
+                    if (typeof meta.hobbies === 'string') {
+                        hobbyIds = JSON.parse(meta.hobbies);
+                    } else if (Array.isArray(meta.hobbies)) {
+                        hobbyIds = meta.hobbies;
+                    }
+                } catch (err) {
+                    hobbyIds = [];
+                }
             }
+
+            let hobbiesWithNames: any[] = [];
+            if (hobbyIds.length > 0) {
+                try {
+                    const { data: hobbiesData } = await supabaseAdmin
+                        .from('hobby')
+                        .select('id, name')
+                        .in('id', hobbyIds);
+
+                    hobbiesWithNames = hobbiesData || [];
+                } catch (err) {
+                    console.error('Error fetching hobby details:', err);
+                }
+            }
+
+
 
             return res.status(200).json({
                 id: userData.id,
@@ -50,7 +69,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 address: meta.address || null,
                 cnic: meta.cnic || null,
                 gender: meta.gender || null,
-                hobbies: hobbies,
+                hobbies: hobbiesWithNames,
             });
         } catch (err) {
             console.error('Profile GET error:', err);
@@ -64,7 +83,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
-        // Get current user data first
         const { data: currentUser, error: currentUserError } = await supabaseAdmin
             .from('users')
             .select('username, phone_number')
@@ -108,7 +126,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                     .eq('phone_number', phone)
                     .single();
 
-                if (existingPhoneError && existingPhoneError.code !== 'PGRST116') { 
+                if (existingPhoneError && existingPhoneError.code !== 'PGRST116') {
                     console.error('Error checking existing phone:', existingPhoneError);
                     return res.status(500).json({ error: 'Failed to validate phone number' });
                 }
@@ -249,7 +267,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                     .select('id, username, email, phone_number, avatar')
                     .eq('id', authUser.userId)
                     .single();
-
                 if (error || !data) {
                     return res.status(404).json({ error: 'User not found' });
                 }
@@ -261,18 +278,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 .select('*')
                 .eq('user_id', authUser.userId)
                 .single();
-                
+
             const meta = currentMeta || {};
-            let finalHobbies: any[] = [];
             
-            if (meta.hobbies && Array.isArray(meta.hobbies) && meta.hobbies.length > 0) {
-                const { data: hobbiesData } = await supabaseAdmin
-                    .from('hobby')
-                    .select('id, name')
-                    .in('id', meta.hobbies);
-                
-                finalHobbies = hobbiesData || [];
-            }
+            // Use hobbies from meta if they exist
+            const finalHobbies: any[] = (meta.hobbies && Array.isArray(meta.hobbies)) ? meta.hobbies : [];
+
+            console.log("Final hobbies:", finalHobbies);
 
             return res.status(200).json({
                 id: userData.id,

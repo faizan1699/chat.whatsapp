@@ -11,13 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!username || !password || (!email && !phoneNumber)) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
-
-    // if (!termsAccepted) {
-    //     return res.status(400).json({ error: 'Terms and conditions must be accepted' });
-    // }
-
     try {
-        // Check if username, email, or phone already exists
         let query = `username.eq.${username}`;
         if (email) query += `,email.eq.${email}`;
         if (phoneNumber) query += `,phone_number.eq.${phoneNumber}`;
@@ -97,38 +91,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             throw error;
         }
 
-        if (userMeta && Object.keys(userMeta).length > 0) {
+        if ((userMeta && Object.keys(userMeta).length > 0) || (hobbies && Array.isArray(hobbies))) {
             const { error: metaError } = await supabaseAdmin
                 .from('users_meta')
                 .insert({
                     user_id: user.id,
-                    bio: userMeta.bio || null,
-                    dateOfBirth: userMeta.dateOfBirth || null,
-                    fatherName: userMeta.fatherName || null,
-                    address: userMeta.address || null,
-                    cnic: userMeta.cnic || null,
-                    gender: userMeta.gender || null
+                    bio: userMeta?.bio || null,
+                    dateOfBirth: userMeta?.dateOfBirth || null,
+                    fatherName: userMeta?.fatherName || null,
+                    address: userMeta?.address || null,
+                    cnic: userMeta?.cnic || null,
+                    gender: userMeta?.gender || null,
+                    hobbies: Array.isArray(hobbies) ? hobbies : []
                 });
 
             if (metaError) {
                 console.error('UserMeta creation error:', metaError);
-            }
-        }
-
-        if (hobbies && Array.isArray(hobbies) && hobbies.length > 0) {
-            const userHobbies = hobbies.map((hobbyId: string) => ({
-                userId: user.id,
-                hobbyId,
-                createdAt: new Date().toISOString()
-            }));
-
-            const { error: hobbiesError } = await supabaseAdmin
-                .from('user_hoby')
-                .insert(userHobbies);
-
-            if (hobbiesError) {
-                console.error('UserHobbies creation error:', hobbiesError);
-                // Don't fail registration if hobbies creation fails, just log it
             }
         }
 

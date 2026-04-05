@@ -16,9 +16,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 return res.status(400).json({ error: 'Hobby IDs must be an array' });
             }
 
-            // User hobbies are not stored in separate table
-            // Just return success without saving
-            console.log('Hobbies received but not stored:', hobbyIds);
+            const { error: updateError } = await supabaseAdmin
+                .from('users_meta')
+                .update({ 
+                    hobbies: hobbyIds,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('user_id', authUser.userId);
+
+            if (updateError) {
+                console.error('Error updating hobbies in meta:', updateError);
+                return res.status(500).json({ error: 'Failed to update hobbies' });
+            }
 
             return res.status(200).json({ message: 'Hobbies updated successfully' });
         } catch (err) {
