@@ -138,6 +138,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             message: 'Logged in successfully',
             accessToken,
             refreshToken,
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                phone: user.phone_number,
+                avatar: user.avatar
+            }
         });
 
     } catch (error: unknown) {

@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import api from '@/utils/api';
+import { userStorage } from '@/utils/userStorage';
 
 interface UserProfile {
     id: string;
@@ -37,26 +38,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
             const response = await api.get('/auth/profile');
             const newProfile = response.data;
             setProfile(newProfile);
-            
-            // Update localStorage
-            localStorage.setItem('user_data', JSON.stringify({
-                id: newProfile.id,
-                username: newProfile.username,
-                email: newProfile.email,
-                phone: newProfile.phone || '',
-                bio: newProfile.bio || '',
-                dateOfBirth: newProfile.dateOfBirth || '',
-                fatherName: newProfile.fatherName || '',
-                address: newProfile.address || '',
-                cnic: newProfile.cnic || '',
-                gender: newProfile.gender || '',
-                hobbies: newProfile.hobbies || []
-            }));
+
+            // Update localStorage using global utility
+            userStorage.set(newProfile);
         } catch (error: any) {
             console.error('Failed to fetch profile:', error);
             // If auth error, clear session and localStorage
             if (error?.response?.status === 401) {
-                localStorage.clear();
+                userStorage.clear();
                 setProfile(null);
             }
         } finally {
@@ -66,43 +55,28 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
     const updateProfile = (newProfile: UserProfile) => {
         setProfile(newProfile);
-        
-        // Update localStorage
-        localStorage.setItem('user_data', JSON.stringify({
-            id: newProfile.id,
-            username: newProfile.username,
-            email: newProfile.email,
-            phone: newProfile.phone || '',
-            bio: newProfile.bio || '',
-            dateOfBirth: newProfile.dateOfBirth || '',
-            fatherName: newProfile.fatherName || '',
-            address: newProfile.address || '',
-            cnic: newProfile.cnic || '',
-            gender: newProfile.gender || '',
-            hobbies: newProfile.hobbies || []
-        }));
+        userStorage.set(newProfile);
     };
 
     useEffect(() => {
-        const storedProfile = localStorage.getItem('user_data');
+        const storedProfile = userStorage.get();
         const accessToken = localStorage.getItem('session_token');
-        
+
         if (storedProfile && accessToken) {
-            const parsedProfile = JSON.parse(storedProfile);
             setProfile({
-                ...parsedProfile,
-                avatar: parsedProfile.avatar || '',
-                bio: parsedProfile.bio || '',
-                dateOfBirth: parsedProfile.dateOfBirth || '',
-                fatherName: parsedProfile.fatherName || '',
-                address: parsedProfile.address || '',
-                cnic: parsedProfile.cnic || '',
-                gender: parsedProfile.gender || '',
-                hobbies: parsedProfile.hobbies || []
+                ...storedProfile,
+                avatar: storedProfile.avatar || '',
+                bio: storedProfile.bio || '',
+                dateOfBirth: storedProfile.dateOfBirth || '',
+                fatherName: storedProfile.fatherName || '',
+                address: storedProfile.address || '',
+                cnic: storedProfile.cnic || '',
+                gender: storedProfile.gender || '',
+                hobbies: storedProfile.hobbies || []
             });
             setLoading(false);
         }
-        
+
         if (accessToken) {
             refreshProfile();
         } else {

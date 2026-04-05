@@ -4,6 +4,7 @@ import { frontendAuth } from '@/utils/frontendAuth';
 import { hasCookieAcceptance, getCookiePreferences } from '@/utils/cookieConsent';
 import AUTH_APIS from '@/libs/apis/auth.api';
 import { useRouter } from 'next/navigation';
+import { userStorage } from '@/utils/userStorage';
 
 interface LoginCredentials {
   identifier: string;
@@ -67,6 +68,22 @@ export const useAuthHook = () => {
   const [error, setError] = useState<string | null>(null);
 
 
+  const getProfile = useCallback(async (): Promise<UserProfile> => {
+    setLoading(true);
+   
+
+    try {
+      const response = await AUTH_APIS.getProfile();
+      setLoading(false);
+      return response as UserProfile;
+    } catch (err: any) {
+      setLoading(false);
+      const errorMessage = err.response?.data?.error || 'Failed to fetch profile';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  }, []);
+
   const login = useCallback(async (credentials: LoginCredentials) => {
 
     setLoading(true);
@@ -83,7 +100,33 @@ export const useAuthHook = () => {
       const response = await AUTH_APIS.login(params);
 
       if (response.status) {
-        getProfile();
+        const user = response?.user || {};
+        frontendAuth.setSession(
+          response.accessToken,
+          response.refreshToken,
+          {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            phone: user.phone || ''
+          }
+        );
+
+        try {
+          const profileData = await getProfile();
+          console.log(profileData)
+          userStorage.set({
+            ...profileData,
+            dateOfBirth: profileData.dateOfBirth || undefined,
+            fatherName: profileData.fatherName || undefined,
+            address: profileData.address || undefined,
+            cnic: profileData.cnic || undefined,
+            gender: profileData.gender || undefined
+          });
+        } catch (profileError) {
+          console.warn('Failed to fetch complete profile, using basic user data:', profileError);
+        }
+
         router.push('/chat');
         setLoading(false);
       }
@@ -94,7 +137,7 @@ export const useAuthHook = () => {
       setError(errorMessage);
       throw new Error(errorMessage);
     }
-  }, []);
+  }, [getProfile]);
 
   const register = useCallback(async (credentials: RegisterCredentials): Promise<void> => {
     setLoading(true);
@@ -127,22 +170,6 @@ export const useAuthHook = () => {
     } catch (err: any) {
       setLoading(false);
       const errorMessage = err.response?.data?.message || 'Registration failed. Please try again.';
-      setError(errorMessage);
-      throw new Error(errorMessage);
-    }
-  }, []);
-
-  const getProfile = useCallback(async (): Promise<UserProfile> => {
-    setLoading(true);
-   
-
-    try {
-      const response = await AUTH_APIS.getProfile();
-      setLoading(false);
-      return response.data;
-    } catch (err: any) {
-      setLoading(false);
-      const errorMessage = err.response?.data?.error || 'Failed to fetch profile';
       setError(errorMessage);
       throw new Error(errorMessage);
     }

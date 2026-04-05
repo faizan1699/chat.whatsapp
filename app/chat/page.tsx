@@ -36,7 +36,9 @@ interface PeerConnectionManager {
 }
 
 export default function ChatPage() {
+  
     const router = useRouter();
+  
     const [username, setUsername] = useState<string>('');
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [users, setUsers] = useState<User>({});
@@ -103,14 +105,12 @@ export default function ChatPage() {
         }
     }, [highlightedMessageId]);
 
-    // Refs
     const localStreamRef = useRef<MediaStream | null>(null);
     const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
     const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
     const ringtoneRef = useRef<HTMLAudioElement | null>(null);
     const iceCandidatesBuffer = useRef<RTCIceCandidateInit[]>([]);
     const callerRef = useRef<string[]>([]);
-    const chunkBufferRef = useRef<Record<string, Message[]>>({});
     const pinsDropdownRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {

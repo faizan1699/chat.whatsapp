@@ -28,7 +28,6 @@ const HobbiesSelector = ({
     const [hobbies, setHobbies] = useState<Hobby[]>([]);
     const [loading, setLoading] = useState(true);
     const [newHobbyName, setNewHobbyName] = useState('');
-    const [showAddNew, setShowAddNew] = useState(false);
     const [addingHobby, setAddingHobby] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [showDropdown, setShowDropdown] = useState(false);
@@ -66,13 +65,10 @@ const HobbiesSelector = ({
     }, [searchTerm, debouncedSearch]);
 
     const fetchHobbies = async () => {
-        console.log('🔄 Fetching hobbies...');
         try {
             const response = await api.get('/hobbies');
-            console.log('✅ Hobbies fetched:', response.data);
             setHobbies(response.data.hobbies);
         } catch (error) {
-            console.error('❌ Error fetching hobbies:', error);
         } finally {
             setLoading(false);
         }
@@ -90,7 +86,6 @@ const HobbiesSelector = ({
             const newHobby = response.data;
             setHobbies([...hobbies, newHobby]);
             setNewHobbyName('');
-            setShowAddNew(false);
 
             const updatedSelection = [...selectedHobbies, newHobby.id];
             onHobbiesChange(updatedSelection);
@@ -244,48 +239,7 @@ const HobbiesSelector = ({
                         </div>
                     )}
                 </div>
-
-                <button
-                    type="button"
-                    onClick={() => setShowAddNew(!showAddNew)}
-                    className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2 whitespace-nowrap"
-                >
-                    <Plus size={16} />
-                    Add New
-                </button>
             </div>
-
-            {/* Add New Hobby Form */}
-            {showAddNew && (
-                <div className="flex gap-2 p-3 bg-gray-50 rounded-lg">
-                    <input
-                        type="text"
-                        value={newHobbyName}
-                        onChange={(e) => setNewHobbyName(e.target.value)}
-                        placeholder="Enter new hobby name..."
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                        onKeyPress={(e) => e.key === 'Enter' && handleAddNewHobby()}
-                    />
-                    <button
-                        type="button"
-                        onClick={handleAddNewHobby}
-                        disabled={addingHobby || !newHobbyName.trim() || selectedHobbies.length >= 15}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                        {addingHobby ? 'Adding...' : 'Add'}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setShowAddNew(false);
-                            setNewHobbyName('');
-                        }}
-                        className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
-                    >
-                        Cancel
-                    </button>
-                </div>
-            )}
 
             <p className="text-xs text-gray-500">
                 Select your hobbies or add new ones. These will be visible on your profile. (Maximum 15 hobbies)

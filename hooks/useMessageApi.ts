@@ -29,7 +29,6 @@ export const useMessageApi = () => {
       'Authorization': `Bearer ${session.accessToken}`,
       'Content-Type': 'application/json'
     };
-    console.log('✅ Auth headers created successfully');
     return headers;
   }, []);
 
