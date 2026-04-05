@@ -9,6 +9,13 @@ interface UserProfile {
     email: string;
     phone: string; // Changed from phoneNumber to phone
     avatar: string;
+    bio: string;
+    dateOfBirth?: string;
+    fatherName?: string;
+    address?: string;
+    cnic?: string;
+    gender?: string;
+    hobbies?: string[];
 }
 
 interface ProfileContextType {
@@ -36,7 +43,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
                 id: newProfile.id,
                 username: newProfile.username,
                 email: newProfile.email,
-                phone: newProfile.phone || ''
+                phone: newProfile.phone || '',
+                bio: newProfile.bio || '',
+                dateOfBirth: newProfile.dateOfBirth || '',
+                fatherName: newProfile.fatherName || '',
+                address: newProfile.address || '',
+                cnic: newProfile.cnic || '',
+                gender: newProfile.gender || '',
+                hobbies: newProfile.hobbies || []
             }));
         } catch (error: any) {
             console.error('Failed to fetch profile:', error);
@@ -58,7 +72,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
             id: newProfile.id,
             username: newProfile.username,
             email: newProfile.email,
-            phone: newProfile.phone || ''
+            phone: newProfile.phone || '',
+            bio: newProfile.bio || '',
+            dateOfBirth: newProfile.dateOfBirth || '',
+            fatherName: newProfile.fatherName || '',
+            address: newProfile.address || '',
+            cnic: newProfile.cnic || '',
+            gender: newProfile.gender || '',
+            hobbies: newProfile.hobbies || []
         }));
     };
 
@@ -69,10 +90,17 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         
         if (storedProfile && accessToken) {
             const parsedProfile = JSON.parse(storedProfile);
-            // Get avatar from localStorage or set empty
+            // Get avatar and bio from localStorage or set empty
             setProfile({
                 ...parsedProfile,
-                avatar: parsedProfile.avatar || ''
+                avatar: parsedProfile.avatar || '',
+                bio: parsedProfile.bio || '',
+                dateOfBirth: parsedProfile.dateOfBirth || '',
+                fatherName: parsedProfile.fatherName || '',
+                address: parsedProfile.address || '',
+                cnic: parsedProfile.cnic || '',
+                gender: parsedProfile.gender || '',
+                hobbies: parsedProfile.hobbies || []
             });
             setLoading(false);
         }

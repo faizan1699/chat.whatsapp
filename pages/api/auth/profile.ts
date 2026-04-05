@@ -10,20 +10,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'GET') {
         try {
-            const { data, error } = await supabaseAdmin
+            // Get user data
+            const { data: userData, error: userError } = await supabaseAdmin
                 .from('users')
                 .select('id, username, email, phone_number, avatar')
                 .eq('id', authUser.userId)
                 .single();
 
-            if (error || !data) return res.status(404).json({ error: 'User not found' });
+            if (userError || !userData) return res.status(404).json({ error: 'User not found' });
+
+            // Get user meta data
+            const { data: meta_data, error: metaError } = await supabaseAdmin
+                .from('UserMeta')
+                .select('bio, dateOfBirth, fatherName, address, cnic, gender')
+                .eq('userId', authUser.userId)
+                .single();
+
+            const meta: any = metaError ? {} : (meta_data || {});
+
+            // Get user hobbies
+            const { data: userHobbies, error: hobbiesError } = await supabaseAdmin
+                .from('UserHobby')
+                .select('hobbyId')
+                .eq('userId', authUser.userId);
+
+            const hobbyIds = hobbiesError ? [] : (userHobbies?.map((uh: any) => uh.hobbyId) || []);
 
             return res.status(200).json({
-                id: data.id,
-                username: data.username,
-                email: data.email,
-                phone: data.phone_number,
-                avatar: data.avatar,
+                id: userData.id,
+                username: userData.username,
+                email: userData.email,
+                phone: userData.phone_number,
+                avatar: userData.avatar,
+                bio: meta.bio || '',
+                dateOfBirth: meta.dateOfBirth || null,
+                fatherName: meta.fatherName || null,
+                address: meta.address || null,
+                cnic: meta.cnic || null,
+                gender: meta.gender || null,
+                hobbies: hobbyIds,
             });
         } catch (err) {
             return res.status(500).json({ error: 'Failed to fetch profile' });
@@ -31,8 +56,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'PATCH') {
-        const { username, phone, avatar } = req.body;
-        console.log('Profile update request:', { username, phone, avatar: avatar ? 'provided' : 'not provided' });
+        const { username, phone, avatar, bio, dateOfBirth, fatherName, address, cnic, gender, hobbies } = req.body;
+        console.log('Profile update request:', { username, phone, avatar: avatar ? 'provided' : 'not provided', bio: bio ? 'provided' : 'not provided' });
         
         const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
         
@@ -103,7 +128,125 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         
         if (typeof avatar === 'string') updates.avatar = avatar;
 
-        if (Object.keys(updates).length <= 1) {
+        // Handle userMeta update in UserMeta table
+        let metaUpdateResult = null;
+        const metaFields = { bio, dateOfBirth, fatherName, address, cnic, gender };
+        const hasMetaUpdates = Object.values(metaFields).some(field => field !== undefined);
+        
+        if (hasMetaUpdates) {
+            // Check if user meta record exists
+            const { data: existingMeta, error: existingMetaError } = await supabaseAdmin
+                .from('UserMeta')
+                .select('id')
+                .eq('userId', authUser.userId)
+                .single();
+
+            if (existingMetaError && existingMetaError.code !== 'PGRST116') {
+                console.error('Error checking existing user meta:', existingMetaError);
+                return res.status(500).json({ error: 'Failed to check user meta data' });
+            }
+
+            // Check CNIC uniqueness if it's being updated
+            if (cnic !== undefined && cnic !== null && cnic !== '') {
+                const { data: existingCnic, error: cnicError } = await supabaseAdmin
+                    .from('UserMeta')
+                    .select('id, userId')
+                    .eq('cnic', cnic)
+                    .neq('userId', authUser.userId)
+                    .single();
+
+                if (cnicError && cnicError.code !== 'PGRST116') {
+                    console.error('Error checking existing CNIC:', cnicError);
+                    return res.status(500).json({ error: 'Failed to validate CNIC' });
+                }
+
+                if (existingCnic) {
+                    return res.status(400).json({ error: 'CNIC is already registered to another account' });
+                }
+            }
+
+            const metaUpdates: any = { updatedAt: new Date().toISOString() };
+            if (bio !== undefined) metaUpdates.bio = bio;
+            if (dateOfBirth !== undefined) metaUpdates.dateOfBirth = dateOfBirth;
+            if (fatherName !== undefined) metaUpdates.fatherName = fatherName;
+            if (address !== undefined) metaUpdates.address = address;
+            if (cnic !== undefined) metaUpdates.cnic = cnic;
+            if (gender !== undefined) metaUpdates.gender = gender;
+
+            if (existingMeta) {
+                // Update existing record
+                const { data, error } = await supabaseAdmin
+                    .from('UserMeta')
+                    .update(metaUpdates)
+                    .eq('userId', authUser.userId)
+                    .select('bio, dateOfBirth, fatherName, address, cnic, gender')
+                    .single();
+
+                if (error) {
+                    console.error('Error updating user meta:', error);
+                    if (error.code === '23505' && error.message.includes('cnic')) {
+                        return res.status(400).json({ error: 'CNIC is already registered to another account' });
+                    }
+                    return res.status(400).json({ error: 'Failed to update profile information' });
+                }
+                metaUpdateResult = data;
+            } else {
+                // Create new record
+                const { data, error } = await supabaseAdmin
+                    .from('UserMeta')
+                    .insert({ 
+                        userId: authUser.userId, 
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                        ...metaUpdates
+                    })
+                    .select('bio, dateOfBirth, fatherName, address, cnic, gender')
+                    .single();
+
+                if (error) {
+                    console.error('Error creating user meta:', error);
+                    if (error.code === '23505' && error.message.includes('cnic')) {
+                        return res.status(400).json({ error: 'CNIC is already registered to another account' });
+                    }
+                    return res.status(400).json({ error: 'Failed to save profile information' });
+                }
+                metaUpdateResult = data;
+            }
+        }
+
+        // Handle hobbies update
+        if (hobbies !== undefined) {
+            // Delete existing user hobbies
+            const { error: deleteError } = await supabaseAdmin
+                .from('UserHobby')
+                .delete()
+                .eq('userId', authUser.userId);
+
+            if (deleteError) {
+                console.error('Error deleting existing hobbies:', deleteError);
+                return res.status(500).json({ error: 'Failed to update hobbies' });
+            }
+
+            // Add new hobbies if any provided
+            if (Array.isArray(hobbies) && hobbies.length > 0) {
+                const userHobbies = hobbies.map((hobbyId: string) => ({
+                    userId: authUser.userId,
+                    hobbyId,
+                    createdAt: new Date().toISOString()
+                }));
+
+                const { error: insertError } = await supabaseAdmin
+                    .from('UserHobby')
+                    .insert(userHobbies);
+
+                if (insertError) {
+                    console.error('Error adding hobbies:', insertError);
+                    return res.status(500).json({ error: 'Failed to add hobbies' });
+                }
+            }
+        }
+
+        if (Object.keys(updates).length <= 1 && !metaUpdateResult && hobbies === undefined) {
             console.log('No updates to apply:', updates);
             return res.status(400).json({ error: 'Nothing to update' });
         }
@@ -111,26 +254,65 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         console.log('Applying updates:', updates);
 
         try {
-            const { data, error } = await supabaseAdmin
-                .from('users')
-                .update(updates)
-                .eq('id', authUser.userId)
-                .select('id, username, email, phone_number, avatar')
-                .single();
+            let userData = null;
+            if (Object.keys(updates).length > 1) {
+                const { data, error } = await supabaseAdmin
+                    .from('users')
+                    .update(updates)
+                    .eq('id', authUser.userId)
+                    .select('id, username, email, phone_number, avatar')
+                    .single();
 
-            if (error) {
-                return res.status(400).json({ error: error.message || 'Update failed' });
+                if (error) {
+                    return res.status(400).json({ error: error.message || 'Update failed' });
+                }
+                
+                if (!data) {
+                    return res.status(404).json({ error: 'User not found after update' });
+                }
+                userData = data;
+            } else {
+                // If only bio was updated, fetch current user data
+                const { data, error } = await supabaseAdmin
+                    .from('users')
+                    .select('id, username, email, phone_number, avatar')
+                    .eq('id', authUser.userId)
+                    .single();
+
+                if (error || !data) {
+                    return res.status(404).json({ error: 'User not found' });
+                }
+                userData = data;
+            }
+
+            // Get updated meta data and hobbies
+            const finalMeta: any = metaUpdateResult || {};
+            let finalHobbies: string[] = [];
+            
+            if (hobbies !== undefined) {
+                finalHobbies = hobbies;
+            } else {
+                // Fetch current hobbies if not updated
+                const { data: currentHobbies } = await supabaseAdmin
+                    .from('UserHobby')
+                    .select('hobbyId')
+                    .eq('userId', authUser.userId);
+                finalHobbies = currentHobbies?.map((uh: any) => uh.hobbyId) || [];
             }
             
-            if (!data) {
-                return res.status(404).json({ error: 'User not found after update' });
-            }
             return res.status(200).json({
-                id: data.id,
-                username: data.username,
-                email: data.email,
-                phone: data.phone_number,
-                avatar: data.avatar,
+                id: userData.id,
+                username: userData.username,
+                email: userData.email,
+                phone: userData.phone_number,
+                avatar: userData.avatar,
+                bio: finalMeta.bio || '',
+                dateOfBirth: finalMeta.dateOfBirth || null,
+                fatherName: finalMeta.fatherName || null,
+                address: finalMeta.address || null,
+                cnic: finalMeta.cnic || null,
+                gender: finalMeta.gender || null,
+                hobbies: finalHobbies,
             });
         } catch (err) {
             return res.status(500).json({ error: 'Failed to update profile' });

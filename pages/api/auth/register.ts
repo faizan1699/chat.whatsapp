@@ -6,7 +6,7 @@ import { otpService } from '../../../services/otpService';
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'POST') return res.status(405).end();
 
-    const { username, email, phoneNumber, password, termsAccepted, cookieConsent } = req.body;
+    const { username, email, phoneNumber, password, termsAccepted, cookieConsent, userMeta, hobbies } = req.body;
 
     if (!username || !password || (!email && !phoneNumber)) {
         return res.status(400).json({ error: 'Missing required fields' });
@@ -18,11 +18,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     try {
         // Check if username, email, or phone already exists
+        let query = `username.eq.${username}`;
+        if (email) query += `,email.eq.${email}`;
+        if (phoneNumber) query += `,phone_number.eq.${phoneNumber}`;
+        
         const { data: existingUser } = await supabaseAdmin
             .from('users')
             .select('id, username, email, phone_number')
-            .or(`username.eq.${username},email.eq.${email},phone_number.eq.${phoneNumber}`)
+            .or(query)
             .limit(1);
+
+        // Check CNIC separately if provided
+        let cnicExists = false;
+        if (userMeta?.cnic) {
+            const { data: existingCnic } = await supabaseAdmin
+                .from('UserMeta')
+                .select('id, userId')
+                .eq('cnic', userMeta.cnic)
+                .limit(1);
+            
+            cnicExists = !!(existingCnic && existingCnic.length > 0);
+        }
 
         if (existingUser && existingUser.length > 0) {
             const existing = existingUser[0];
@@ -36,6 +52,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             if (existing.phone_number === phoneNumber) {
                 return res.status(400).json({ error: 'Phone number is already registered' });
             }
+        }
+        
+        if (cnicExists) {
+            return res.status(400).json({ error: 'CNIC is already registered' });
         }
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -60,7 +80,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         if (error) {
             if (error.code === '23505') {
-                // Check which field caused the uniqueness violation
+                // Check which field caused uniqueness violation
                 const errorMessage = error.message || '';
                 
                 if (errorMessage.includes('users_username_key')) {
@@ -69,11 +89,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                     return res.status(400).json({ error: 'Email is already registered' });
                 } else if (errorMessage.includes('users_phone_number_key')) {
                     return res.status(400).json({ error: 'Phone number is already registered' });
+                } else if (errorMessage.includes('UserMeta_cnic_key')) {
+                    return res.status(400).json({ error: 'CNIC is already registered' });
                 } else {
-                    return res.status(400).json({ error: 'Username, email or phone already exists' });
+                    return res.status(400).json({ error: 'Username, email, phone or CNIC already exists' });
                 }
             }
             throw error;
+        }
+
+        // Create UserMeta record if userMeta data is provided
+        if (userMeta && Object.keys(userMeta).length > 0) {
+            const { error: metaError } = await supabaseAdmin
+                .from('UserMeta')
+                .insert({
+                    userId: user.id,
+                    dateOfBirth: userMeta.dateOfBirth || null,
+                    fatherName: userMeta.fatherName || null,
+                    address: userMeta.address || null,
+                    cnic: userMeta.cnic || null,
+                    gender: userMeta.gender || null
+                });
+
+            if (metaError) {
+                console.error('UserMeta creation error:', metaError);
+                // Don't fail registration if meta creation fails, just log it
+            }
+        }
+
+        // Create user hobbies if provided
+        if (hobbies && Array.isArray(hobbies) && hobbies.length > 0) {
+            const userHobbies = hobbies.map((hobbyId: string) => ({
+                userId: user.id,
+                hobbyId,
+                createdAt: new Date().toISOString()
+            }));
+
+            const { error: hobbiesError } = await supabaseAdmin
+                .from('UserHobby')
+                .insert(userHobbies);
+
+            if (hobbiesError) {
+                console.error('UserHobbies creation error:', hobbiesError);
+                // Don't fail registration if hobbies creation fails, just log it
+            }
         }
 
         if (email) {

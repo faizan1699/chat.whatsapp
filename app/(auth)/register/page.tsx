@@ -9,6 +9,7 @@ import api from '@/utils/api';
 import { useImageCropper } from '@/hooks/useImageCropper';
 import Cropper from 'react-easy-crop';
 import GlobalImageCropper from '@/components/global/GlobalImageCropper';
+import HobbiesSelector from '@/components/global/HobbiesSelector';
 
 interface RegisterFormData {
     username: string;
@@ -18,6 +19,12 @@ interface RegisterFormData {
     phone?: string;
     avatar?: string;
     verificationCode?: string;
+    dateOfBirth?: string;
+    fatherName?: string;
+    address?: string;
+    cnic?: string;
+    gender?: string;
+    hobbies?: string[];
 }
 
 function RegisterForm() {
@@ -82,6 +89,14 @@ function RegisterForm() {
                 email: data.email,
                 password: data.password,
                 phone: data.phone,
+                userMeta: {
+                    dateOfBirth: data.dateOfBirth,
+                    fatherName: data.fatherName,
+                    address: data.address,
+                    cnic: data.cnic,
+                    gender: data.gender
+                },
+                hobbies: data.hobbies || []
             });
 
             setVerificationSent(true);
@@ -319,6 +334,102 @@ function RegisterForm() {
                 {errors.confirmPassword && (
                     <p className="mt-2 text-sm text-red-600">{errors.confirmPassword.message}</p>
                 )}
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Date of Birth (Optional)
+                </label>
+                <input
+                    {...register('dateOfBirth')}
+                    type="date"
+                    className={`block w-full px-3 py-3 bg-gray-50 border ${errors.dateOfBirth ? 'border-red-300' : 'border-gray-300'
+                        } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
+                    max={new Date().toISOString().split('T')[0]}
+                />
+                {errors.dateOfBirth && (
+                    <p className="mt-2 text-sm text-red-600">{errors.dateOfBirth.message}</p>
+                )}
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Gender (Optional)
+                </label>
+                <select
+                    {...register('gender')}
+                    className={`block w-full px-3 py-3 bg-gray-50 border ${errors.gender ? 'border-red-300' : 'border-gray-300'
+                        } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
+                >
+                    <option value="">Select Gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                </select>
+                {errors.gender && (
+                    <p className="mt-2 text-sm text-red-600">{errors.gender.message}</p>
+                )}
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Father Name (Optional)
+                </label>
+                <input
+                    {...register('fatherName')}
+                    type="text"
+                    className={`block w-full px-3 py-3 bg-gray-50 border ${errors.fatherName ? 'border-red-300' : 'border-gray-300'
+                        } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
+                    placeholder="Enter father's name"
+                />
+                {errors.fatherName && (
+                    <p className="mt-2 text-sm text-red-600">{errors.fatherName.message}</p>
+                )}
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                    CNIC (Optional - Unique)
+                </label>
+                <input
+                    {...register('cnic', {
+                        pattern: {
+                            value: /^[0-9]{5}-[0-9]{7}-[0-9]{1}$/,
+                            message: 'CNIC format: XXXXX-XXXXXXX-X',
+                        },
+                    })}
+                    type="text"
+                    className={`block w-full px-3 py-3 bg-gray-50 border ${errors.cnic ? 'border-red-300' : 'border-gray-300'
+                        } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
+                    placeholder="XXXXX-XXXXXXX-X"
+                    maxLength={15}
+                />
+                {errors.cnic && (
+                    <p className="mt-2 text-sm text-red-600">{errors.cnic.message}</p>
+                )}
+            </div>
+
+            <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Address (Optional)
+                </label>
+                <textarea
+                    {...register('address')}
+                    rows={3}
+                    className={`block w-full px-3 py-3 bg-gray-50 border ${errors.address ? 'border-red-300' : 'border-gray-300'
+                        } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors resize-none`}
+                    placeholder="Enter your address"
+                />
+                {errors.address && (
+                    <p className="mt-2 text-sm text-red-600">{errors.address.message}</p>
+                )}
+            </div>
+
+            <div className="md:col-span-2">
+                <HobbiesSelector
+                    selectedHobbies={watch('hobbies') || []}
+                    onHobbiesChange={(hobbyIds) => setValue('hobbies', hobbyIds)}
+                />
             </div>
         </div>
     );

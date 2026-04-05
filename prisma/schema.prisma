@@ -52,6 +52,9 @@ model User {
   cookieConsent    Json?          // Store cookie preferences as JSON
   cookieConsentAt  DateTime?
   
+  // User meta information
+  userMeta         UserMeta?
+  
   // Conversations where this user is a participant
   conversations    ConversationParticipant[]
   
@@ -63,6 +66,45 @@ model User {
   
   // Messages this user sent that were deleted
   sentDeletedMessages DeletedMessage[]
+}
+
+model UserMeta {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  bio          String?   @default("")
+  dateOfBirth  DateTime?
+  fatherName   String?
+  address      String?
+  cnic         String?   @unique
+  gender       String?   // 'male', 'female', 'other'
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userHobbies  UserHobby[]
+}
+
+model Hobby {
+  id        String      @id @default(cuid())
+  name      String      @unique
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  
+  userHobbies UserHobby[]
+}
+
+model UserHobby {
+  id        String   @id @default(cuid())
+  userId    String
+  hobbyId   String
+  createdAt DateTime @default(now())
+  
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hobby Hobby @relation(fields: [hobbyId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, hobbyId])
+  @@index([userId])
+  @@index([hobbyId])
 }
 
 model Conversation {

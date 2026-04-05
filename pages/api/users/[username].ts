@@ -23,12 +23,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return res.status(404).json({ error: 'User not found' });
         }
 
+        // Get user bio from users_meta table
+        const { data: meta_data, error: metaError } = await supabaseAdmin
+            .from('users_meta')
+            .select('bio')
+            .eq('user_id', user.id)
+            .single();
+
+        const bio = metaError ? '' : (meta_data?.bio || '');
+
         return res.status(200).json({
             id: user.id,
             username: user.username,
             email: user.email,
             phone: user.phone_number,
             avatar: user.avatar,
+            bio: bio,
             createdAt: user.created_at,
             lastSeen: user.last_seen
         });

@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, Mail, Phone, Calendar, Clock, Shield, Edit2, Save, X, Camera } from 'lucide-react';
+import { ArrowLeft, User, Mail, Phone, Calendar, Clock, Shield, Edit2, Save, X, Camera, Tag } from 'lucide-react';
 import { useProfile } from '@/contexts/ProfileContext';
 import { frontendAuth } from '@/utils/frontendAuth';
 import api from '@/utils/api';
 import { useImageCropper } from '@/hooks/useImageCropper';
 import GlobalImageCropper from '@/components/global/GlobalImageCropper';
+import HobbiesSelector from '@/components/global/HobbiesSelector';
 
 interface UserProfile {
     id: string;
@@ -15,6 +16,13 @@ interface UserProfile {
     email: string;
     phone: string;
     avatar: string;
+    bio: string;
+    dateOfBirth?: string;
+    fatherName?: string;
+    address?: string;
+    cnic?: string;
+    gender?: string;
+    hobbies?: string[];
     createdAt: string;
     lastSeen: string;
 }
@@ -31,7 +39,14 @@ export default function ProfilePage() {
     const [editForm, setEditForm] = useState({
         username: '',
         phone: '',
-        avatar: ''
+        avatar: '',
+        bio: '',
+        dateOfBirth: '',
+        fatherName: '',
+        address: '',
+        cnic: '',
+        gender: '',
+        hobbies: [] as string[]
     });
 
     const {
@@ -66,13 +81,21 @@ export default function ProfilePage() {
             if (ownProfile) {
                 setViewingProfile({
                     ...ownProfile,
+                    bio: ownProfile.bio || '',
                     createdAt: new Date().toISOString(),
                     lastSeen: new Date().toISOString()
                 });
                 setEditForm({
                     username: ownProfile.username || '',
                     phone: ownProfile.phone || '',
-                    avatar: ownProfile.avatar || ''
+                    avatar: ownProfile.avatar || '',
+                    bio: ownProfile.bio || '',
+                    dateOfBirth: ownProfile.dateOfBirth || '',
+                    fatherName: ownProfile.fatherName || '',
+                    address: ownProfile.address || '',
+                    cnic: ownProfile.cnic || '',
+                    gender: ownProfile.gender || '',
+                    hobbies: ownProfile.hobbies || []
                 });
             }
             setLoading(false);
@@ -92,7 +115,14 @@ export default function ProfilePage() {
                 setEditForm({
                     username: ownProfile.username || '',
                     phone: ownProfile.phone || '',
-                    avatar: ownProfile.avatar || ''
+                    avatar: ownProfile.avatar || '',
+                    bio: ownProfile.bio || '',
+                    dateOfBirth: ownProfile.dateOfBirth || '',
+                    fatherName: ownProfile.fatherName || '',
+                    address: ownProfile.address || '',
+                    cnic: ownProfile.cnic || '',
+                    gender: ownProfile.gender || '',
+                    hobbies: ownProfile.hobbies || []
                 });
             }
             resetCropper();
@@ -113,6 +143,27 @@ export default function ProfilePage() {
             }
             if (editForm.avatar !== ownProfile?.avatar) {
                 changedFields.avatar = editForm.avatar || undefined;
+            }
+            if (editForm.bio !== ownProfile?.bio) {
+                changedFields.bio = editForm.bio || undefined;
+            }
+            if (editForm.dateOfBirth !== ownProfile?.dateOfBirth) {
+                changedFields.dateOfBirth = editForm.dateOfBirth || undefined;
+            }
+            if (editForm.fatherName !== ownProfile?.fatherName) {
+                changedFields.fatherName = editForm.fatherName || undefined;
+            }
+            if (editForm.address !== ownProfile?.address) {
+                changedFields.address = editForm.address || undefined;
+            }
+            if (editForm.cnic !== ownProfile?.cnic) {
+                changedFields.cnic = editForm.cnic || undefined;
+            }
+            if (editForm.gender !== ownProfile?.gender) {
+                changedFields.gender = editForm.gender || undefined;
+            }
+            if (JSON.stringify(editForm.hobbies) !== JSON.stringify(ownProfile?.hobbies)) {
+                changedFields.hobbies = editForm.hobbies;
             }
             
             if (Object.keys(changedFields).length === 0) {
@@ -312,7 +363,7 @@ export default function ProfilePage() {
                                     </div>
                                 )}
                                 {isOwnProfile && isEditing && (
-                                    <>
+                                    <Fragment>
                                         <input
                                             type="file"
                                             accept="image/*"
@@ -326,7 +377,7 @@ export default function ProfilePage() {
                                         >
                                             <Camera className="h-4 w-4 text-gray-600" />
                                         </label>
-                                    </>
+                                    </Fragment>
                                 )}
                                 {isOwnProfile && !isEditing && (
                                     <div className="absolute bottom-0 right-0 bg-green-500 rounded-full p-2 border-2 border-white">
@@ -337,8 +388,10 @@ export default function ProfilePage() {
                             <h2 className="mt-4 text-2xl font-bold text-white">
                                 {viewingProfile.username}
                             </h2>
-                            {isOwnProfile && (
-                                <p className="mt-1 text-green-100">This is your profile</p>
+                            {viewingProfile.bio && (
+                                <p className="mt-2 text-green-100 text-center max-w-md">
+                                    {viewingProfile.bio }
+                                </p>
                             )}
                         </div>
                     </div>
@@ -373,12 +426,26 @@ export default function ProfilePage() {
                                 </div>
                             </div>
 
-                            {/* Email */}
-                            {viewingProfile.email && (
+                            {isOwnProfile && isEditing && (
                                 <div className="flex items-start space-x-4">
                                     <div className="flex-shrink-0">
                                         <div className="bg-gray-100 rounded-lg p-3">
-                                            <Mail className="h-6 w-6 text-gray-600" />
+                                            <User className="h-6 w-6 text-gray-600" />
+                                        </div>
+                                    </div>
+                                    <div className="flex-1">
+                                        <label className="text-sm font-medium text-gray-500 block mb-1">
+                                            Bio
+                                        </label>
+                                        <div className="space-y-1">
+                                            <input
+                                                value={editForm.bio}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, bio: e.target.value }))}
+                                                placeholder="Tell us about yourself..."
+                                                className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors resize-none"
+                                                maxLength={50}
+                                            />
+                                            <p className="text-xs text-gray-500">{editForm.bio.length}/50 characters</p>
                                         </div>
                                     </div>
                                     <div className="flex-1">
@@ -421,7 +488,203 @@ export default function ProfilePage() {
                                 </div>
                             </div>
 
-                            {/* Member Since */}
+                            <div className="flex items-start space-x-4">
+                                <div className="flex-shrink-0">
+                                    <div className="bg-gray-100 rounded-lg p-3">
+                                        <Calendar className="h-6 w-6 text-gray-600" />
+                                    </div>
+                                </div>
+                                <div className="flex-1">
+                                    <label className="text-sm font-medium text-gray-500 block mb-1">
+                                        Date of Birth
+                                    </label>
+                                    {isOwnProfile && isEditing ? (
+                                        <div className="space-y-1">
+                                            <input
+                                                type="date"
+                                                value={editForm.dateOfBirth}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, dateOfBirth: e.target.value }))}
+                                                className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors"
+                                                max={new Date().toISOString().split('T')[0]}
+                                            />
+                                            <p className="text-xs text-gray-500">Optional: Enter your date of birth</p>
+                                        </div>
+                                    ) : (
+                                        <p className="text-lg font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-lg min-h-[44px] flex items-center">
+                                            {viewingProfile.dateOfBirth ? formatDate(viewingProfile.dateOfBirth) : 'Not provided'}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex items-start space-x-4">
+                                <div className="flex-shrink-0">
+                                    <div className="bg-gray-100 rounded-lg p-3">
+                                        <User className="h-6 w-6 text-gray-600" />
+                                    </div>
+                                </div>
+                                <div className="flex-1">
+                                    <label className="text-sm font-medium text-gray-500 block mb-1">
+                                        Gender
+                                    </label>
+                                    {isOwnProfile && isEditing ? (
+                                        <div className="space-y-1">
+                                            <select
+                                                value={editForm.gender}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, gender: e.target.value }))}
+                                                className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors"
+                                            >
+                                                <option value="">Select Gender</option>
+                                                <option value="male">Male</option>
+                                                <option value="female">Female</option>
+                                                <option value="other">Other</option>
+                                            </select>
+                                            <p className="text-xs text-gray-500">Optional: Select your gender</p>
+                                        </div>
+                                    ) : (
+                                        <p className="text-lg font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-lg min-h-[44px] flex items-center capitalize">
+                                            {viewingProfile.gender || 'Not provided'}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex items-start space-x-4">
+                                <div className="flex-shrink-0">
+                                    <div className="bg-gray-100 rounded-lg p-3">
+                                        <User className="h-6 w-6 text-gray-600" />
+                                    </div>
+                                </div>
+                                <div className="flex-1">
+                                    <label className="text-sm font-medium text-gray-500 block mb-1">
+                                        Father Name
+                                    </label>
+                                    {isOwnProfile && isEditing ? (
+                                        <div className="space-y-1">
+                                            <input
+                                                type="text"
+                                                value={editForm.fatherName}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, fatherName: e.target.value }))}
+                                                placeholder="Enter father's name"
+                                                className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors"
+                                            />
+                                            <p className="text-xs text-gray-500">Optional: Enter father's name</p>
+                                        </div>
+                                    ) : (
+                                        <p className="text-lg font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-lg min-h-[44px] flex items-center">
+                                            {viewingProfile.fatherName || 'Not provided'}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* CNIC */}
+                            <div className="flex items-start space-x-4">
+                                <div className="flex-shrink-0">
+                                    <div className="bg-gray-100 rounded-lg p-3">
+                                        <Shield className="h-6 w-6 text-gray-600" />
+                                    </div>
+                                </div>
+                                <div className="flex-1">
+                                    <label className="text-sm font-medium text-gray-500 block mb-1">
+                                        CNIC
+                                    </label>
+                                    {isOwnProfile && isEditing ? (
+                                        <div className="space-y-1">
+                                            <input
+                                                type="text"
+                                                value={editForm.cnic}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, cnic: e.target.value }))}
+                                                placeholder="XXXXX-XXXXXXX-X"
+                                                className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors"
+                                                maxLength={15}
+                                                pattern="[0-9]{5}-[0-9]{7}-[0-9]{1}"
+                                            />
+                                            <p className="text-xs text-gray-500">Optional: Format XXXXX-XXXXXXX-X (unique)</p>
+                                        </div>
+                                    ) : (
+                                        <p className="text-lg font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-lg min-h-[44px] flex items-center">
+                                            {viewingProfile.cnic || 'Not provided'}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex items-start space-x-4">
+                                <div className="flex-shrink-0">
+                                    <div className="bg-gray-100 rounded-lg p-3">
+                                        <User className="h-6 w-6 text-gray-600" />
+                                    </div>
+                                </div>
+                                <div className="flex-1">
+                                    <label className="text-sm font-medium text-gray-500 block mb-1">
+                                        Address
+                                    </label>
+                                    {isOwnProfile && isEditing ? (
+                                        <div className="space-y-1">
+                                            <textarea
+                                                value={editForm.address}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, address: e.target.value }))}
+                                                placeholder="Enter your address"
+                                                rows={3}
+                                                className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors resize-none"
+                                            />
+                                            <p className="text-xs text-gray-500">Optional: Enter your address</p>
+                                        </div>
+                                    ) : (
+                                        <p className="text-lg font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-lg min-h-[44px] flex items-center">
+                                            {viewingProfile.address || 'Not provided'}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Hobbies */}
+                            <div className="flex items-start space-x-4">
+                                <div className="flex-shrink-0">
+                                    <div className="bg-gray-100 rounded-lg p-3">
+                                        <Tag className="h-6 w-6 text-gray-600" />
+                                    </div>
+                                </div>
+                                <div className="flex-1">
+                                    <label className="text-sm font-medium text-gray-500 block mb-1">
+                                        Hobbies
+                                    </label>
+                                    {isOwnProfile && isEditing ? (
+                                        <div className="space-y-1">
+                                            <HobbiesSelector
+                                                selectedHobbies={editForm.hobbies}
+                                                onHobbiesChange={(hobbyIds) => setEditForm(prev => ({ ...prev, hobbies: hobbyIds }))}
+                                                className="mt-0"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {viewingProfile.hobbies && viewingProfile.hobbies.length > 0 ? (
+                                                <div className="flex flex-wrap gap-2">
+                                                    {viewingProfile.hobbies.map((hobbyId: string) => {
+                                                        // This is a simplified display - in real implementation, you'd fetch hobby names
+                                                        return (
+                                                            <div
+                                                                key={hobbyId}
+                                                                className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm"
+                                                            >
+                                                                <Tag size={14} />
+                                                                <span>Hobby {hobbyId.slice(0, 8)}</span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : (
+                                                <p className="text-lg font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-lg min-h-[44px] flex items-center">
+                                                    No hobbies added
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
                             <div className="flex items-center space-x-4">
                                 <div className="flex-shrink-0">
                                     <div className="bg-gray-100 rounded-lg p-3">
@@ -436,7 +699,6 @@ export default function ProfilePage() {
                                 </div>
                             </div>
 
-                            {/* Last Seen */}
                             {!isOwnProfile && (
                                 <div className="flex items-center space-x-4">
                                     <div className="flex-shrink-0">
@@ -454,7 +716,6 @@ export default function ProfilePage() {
                             )}
                         </div>
 
-                        {/* Action Buttons */}
                         <div className="mt-8 pt-8 border-t">
                             <div className="flex flex-col sm:flex-row gap-4">
                                 {isOwnProfile ? (
@@ -468,10 +729,10 @@ export default function ProfilePage() {
                                                 {editLoading ? (
                                                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                                                 ) : (
-                                                    <>
+                                                    <Fragment>
                                                         <Save size={16} />
                                                         Save Changes
-                                                    </>
+                                                    </Fragment>
                                                 )}
                                             </button>
                                             <button
@@ -483,7 +744,7 @@ export default function ProfilePage() {
                                             </button>
                                         </>
                                     ) : (
-                                        <>
+                                        <Fragment>
                                             <button
                                                 onClick={handleEditToggle}
                                                 className="flex-1 bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 transition-colors font-medium flex items-center justify-center gap-2"
@@ -497,10 +758,10 @@ export default function ProfilePage() {
                                             >
                                                 Back to Chat
                                             </button>
-                                        </>
+                                        </Fragment>
                                     )
                                 ) : (
-                                    <>
+                                    <Fragment>
                                         <button
                                             onClick={() => router.push(`/chat?user=${viewingProfile.username}`)}
                                             className="flex-1 bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 transition-colors font-medium"
@@ -513,7 +774,7 @@ export default function ProfilePage() {
                                         >
                                             Go Back
                                         </button>
-                                    </>
+                                    </Fragment>
                                 )}
                             </div>
                         </div>
@@ -521,7 +782,6 @@ export default function ProfilePage() {
                 </div>
             </div>
 
-            {/* Image Cropper */}
             {showCropper && (
                 <GlobalImageCropper
                     image={selectedImage || ''}
