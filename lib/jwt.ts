@@ -1,7 +1,5 @@
 import { SignJWT, jwtVerify, JWTPayload } from 'jose';
-
-const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback_secret_dont_use_in_production');
-const refreshSecret = new TextEncoder().encode(process.env.JWT_REFRESH_SECRET || 'fallback_refresh_secret_dont_use_in_production');
+import { secret, refreshSecret } from './jwt-config';
 
 export interface SessionPayload extends JWTPayload {
   userId: string;

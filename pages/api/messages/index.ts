@@ -5,8 +5,7 @@ import { Server as ServerIO } from 'socket.io';
 import { Server as NetServer } from 'http';
 import { Socket as NetSocket } from 'net';
 import { jwtVerify, JWTPayload } from 'jose';
-
-const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback_secret_dont_use_in_production');
+import { secret } from '../../../lib/jwt-config';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
@@ -97,7 +96,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         try {
-            // Create supabase client with auth context
             const supabase = createClient(supabaseUrl, supabaseAnonKey, {
                 global: {
                     headers: {
@@ -142,7 +140,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } else if (req.method === 'PUT') {
         const { messageId, content, from, to } = req.body;
 
-        // First, get the message to check who owns it
         const { data: existingMessage, error: fetchError } = await supabaseAdmin
             .from('messages')
             .select('sender_id')

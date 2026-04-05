@@ -1,12 +1,11 @@
 import React, { useState, Fragment, useRef, useEffect, useMemo, useCallback } from 'react';
-import { Search, MoreVertical, X, Phone, Video, Archive, Trash2, Bell, BellOff, User, Volume2, VolumeX, Plus, LogOut, Search as SearchIcon } from 'lucide-react';
+import { MoreVertical, X, Archive, Trash2, Bell, BellOff, User, Plus, LogOut, Search as SearchIcon } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import UserSearch from '../chat/UserSearch';
 import { apiService } from '@/services/apiService';
-import api from '@/utils/api';
 import { useProfile } from '@/contexts/ProfileContext';
 import { Message } from '@/types/message';
 
-// Simple debounce implementation
 const debounce = <T extends (...args: any[]) => void>(func: T, delay: number): ((...args: Parameters<T>) => void) => {
     let timeoutId: NodeJS.Timeout;
     return (...args: Parameters<T>) => {
@@ -68,6 +67,7 @@ export default function Sidebar({
     onConversationCreated,
     isLoading = false,
 }: SidebarProps) {
+    const router = useRouter();
     const { profile } = useProfile();
     const [showGlobalSearch, setShowGlobalSearch] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
@@ -198,7 +198,7 @@ export default function Sidebar({
         <div className="flex h-full w-full flex-col bg-white overflow-hidden">
             <header className="flex h-[60px] items-center justify-between bg-[#f0f2f5] px-4 py-2">
                 <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-300 cursor-pointer" onClick={() => onEditProfile?.()}>
+                    <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-300 cursor-pointer" onClick={() => router.push('/profile')}>
                         {profile?.avatar ? (
                             <img src={profile.avatar} alt="avatar" className="h-full w-full object-cover" />
                         ) : (
@@ -229,7 +229,7 @@ export default function Sidebar({
                             <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-xl border border-[#e9edef] py-1 z-50 animate-in fade-in duration-150">
                                 <button
                                     onClick={() => {
-                                        onEditProfile?.();
+                                        router.push('/profile');
                                         setShowMenu(false);
                                     }}
                                     className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-[#111b21] hover:bg-[#f0f2f5]"
@@ -392,8 +392,7 @@ export default function Sidebar({
                     </button>
                     <button
                         onClick={() => {
-                            // Implement view profile
-                            console.log('View profile:', contextMenuUser);
+                            router.push(`/profile?user=${contextMenuUser}`);
                             setContextMenuUser(null);
                             setContextMenuPosition(null);
                         }}

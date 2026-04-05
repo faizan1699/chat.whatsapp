@@ -2,7 +2,7 @@ import { NextApiRequest } from 'next';
 import jwt from 'jsonwebtoken';
 import { parse } from 'cookie';
 
-const JWT_SECRET = process.env.JWT_SECRET || '';
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_dont_use_in_production';
 
 export interface JWTPayload {
     userId: string;

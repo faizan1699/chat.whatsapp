@@ -1,8 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../utils/supabase-server';
 import { jwtVerify, JWTPayload } from 'jose';
-
-const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback_secret_dont_use_in_production');
+import { secret } from '../../../lib/jwt-config';
 
 interface SessionPayload extends JWTPayload {
     userId: string;
@@ -76,7 +75,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                     deletion_reason: 'deleted_by_sender'
                 });
 
-                // Update message for everyone
                 await supabaseAdmin
                     .from('messages')
                     .update({

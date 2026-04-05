@@ -10,7 +10,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         try {
-            // Set secure cookies
             setAuthCookie(res, authToken, userId, username);
             
             res.status(200).json({ 
@@ -23,7 +22,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
     } else if (req.method === 'DELETE') {
         try {
-            // Clear secure cookies
             res.setHeader('Set-Cookie', [
                 'auth-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; HttpOnly; Secure; SameSite=strict',
                 'user-id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; HttpOnly; Secure; SameSite=strict',

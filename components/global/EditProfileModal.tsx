@@ -178,7 +178,7 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
             <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between px-6 py-4 border-b border-[#f0f2f5]">
-                    <h2 className="text-lg font-bold text-[#111b21]">Edit Profile</h2>
+                    <h2 className="text-lg font-bold text-[#111b21]">View Profile</h2>
                     <button onClick={onClose} className="p-2 hover:bg-black/5 rounded-full">
                         <X size={20} />
                     </button>
