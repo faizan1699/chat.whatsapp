@@ -5,6 +5,7 @@ import { Plus, X, Tag } from 'lucide-react';
 import { debounce } from '@/utils/debounce';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { HOBBIES_APIS } from '@/libs/apis';
+import { showCustomToast } from './CustomToast';
 
 interface Hobby {
     id: string;
@@ -127,6 +128,12 @@ const HobbiesSelector = ({
         } else if (selectedHobbies.length < 15) {
             const updatedSelection = [...selectedHobbies, hobbyId];
             onHobbiesChange(updatedSelection);
+        } else {
+            showCustomToast({
+                message: 'Maximum 15 hobbies are allowed',
+                type: 'warning',
+                duration: 3000
+            });
         }
     };
 
@@ -140,9 +147,7 @@ const HobbiesSelector = ({
             <div className={`space-y-3 ${className}`}>
                 <label className="block text-sm font-medium text-gray-700">Hobbies</label>
                 <div className="animate-pulse">
-                    <div className="h-10 bg-gray-200 rounded mb-2"></div>
-                    <div className="h-10 bg-gray-200 rounded mb-2"></div>
-                    <div className="h-10 bg-gray-200 rounded"></div>
+                 Loading ...
                 </div>
             </div>
         );
@@ -159,7 +164,6 @@ const HobbiesSelector = ({
         <div className={`space-y-3 ${className}`}>
             <label className="block text-sm font-medium text-gray-700">Hobbies (Optional)</label>
 
-            {/* Selected Hobbies */}
             {selectedHobbyObjects.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                     {selectedHobbyObjects.map((hobby) => (
@@ -196,16 +200,15 @@ const HobbiesSelector = ({
                     {showDropdown && (
                         <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                             {searchResults.length > 0 ? (
-                                searchResults.map((hobby: Hobby) => {
+                                searchResults.map((hobby: Hobby , index) => {
                                     const isSelected = selectedHobbies.includes(hobby.id);
                                     return (
                                         <button
-                                            key={hobby.id}
+                                            key={index}
                                             type="button"
                                             onClick={() => {
                                                 if (!isSelected && selectedHobbies.length < 15) {
                                                     handleHobbyToggle(hobby.id);
-                                                    setSearchTerm('');
                                                 }
                                             }}
                                             className={`w-full px-3 py-2 text-left hover:bg-gray-100 transition-colors flex items-center justify-between ${isSelected ? 'bg-green-50' : ''}`}
