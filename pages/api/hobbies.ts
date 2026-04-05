@@ -2,7 +2,18 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../utils/supabase-server';
 import { getAuthUser } from '../../utils/auth';
 
+// Simple UUID generator
+function generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+    // Remove auth requirement for GET requests
+    // For POST requests, require authentication
     const authUser = getAuthUser(req);
     if (!authUser) {
         return res.status(401).json({ error: 'Please login' });
@@ -12,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         try {
             // Get all available hobbies
             const { data: hobbies, error } = await supabaseAdmin
-                .from('hoby')
+                .from('hobby')
                 .select('id, name')
                 .order('name', { ascending: true });
 
@@ -21,22 +32,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 return res.status(500).json({ error: 'Failed to fetch hobbies' });
             }
 
-            // Get user's current hobbies
-            const { data: userHobbies, error: userHobbiesError } = await supabaseAdmin
-                .from('user_hoby')
-                .select('hobbyId')
-                .eq('userId', authUser.userId);
-
-            if (userHobbiesError) {
-                console.error('Error fetching user hobbies:', userHobbiesError);
-                return res.status(500).json({ error: 'Failed to fetch user hobbies' });
-            }
-
-            const userHobbyIds = userHobbies?.map((uh: any) => uh.hobbyId) || [];
-
             return res.status(200).json({
                 hobbies: hobbies || [],
-                userHobbyIds
             });
         } catch (err) {
             console.error('Hobbies API error:', err);
@@ -54,9 +51,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             const trimmedName = name.trim().toLowerCase();
 
-            // Check if hobby already exists
             const { data: existingHobby, error: checkError } = await supabaseAdmin
-                .from('hoby')
+                .from('hobby')
                 .select('id, name')
                 .eq('name', trimmedName)
                 .single();
@@ -72,9 +68,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             // Create new hobby
             const { data: newHobby, error: createError } = await supabaseAdmin
-                .from('hoby')
+                .from('hobby')
                 .insert({
+                    id: generateUUID(),
                     name: trimmedName,
+                    createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString()
                 })
                 .select('id, name')

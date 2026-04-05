@@ -21,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         let query = `username.eq.${username}`;
         if (email) query += `,email.eq.${email}`;
         if (phoneNumber) query += `,phone_number.eq.${phoneNumber}`;
-        
+
         const { data: existingUser } = await supabaseAdmin
             .from('users')
             .select('id, username, email, phone_number')
@@ -32,17 +32,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         let cnicExists = false;
         if (userMeta?.cnic) {
             const { data: existingCnic } = await supabaseAdmin
-                .from('UserMeta')
-                .select('id, userId')
+                .from('users_meta')
+                .select('id, user_id')
                 .eq('cnic', userMeta.cnic)
                 .limit(1);
-            
+
             cnicExists = !!(existingCnic && existingCnic.length > 0);
         }
 
         if (existingUser && existingUser.length > 0) {
             const existing = existingUser[0];
-            
+
             if (existing.username === username) {
                 return res.status(400).json({ error: 'Username is already taken' });
             }
@@ -53,14 +53,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 return res.status(400).json({ error: 'Phone number is already registered' });
             }
         }
-        
+
         if (cnicExists) {
             return res.status(400).json({ error: 'CNIC is already registered' });
         }
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const hashedPassword = await bcrypt.hash(password, 10);
-        const otpExpires = new Date(Date.now() + 10 * 60 * 1000); 
+        const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
 
         const userData: any = {
             username,
@@ -80,9 +80,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         if (error) {
             if (error.code === '23505') {
-                // Check which field caused uniqueness violation
                 const errorMessage = error.message || '';
-                
+
                 if (errorMessage.includes('users_username_key')) {
                     return res.status(400).json({ error: 'Username is already taken' });
                 } else if (errorMessage.includes('users_email_key')) {
@@ -98,12 +97,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             throw error;
         }
 
-        // Create UserMeta record if userMeta data is provided
         if (userMeta && Object.keys(userMeta).length > 0) {
             const { error: metaError } = await supabaseAdmin
                 .from('users_meta')
                 .insert({
-                    userId: user.id,
+                    user_id: user.id,
+                    bio: userMeta.bio || null,
                     dateOfBirth: userMeta.dateOfBirth || null,
                     fatherName: userMeta.fatherName || null,
                     address: userMeta.address || null,
@@ -113,11 +112,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             if (metaError) {
                 console.error('UserMeta creation error:', metaError);
-                // Don't fail registration if meta creation fails, just log it
             }
         }
 
-        // Create user hobbies if provided
         if (hobbies && Array.isArray(hobbies) && hobbies.length > 0) {
             const userHobbies = hobbies.map((hobbyId: string) => ({
                 userId: user.id,

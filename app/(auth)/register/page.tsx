@@ -429,6 +429,7 @@ function RegisterForm() {
                 <HobbiesSelector
                     selectedHobbies={watch('hobbies') || []}
                     onHobbiesChange={(hobbyIds) => setValue('hobbies', hobbyIds)}
+                    sideClickClose={false}
                 />
             </div>
         </div>

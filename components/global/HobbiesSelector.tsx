@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, X, Tag } from 'lucide-react';
 import api from '@/utils/api';
 import { debounce } from '@/utils/debounce';
+import { useClickOutside } from '@/hooks/useClickOutside';
 
 interface Hobby {
     id: string;
@@ -14,11 +15,12 @@ interface HobbiesSelectorProps {
     selectedHobbies: string[];
     onHobbiesChange: (hobbyIds: string[]) => void;
     className?: string;
+    sideClickClose?: boolean;
 }
 
-export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, className = '' }: HobbiesSelectorProps) {
+export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, className = '', sideClickClose = true }: HobbiesSelectorProps) {
+
     const [hobbies, setHobbies] = useState<Hobby[]>([]);
-    const [userHobbyIds, setUserHobbyIds] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     const [newHobbyName, setNewHobbyName] = useState('');
     const [showAddNew, setShowAddNew] = useState(false);
@@ -26,6 +28,13 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
     const [searchTerm, setSearchTerm] = useState('');
     const [showDropdown, setShowDropdown] = useState(false);
     const [searchResults, setSearchResults] = useState<Hobby[]>([]);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useClickOutside({
+        ref: dropdownRef,
+        handler: () => setShowDropdown(false),
+        enabled: sideClickClose
+    });
 
     useEffect(() => {
         fetchHobbies();
@@ -37,6 +46,7 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
                 setSearchResults([]);
                 return;
             }
+
             const filtered = hobbies.filter(hobby =>
                 hobby.name.toLowerCase().includes(query.toLowerCase()) &&
                 !selectedHobbies.includes(hobby.id)
@@ -51,19 +61,20 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
     }, [searchTerm, debouncedSearch]);
 
     const fetchHobbies = async () => {
+        console.log('🔄 Fetching hobbies...');
         try {
             const response = await api.get('/hobbies');
+            console.log('✅ Hobbies fetched:', response.data);
             setHobbies(response.data.hobbies);
-            setUserHobbyIds(response.data.userHobbyIds);
         } catch (error) {
-            console.error('Error fetching hobbies:', error);
+            console.error('❌ Error fetching hobbies:', error);
         } finally {
             setLoading(false);
         }
     };
 
     const handleAddNewHobby = async () => {
-        if (!newHobbyName.trim()) return;
+        if (!newHobbyName.trim() || selectedHobbies.length >= 15) return;
 
         setAddingHobby(true);
         try {
@@ -76,7 +87,6 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
             setNewHobbyName('');
             setShowAddNew(false);
 
-            // Auto-select the newly added hobby
             const updatedSelection = [...selectedHobbies, newHobby.id];
             onHobbiesChange(updatedSelection);
 
@@ -89,9 +99,8 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
         }
     };
 
-    // Add hobby from search input if not found
     const handleAddFromSearch = async () => {
-        if (!searchTerm.trim()) return;
+        if (!searchTerm.trim() || selectedHobbies.length >= 15) return;
 
         setAddingHobby(true);
         try {
@@ -102,14 +111,11 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
             const newHobby = response.data;
             setHobbies([...hobbies, newHobby]);
 
-            // Auto-select the newly added hobby
             const updatedSelection = [...selectedHobbies, newHobby.id];
             onHobbiesChange(updatedSelection);
 
-            // Clear search
             setSearchTerm('');
             setSearchResults([]);
-            setShowDropdown(false);
         } catch (error: any) {
             console.error('Error adding hobby:', error);
             alert(error.response?.data?.error || 'Failed to add hobby');
@@ -119,11 +125,13 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
     };
 
     const handleHobbyToggle = (hobbyId: string) => {
-        const updatedSelection = selectedHobbies.includes(hobbyId)
-            ? selectedHobbies.filter(id => id !== hobbyId)
-            : [...selectedHobbies, hobbyId];
-
-        onHobbiesChange(updatedSelection);
+        if (selectedHobbies.includes(hobbyId)) {
+            const updatedSelection = selectedHobbies.filter(id => id !== hobbyId);
+            onHobbiesChange(updatedSelection);
+        } else if (selectedHobbies.length < 15) {
+            const updatedSelection = [...selectedHobbies, hobbyId];
+            onHobbiesChange(updatedSelection);
+        }
     };
 
     const handleRemoveHobby = (hobbyId: string) => {
@@ -145,6 +153,11 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
     }
 
     const selectedHobbyObjects = hobbies.filter(hobby => selectedHobbies.includes(hobby.id));
+
+    const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setSearchTerm(e.target.value);
+        setShowDropdown(true);
+    };
 
     return (
         <div className={`space-y-3 ${className}`}>
@@ -173,40 +186,40 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
             )}
 
             <div className="flex gap-2">
-                <div className="relative flex-1">
+                <div className="relative flex-1" ref={dropdownRef}>
                     <input
                         type="text"
                         value={searchTerm}
-                        onChange={(e) => {
-                            setSearchTerm(e.target.value);
-                            setShowDropdown(true);
-                        }}
+                        onChange={handleSearchChange}
                         onFocus={() => setShowDropdown(true)}
-                        onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                        onClick={() => setShowDropdown(true)}
                         placeholder="Search or select a hobby..."
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     />
 
-                    {/* Dropdown */}
                     {showDropdown && (
                         <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                             {searchResults.length > 0 ? (
-                                searchResults.map((hobby: Hobby) => (
-                                    <button
-                                        key={hobby.id}
-                                        type="button"
-                                        onClick={() => {
-                                            handleHobbyToggle(hobby.id);
-                                            setSearchTerm('');
-                                            setShowDropdown(false);
-                                        }}
-                                        className="w-full px-3 py-2 text-left hover:bg-gray-100 transition-colors flex items-center justify-between"
-                                    >
-                                        <span className="flex-1">{hobby.name}</span>
-                                        <Tag size={14} className="text-green-600" />
-                                    </button>
-                                ))
-                            ) : searchTerm.trim() && (
+                                searchResults.map((hobby: Hobby) => {
+                                    const isSelected = selectedHobbies.includes(hobby.id);
+                                    return (
+                                        <button
+                                            key={hobby.id}
+                                            type="button"
+                                            onClick={() => {
+                                                if (!isSelected && selectedHobbies.length < 15) {
+                                                    handleHobbyToggle(hobby.id);
+                                                    setSearchTerm('');
+                                                }
+                                            }}
+                                            className={`w-full px-3 py-2 text-left hover:bg-gray-100 transition-colors flex items-center justify-between ${isSelected ? 'bg-green-50' : ''}`}
+                                        >
+                                            <span className="flex-1">{hobby.name}</span>
+                                            {isSelected ? <Tag size={14} className="text-green-600" /> : <div className="w-4" />}
+                                        </button>
+                                    );
+                                })
+                            ) : searchTerm.trim() && selectedHobbies.length < 15 ? (
                                 <div className="p-3">
                                     <p className="text-sm text-gray-500 mb-2">No hobbies found. Add "{searchTerm}" as a new hobby?</p>
                                     <button
@@ -218,7 +231,11 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
                                         {addingHobby ? 'Adding...' : `Add "${searchTerm}"`}
                                     </button>
                                 </div>
-                            )}
+                            ) : searchTerm.trim() ? (
+                                <div className="p-3">
+                                    <p className="text-sm text-gray-500">Maximum 15 hobbies reached. Remove some hobbies to add new ones.</p>
+                                </div>
+                            ) : null}
                         </div>
                     )}
                 </div>
@@ -247,7 +264,7 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
                     <button
                         type="button"
                         onClick={handleAddNewHobby}
-                        disabled={addingHobby || !newHobbyName.trim()}
+                        disabled={addingHobby || !newHobbyName.trim() || selectedHobbies.length >= 15}
                         className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                         {addingHobby ? 'Adding...' : 'Add'}
@@ -266,7 +283,7 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
             )}
 
             <p className="text-xs text-gray-500">
-                Select your hobbies or add new ones. These will be visible on your profile.
+                Select your hobbies or add new ones. These will be visible on your profile. (Maximum 15 hobbies)
             </p>
         </div>
     );

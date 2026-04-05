@@ -26,22 +26,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // Get user bio from users_meta table
         const { data: meta_data, error: metaError } = await supabaseAdmin
             .from('users_meta')
-            .select('bio')
+            .select('bio, hobbies')
             .eq('user_id', user.id)
             .single();
 
         const bio = metaError ? '' : (meta_data?.bio || '');
 
-        // Get user hobbies
-        const { data: userHobbies, error: hobbiesError } = await supabaseAdmin
-            .from('user_hoby')
-            .select('hobbyId, hoby(name)')
-            .eq('userId', user.id);
-
-        const hobbies = hobbiesError ? [] : (userHobbies?.map((uh: any) => ({
-            id: uh.hobbyId,
-            name: uh.hoby?.name || 'Unknown'
-        })) || []);
+        // Get user hobbies from hobbies array in users_meta
+        let hobbies: any[] = [];
+        if (meta_data && meta_data.hobbies && Array.isArray(meta_data.hobbies) && meta_data.hobbies.length > 0) {
+            const { data: hobbiesData } = await supabaseAdmin
+                .from('hobby')
+                .select('id, name')
+                .in('id', meta_data.hobbies);
+            
+            hobbies = hobbiesData || [];
+        }
 
         return res.status(200).json({
             id: user.id,

@@ -29,6 +29,7 @@ interface UserProfile {
 }
 
 export default function ProfilePage() {
+
     const router = useRouter();
     const { profile: ownProfile, loading: ownProfileLoading, refreshProfile } = useProfile();
     const [viewingProfile, setViewingProfile] = useState<UserProfile | null>(null);
@@ -37,7 +38,7 @@ export default function ProfilePage() {
     const [isOwnProfile, setIsOwnProfile] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
     const [editLoading, setEditLoading] = useState(false);
-    const [editForm, setEditForm] = useState({
+    const [formData, setFormData] = useState({
         username: '',
         phone: '',
         avatar: '',
@@ -87,7 +88,7 @@ export default function ProfilePage() {
                     createdAt: new Date().toISOString(),
                     lastSeen: new Date().toISOString()
                 });
-                setEditForm({
+                setFormData({
                     username: ownProfile.username || '',
                     phone: ownProfile.phone || '',
                     avatar: ownProfile.avatar || '',
@@ -102,19 +103,18 @@ export default function ProfilePage() {
             }
             setLoading(false);
         }
-    }, [ownProfile, router]);
+    }, [ownProfile?.username, router]);
 
     useEffect(() => {
         if (croppedImage) {
-            setEditForm(prev => ({ ...prev, avatar: croppedImage }));
+            setFormData(prev => ({ ...prev, avatar: croppedImage }));
         }
     }, [croppedImage]);
 
     const handleEditToggle = () => {
         if (isEditing) {
-            // Reset form on cancel
             if (ownProfile) {
-                setEditForm({
+                setFormData({
                     username: ownProfile.username || '',
                     phone: ownProfile.phone || '',
                     avatar: ownProfile.avatar || '',
@@ -137,36 +137,36 @@ export default function ProfilePage() {
         try {
             const changedFields: Record<string, any> = {};
             
-            if (editForm.username !== ownProfile?.username) {
-                changedFields.username = editForm.username;
+            if (formData.username !== ownProfile?.username) {
+                changedFields.username = formData.username;
             }
-            if (editForm.phone !== ownProfile?.phone) {
-                changedFields.phone = editForm.phone || undefined;
+            if (formData.phone !== ownProfile?.phone) {
+                changedFields.phone = formData.phone || undefined;
             }
-            if (editForm.avatar !== ownProfile?.avatar) {
-                changedFields.avatar = editForm.avatar || undefined;
+            if (formData.avatar !== ownProfile?.avatar) {
+                changedFields.avatar = formData.avatar || undefined;
             }
-            if (editForm.bio !== ownProfile?.bio) {
-                changedFields.bio = editForm.bio || undefined;
+            if (formData.bio !== ownProfile?.bio) {
+                changedFields.bio = formData.bio || undefined;
             }
-            if (editForm.dateOfBirth !== ownProfile?.dateOfBirth) {
-                changedFields.dateOfBirth = editForm.dateOfBirth || undefined;
+            if (formData.dateOfBirth !== ownProfile?.dateOfBirth) {
+                changedFields.dateOfBirth = formData.dateOfBirth || undefined;
             }
-            if (editForm.fatherName !== ownProfile?.fatherName) {
-                changedFields.fatherName = editForm.fatherName || undefined;
+            if (formData.fatherName !== ownProfile?.fatherName) {
+                changedFields.fatherName = formData.fatherName || undefined;
             }
-            if (editForm.address !== ownProfile?.address) {
-                changedFields.address = editForm.address || undefined;
+            if (formData.address !== ownProfile?.address) {
+                changedFields.address = formData.address || undefined;
             }
-            if (editForm.cnic !== ownProfile?.cnic) {
-                changedFields.cnic = editForm.cnic || undefined;
+            if (formData.cnic !== ownProfile?.cnic) {
+                changedFields.cnic = formData.cnic || undefined;
             }
-            if (editForm.gender !== ownProfile?.gender) {
-                changedFields.gender = editForm.gender || undefined;
+            if (formData.gender !== ownProfile?.gender) {
+                changedFields.gender = formData.gender || undefined;
             }
             const currentHobbyIds = (ownProfile?.hobbies || []).map((h: any) => typeof h === 'string' ? h : h.id);
-            if (JSON.stringify(editForm.hobbies) !== JSON.stringify(currentHobbyIds)) {
-                changedFields.hobbies = editForm.hobbies;
+            if (JSON.stringify(formData.hobbies) !== JSON.stringify(currentHobbyIds)) {
+                changedFields.hobbies = formData.hobbies;
             }
             
             if (Object.keys(changedFields).length === 0) {
@@ -354,9 +354,9 @@ export default function ProfilePage() {
                     <div className="bg-gradient-to-r from-green-500 to-green-600 p-8">
                         <div className="flex flex-col items-center text-center">
                             <div className="relative">
-                                {editForm.avatar ? (
+                                {formData.avatar ? (
                                     <img
-                                        src={editForm.avatar}
+                                        src={formData.avatar}
                                         alt={viewingProfile.username}
                                         className="w-32 h-32 rounded-full border-4 border-white shadow-lg object-cover"
                                     />
@@ -415,8 +415,8 @@ export default function ProfilePage() {
                                         <div className="space-y-1">
                                             <input
                                                 type="text"
-                                                value={editForm.username}
-                                                onChange={(e) => setEditForm(prev => ({ ...prev, username: e.target.value }))}
+                                                value={formData.username}
+                                                onChange={(e) => setFormData(prev => ({ ...prev, username: e.target.value }))}
                                                 placeholder="Enter your username"
                                                 className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors"
                                                 minLength={2}
@@ -442,13 +442,13 @@ export default function ProfilePage() {
                                         </label>
                                         <div className="space-y-1">
                                             <input
-                                                value={editForm.bio}
-                                                onChange={(e) => setEditForm(prev => ({ ...prev, bio: e.target.value }))}
+                                                value={formData.bio}
+                                                onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
                                                 placeholder="Tell us about yourself..."
                                                 className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors resize-none"
                                                 maxLength={50}
                                             />
-                                            <p className="text-xs text-gray-500">{editForm.bio.length}/50 characters</p>
+                                            <p className="text-xs text-gray-500">{formData.bio.length}/50 characters</p>
                                         </div>
                                     </div>
                                     <div className="flex-1">
@@ -476,8 +476,8 @@ export default function ProfilePage() {
                                         <div className="space-y-1">
                                             <PatternFormat
                                                 type="tel"
-                                                value={editForm.phone}
-                                                onValueChange={(values: any) => setEditForm(prev => ({ ...prev, phone: values.value }))}
+                                                value={formData.phone}
+                                                onValueChange={(values: any) => setFormData(prev => ({ ...prev, phone: values.value }))}
                                                 placeholder="+1 (234) 567-8900 (optional)"
                                                 format="+## (###) ###-####"
                                                 mask="_"
@@ -507,8 +507,8 @@ export default function ProfilePage() {
                                         <div className="space-y-1">
                                             <input
                                                 type="date"
-                                                value={editForm.dateOfBirth}
-                                                onChange={(e) => setEditForm(prev => ({ ...prev, dateOfBirth: e.target.value }))}
+                                                value={formData.dateOfBirth}
+                                                onChange={(e) => setFormData(prev => ({ ...prev, dateOfBirth: e.target.value }))}
                                                 className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors"
                                                 max={new Date().toISOString().split('T')[0]}
                                             />
@@ -535,8 +535,8 @@ export default function ProfilePage() {
                                     {isOwnProfile && isEditing ? (
                                         <div className="space-y-1">
                                             <select
-                                                value={editForm.gender}
-                                                onChange={(e) => setEditForm(prev => ({ ...prev, gender: e.target.value }))}
+                                                value={formData.gender}
+                                                onChange={(e) => setFormData(prev => ({ ...prev, gender: e.target.value }))}
                                                 className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors"
                                             >
                                                 <option value="">Select Gender</option>
@@ -568,8 +568,8 @@ export default function ProfilePage() {
                                         <div className="space-y-1">
                                             <input
                                                 type="text"
-                                                value={editForm.fatherName}
-                                                onChange={(e) => setEditForm(prev => ({ ...prev, fatherName: e.target.value }))}
+                                                value={formData.fatherName}
+                                                onChange={(e) => setFormData(prev => ({ ...prev, fatherName: e.target.value }))}
                                                 placeholder="Enter father's name"
                                                 className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors"
                                             />
@@ -598,8 +598,8 @@ export default function ProfilePage() {
                                         <div className="space-y-1">
                                             <PatternFormat
                                                 type="text"
-                                                value={editForm.cnic}
-                                                onValueChange={(values: any) => setEditForm(prev => ({ ...prev, cnic: values.value }))}
+                                                value={formData.cnic}
+                                                onValueChange={(values: any) => setFormData(prev => ({ ...prev, cnic: values.value }))}
                                                 placeholder="XXXXX-XXXXXXX-X"
                                                 format="#####-#######-#"
                                                 mask="_"
@@ -628,8 +628,8 @@ export default function ProfilePage() {
                                     {isOwnProfile && isEditing ? (
                                         <div className="space-y-1">
                                             <textarea
-                                                value={editForm.address}
-                                                onChange={(e) => setEditForm(prev => ({ ...prev, address: e.target.value }))}
+                                                value={formData.address}
+                                                onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
                                                 placeholder="Enter your address"
                                                 rows={3}
                                                 className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors resize-none"
@@ -658,9 +658,10 @@ export default function ProfilePage() {
                                     {isOwnProfile && isEditing ? (
                                         <div className="space-y-1">
                                             <HobbiesSelector
-                                                selectedHobbies={editForm.hobbies}
-                                                onHobbiesChange={(hobbyIds) => setEditForm(prev => ({ ...prev, hobbies: hobbyIds }))}
+                                                selectedHobbies={formData.hobbies}
+                                                onHobbiesChange={(hobbyIds) => setFormData(prev => ({ ...prev, hobbies: hobbyIds }))}
                                                 className="mt-0"
+                                                sideClickClose={false}
                                             />
                                         </div>
                                     ) : (

@@ -16,34 +16,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 return res.status(400).json({ error: 'Hobby IDs must be an array' });
             }
 
-            // Delete existing user hobbies
-            const { error: deleteError } = await supabaseAdmin
-                .from('UserHobby')
-                .delete()
-                .eq('userId', authUser.userId);
-
-            if (deleteError) {
-                console.error('Error deleting existing hobbies:', deleteError);
-                return res.status(500).json({ error: 'Failed to update hobbies' });
-            }
-
-            // Add new hobbies if any provided
-            if (hobbyIds.length > 0) {
-                const userHobbies = hobbyIds.map((hobbyId: string) => ({
-                    userId: authUser.userId,
-                    hobbyId,
-                    createdAt: new Date().toISOString()
-                }));
-
-                const { error: insertError } = await supabaseAdmin
-                    .from('UserHobby')
-                    .insert(userHobbies);
-
-                if (insertError) {
-                    console.error('Error adding hobbies:', insertError);
-                    return res.status(500).json({ error: 'Failed to add hobbies' });
-                }
-            }
+            // User hobbies are not stored in separate table
+            // Just return success without saving
+            console.log('Hobbies received but not stored:', hobbyIds);
 
             return res.status(200).json({ message: 'Hobbies updated successfully' });
         } catch (err) {

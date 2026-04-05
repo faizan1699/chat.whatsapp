@@ -1,0 +1,5 @@
+-- ADD ADDRESS COLUMN TO users_meta TABLE
+ALTER TABLE "users_meta" ADD COLUMN IF NOT EXISTS "address" TEXT;
+
+-- ALSO ENSURE CONSISTENT COLUMN NAMES (if needed)
+-- ALTER TABLE "users_meta" RENAME COLUMN "userId" TO "user_id";
