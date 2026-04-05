@@ -60,11 +60,21 @@ export default function LoginForm({ onSuccess, onSwitchToRegister, onForgotPassw
                         id: user.id,
                         username: user.username,
                         email: user.email,
-                        phoneNumber: user.phoneNumber || ''
+                        phone: user.phoneNumber || ''
                     }
                 );
                 
                 console.log('✅ Session stored in localStorage');
+                
+                // Auto-fetch user profile after successful login
+                try {
+                    const profileResponse = await api.get('/auth/profile');
+                    console.log('✅ Profile fetched successfully:', profileResponse.data);
+                } catch (profileError) {
+                    console.error('⚠️ Failed to fetch profile after login:', profileError);
+                    // Don't fail the login if profile fetch fails
+                }
+                
                 onSuccess({ username: user.username, userId: user.id });
             } else if (user?.username) {
                 // Fallback for backward compatibility

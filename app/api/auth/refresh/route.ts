@@ -22,9 +22,6 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        console.log('🔄 Refreshing session with token:', refreshToken.substring(0, 50) + '...');
-
-        // Verify refresh token
         const { payload } = await jwtVerify(refreshToken, refreshSecret) as { payload: RefreshTokenPayload };
         
         if (payload.type !== 'refresh') {
@@ -34,9 +31,6 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        console.log('✅ Refresh token verified for user:', payload.username);
-
-        // Get user info from database
         const { data: user, error } = await supabaseAdmin
             .from('users')
             .select('id, username, email, phone_number')
@@ -50,7 +44,6 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Create new access token
         const newAccessToken = await new SignJWT({
             userId: payload.userId, 
             username: payload.username,
@@ -61,7 +54,6 @@ export async function POST(request: NextRequest) {
             .setExpirationTime('1h')
             .sign(secret);
 
-        // Create new refresh token
         const newRefreshToken = await new SignJWT({
             userId: payload.userId, 
             username: payload.username,
@@ -72,19 +64,12 @@ export async function POST(request: NextRequest) {
             .setExpirationTime('30d')
             .sign(refreshSecret);
 
-        console.log('✅ New tokens generated successfully');
-
         return NextResponse.json({
             message: 'Session refreshed successfully',
             accessToken: newAccessToken,
             refreshToken: newRefreshToken,
-            user: {
-                id: user.id,
-                username: user.username,
-                email: user.email,
-                phoneNumber: user.phone_number
-            }
-        });
+            status: 200
+        }, {status: 200});
 
     } catch (error) {
         console.error('Session refresh error:', error);
