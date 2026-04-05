@@ -4,51 +4,56 @@ import { useState, Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { Eye, EyeOff, MessageCircle, Lock, Mail, User } from 'lucide-react';
+import { useAuthHook } from '@/hooks/useAuthHook';
 import { frontendAuth } from '@/utils/frontendAuth';
-import api from '@/utils/api';
+import { LoginDTO } from '@/utils/helpers/models/auth.dto';
 
 interface LoginFormData {
     identifier: string;
     password: string;
+    termsAccepted: boolean;
 }
 
 function LoginForm() {
     const [showPassword, setShowPassword] = useState(false);
+    const [formData, setFormData] = useState<LoginFormData>({
+        identifier: '',
+        password: '',
+        termsAccepted: false
+    });
     const router = useRouter();
     const searchParams = useSearchParams();
 
-    useEffect(() => {
-        if (frontendAuth.isAuthenticated()) {
-            const returnTo = searchParams?.get('returnTo') || '/chat';
-            router.push(returnTo);
-        }
-    }, [router, searchParams]);
+    const { login, loading, error } = useAuthHook();
 
+    
     const {
         register,
         handleSubmit,
-        formState: { errors, isSubmitting },
-        setError: setFormError,
-    } = useForm<LoginFormData>();
+        formState: { errors },
+        setValue,
+        trigger
+    } = useForm<LoginFormData>({
+        defaultValues: formData
+    });
 
-    const onSubmit = async (data: LoginFormData) => {
-        try {
-            const response = await api.post('/auth/login', data);
-            const responseData = response.data;
-
-            frontendAuth.setSession(
-                responseData.accessToken,
-                responseData.refreshToken,
-                responseData.user
-            );
-
-            const returnTo = searchParams?.get('returnTo') || '/chat';
-            router.push(returnTo);
-        } catch (error: any) {
-            const errorMessage = error?.response?.data?.message || 'Login failed';
-            setFormError('root', { type: 'manual', message: errorMessage });
-        }
+    const handleChange = (event: any) => {
+        const { name, value } = event.target;
+        setValue(name, value);
+        trigger(name);
+        setFormData({ ...formData, [name]: value });
     };
+    
+    const onSubmit = async (data: LoginFormData) => {
+        login(data);
+    }
+   
+    useEffect(() => {
+            if (frontendAuth.isAuthenticated()) {
+                const returnTo = searchParams?.get('returnTo') || '/chat';
+                router.push(returnTo);
+            }
+        }, [router, searchParams]);
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
@@ -80,6 +85,7 @@ function LoginForm() {
                                     id="identifier"
                                     {...register('identifier', {
                                         required: 'Username or email is required',
+                                        onChange: (e) => handleChange(e)
                                     })}
                                     type="text"
                                     className={`block w-full pl-10 pr-3 py-3 border ${errors.identifier ? 'border-red-300' : 'border-gray-300'
@@ -108,6 +114,7 @@ function LoginForm() {
                                             value: 6,
                                             message: 'Password must be at least 6 characters',
                                         },
+                                        onChange: (e) => handleChange(e)
                                     })}
                                     type={showPassword ? 'text' : 'password'}
                                     className={`block w-full pl-10 pr-10 py-3 border ${errors.password ? 'border-red-300' : 'border-gray-300'
@@ -139,10 +146,10 @@ function LoginForm() {
 
                         <button
                             type="submit"
-                            disabled={isSubmitting}
+                            disabled={loading}
                             className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
-                            {isSubmitting ? (
+                            {loading ? (
                                 <div className="flex items-center justify-center">
                                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                                     Signing in...

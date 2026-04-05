@@ -1,22 +1,23 @@
 'use client';
 
-import { useState, Suspense, useEffect, FC, Fragment } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
-import { Eye, EyeOff, MessageCircle, Lock, Mail, User, Camera, Upload, Check } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, User, Camera } from 'lucide-react';
 import { frontendAuth } from '@/utils/frontendAuth';
-import api from '@/utils/api';
 import { useImageCropper } from '@/hooks/useImageCropper';
-import Cropper from 'react-easy-crop';
 import GlobalImageCropper from '@/components/global/GlobalImageCropper';
-import HobbiesSelector from '@/components/global/HobbiesSelector';
+import Link from 'next/link';
 
-interface Props {
+import { useAuthHook } from '@/hooks/useAuthHook';
+
+interface RegisterFormData {
     username: string;
     email: string;
     password: string;
-    confirmPassword: string;
-    phone?: string;
+    phoneNumber?: string;
+    termsAccepted: boolean;
+    confirmPassword?: string;
     avatar?: string;
     verificationCode?: string;
     dateOfBirth?: string;
@@ -28,13 +29,24 @@ interface Props {
 }
 
 const RegisterForm = () => {
-    const [showPassword, setShowPassword] = useState(false);
-    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    
+    const [passwordVisibility, setPasswordVisibility] = useState({
+        password: false,
+        confirmPassword: false
+    });
     const [avatarPreview, setAvatarPreview] = useState<string>('');
-    const [step, setStep] = useState<1 | 2 | 3>(1);
     const [verificationSent, setVerificationSent] = useState(false);
+    const [step, setStep] = useState(1);
     const router = useRouter();
     const searchParams = useSearchParams();
+    const { register: registerUser, loading, error } = useAuthHook();
+    const [formData, setFormData] = useState<RegisterFormData>({
+        username: '',
+        email: '',
+        password: '',
+        phoneNumber: '',
+        termsAccepted: false
+    });
 
     const {
         selectedImage,
@@ -48,29 +60,24 @@ const RegisterForm = () => {
         handleCropComplete,
         handleCropConfirm,
         handleCropCancel,
-        resetCropper
     } = useImageCropper();
 
-    // Check if user is already logged in and redirect to chat
     useEffect(() => {
         if (frontendAuth.isAuthenticated()) {
-            console.log('✅ User already logged in, redirecting to chat...');
             router.push('/chat');
             router.refresh();
         }
     }, [router]);
 
-    
-  
     const {
-        register,
+        register: formRegister,
         handleSubmit,
         formState: { errors, isSubmitting },
         setError: setFormError,
         watch,
         setValue,
         trigger,
-    } = useForm<Props>();
+    } = useForm<RegisterFormData>();
 
     const password = watch('password');
 
@@ -81,93 +88,24 @@ const RegisterForm = () => {
         }
     };
 
-
-    const onBasicInfoSubmit = async (data: Props) => {
-        try {
-            const response = await api.post('/auth/register', {
-                username: data.username,
-                email: data.email,
-                password: data.password,
-                phone: data.phone,
-                userMeta: {
-                    dateOfBirth: data.dateOfBirth,
-                    fatherName: data.fatherName,
-                    address: data.address,
-                    cnic: data.cnic,
-                    gender: data.gender
-                },
-                hobbies: data.hobbies || []
-            });
-
-            setVerificationSent(true);
-            setStep(2);
-        } catch (error: any) {
-            const errorMessage = error?.response?.data?.message || 'Registration failed';
-            setFormError('root', { type: 'manual', message: errorMessage });
-        }
+    const handleChange = (event: any) => {
+        const { name, value } = event.target;
+        setValue(name, value);
+        trigger(name);
     };
 
-    const onVerificationSubmit = async (data: Props) => {
+    const onSubmit = async (data: RegisterFormData) => {
         try {
-            const response = await api.post('/auth/verify-email', {
-                email: data.email,
-                code: data.verificationCode,
-            });
-
-            setStep(3);
-        } catch (error: any) {
-            const errorMessage = error?.response?.data?.message || 'Verification failed';
-            setFormError('verificationCode', { type: 'manual', message: errorMessage });
+            await registerUser(data);
+            const returnTo = searchParams?.get('returnTo') || '/chat';
+            router.push(returnTo);
+        } catch (error) {
+            console.error('Registration failed:', error);
         }
     };
 
     const handleResendOTP = async () => {
-        try {
-            const response = await api.post('/auth/resend-otp', {
-                email: watch('email'),
-            });
-
-            setFormError('verificationCode', { 
-                type: 'manual', 
-                message: 'New verification code sent to your email' 
-            });
-        } catch (error: any) {
-            const errorMessage = error?.response?.data?.message || 'Failed to resend code';
-            setFormError('verificationCode', { type: 'manual', message: errorMessage });
-        }
-    };
-
-    const onFinalSubmit = async (data: Props) => {
-        try {
-            const response = await api.post('/auth/complete-registration', {
-                username: data.username,
-                email: data.email,
-                avatar: croppedImage || data.avatar,
-            });
-
-            const responseData = response.data;
-            
-            frontendAuth.setSession(
-                responseData.accessToken,
-                responseData.refreshToken,
-                responseData.user
-            );
-
-            router.push('/chat');
-        } catch (error: any) {
-            const errorMessage = error?.response?.data?.message || 'Registration completion failed';
-            setFormError('root', { type: 'manual', message: errorMessage });
-        }
-    };
-
-    const onSubmit = (data: Props) => {
-        if (step === 1) {
-            onBasicInfoSubmit(data);
-        } else if (step === 2) {
-            onVerificationSubmit(data);
-        } else if (step === 3) {
-            onFinalSubmit(data);
-        }
+        console.log('Resend OTP clicked');
     };
 
       useEffect(() => {
@@ -188,7 +126,7 @@ const RegisterForm = () => {
                         <User className="h-5 w-5 text-gray-400" />
                     </div>
                     <input
-                        {...register('username', {
+                        {...formRegister('username', {
                             required: 'Username is required',
                             minLength: {
                                 value: 3,
@@ -198,6 +136,7 @@ const RegisterForm = () => {
                                 value: /^[a-zA-Z0-9_]+$/,
                                 message: 'Username can only contain letters, numbers, and underscores',
                             },
+                            onChange: (e) => handleChange(e)
                         })}
                         type="text"
                         className={`block w-full pl-10 pr-3 py-3 bg-gray-50 border ${errors.username ? 'border-red-300' : 'border-gray-300'
@@ -219,12 +158,13 @@ const RegisterForm = () => {
                         <Mail className="h-5 w-5 text-gray-400" />
                     </div>
                     <input
-                        {...register('email', {
+                        {...formRegister('email', {
                             required: 'Email is required',
                             pattern: {
                                 value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
                                 message: 'Invalid email address',
                             },
+                            onChange: (e) => handleChange(e)
                         })}
                         type="email"
                         className={`block w-full pl-10 pr-3 py-3 bg-gray-50 border ${errors.email ? 'border-red-300' : 'border-gray-300'
@@ -246,20 +186,21 @@ const RegisterForm = () => {
                         <User className="h-5 w-5 text-gray-400" />
                     </div>
                     <input
-                        {...register('phone', {
+                        {...formRegister('phoneNumber', {
                             pattern: {
                                 value: /^[+]?[\d\s-()]+$/,
                                 message: 'Invalid phone number format',
                             },
+                            onChange: (e) => handleChange(e)
                         })}
                         type="tel"
-                        className={`block w-full pl-10 pr-3 py-3 bg-gray-50 border ${errors.phone ? 'border-red-300' : 'border-gray-300'
+                        className={`block w-full pl-10 pr-3 py-3 bg-gray-50 border ${errors.phoneNumber ? 'border-red-300' : 'border-gray-300'
                             } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
                         placeholder="+1234567890"
                     />
                 </div>
-                {errors.phone && (
-                    <p className="mt-2 text-sm text-red-600">{errors.phone.message}</p>
+                {errors.phoneNumber && (
+                    <p className="mt-2 text-sm text-red-600">{errors.phoneNumber.message}</p>
                 )}
             </div>
 
@@ -272,24 +213,25 @@ const RegisterForm = () => {
                         <Lock className="h-5 w-5 text-gray-400" />
                     </div>
                     <input
-                        {...register('password', {
+                        {...formRegister('password', {
                             required: 'Password is required',
                             minLength: {
                                 value: 6,
                                 message: 'Password must be at least 6 characters',
                             },
+                            onChange: (e) => handleChange(e)
                         })}
-                        type={showPassword ? 'text' : 'password'}
+                        type={passwordVisibility.password ? 'text' : 'password'}
                         className={`block w-full pl-10 pr-10 py-3 bg-gray-50 border ${errors.password ? 'border-red-300' : 'border-gray-300'
                             } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
                         placeholder="Create a password"
                     />
                     <button
                         type="button"
-                        onClick={() => setShowPassword(!showPassword)}
+                        onClick={() => setPasswordVisibility(prev => ({ ...prev, password: !prev.password }))}
                         className="absolute inset-y-0 right-0 pr-3 flex items-center"
                     >
-                        {showPassword ? (
+                        {passwordVisibility.password ? (
                             <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
                         ) : (
                             <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
@@ -310,21 +252,22 @@ const RegisterForm = () => {
                         <Lock className="h-5 w-5 text-gray-400" />
                     </div>
                     <input
-                        {...register('confirmPassword', {
+                        {...formRegister('confirmPassword', {
                             required: 'Please confirm your password',
                             validate: (value) => value === password || 'Passwords do not match',
+                            onChange: (e) => handleChange(e)
                         })}
-                        type={showConfirmPassword ? 'text' : 'password'}
+                        type={passwordVisibility.confirmPassword ? 'text' : 'password'}
                         className={`block w-full pl-10 pr-10 py-3 bg-gray-50 border ${errors.confirmPassword ? 'border-red-300' : 'border-gray-300'
                             } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
                         placeholder="Confirm your password"
                     />
                     <button
                         type="button"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        onClick={() => setPasswordVisibility(prev => ({ ...prev, confirmPassword: !prev.confirmPassword }))}
                         className="absolute inset-y-0 right-0 pr-3 flex items-center"
                     >
-                        {showConfirmPassword ? (
+                        {passwordVisibility.confirmPassword ? (
                             <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
                         ) : (
                             <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
@@ -332,7 +275,7 @@ const RegisterForm = () => {
                     </button>
                 </div>
                 {errors.confirmPassword && (
-                    <p className="mt-2 text-sm text-red-600">{errors.confirmPassword.message}</p>
+                    <p className="mt-2 text-sm text-red-600">{errors.confirmPassword?.message}</p>
                 )}
             </div>
 
@@ -341,7 +284,9 @@ const RegisterForm = () => {
                     Date of Birth (Optional)
                 </label>
                 <input
-                    {...register('dateOfBirth')}
+                    {...formRegister('dateOfBirth', {
+                        onChange: (e) => handleChange(e)
+                    })}
                     type="date"
                     className={`block w-full px-3 py-3 bg-gray-50 border ${errors.dateOfBirth ? 'border-red-300' : 'border-gray-300'
                         } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
@@ -357,7 +302,9 @@ const RegisterForm = () => {
                     Gender (Optional)
                 </label>
                 <select
-                    {...register('gender')}
+                    {...formRegister('gender', {
+                        onChange: (e) => handleChange(e)
+                    })}
                     className={`block w-full px-3 py-3 bg-gray-50 border ${errors.gender ? 'border-red-300' : 'border-gray-300'
                         } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
                 >
@@ -376,7 +323,9 @@ const RegisterForm = () => {
                     Father Name (Optional)
                 </label>
                 <input
-                    {...register('fatherName')}
+                    {...formRegister('fatherName', {
+                        onChange: (e) => handleChange(e)
+                    })}
                     type="text"
                     className={`block w-full px-3 py-3 bg-gray-50 border ${errors.fatherName ? 'border-red-300' : 'border-gray-300'
                         } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors`}
@@ -392,11 +341,12 @@ const RegisterForm = () => {
                     CNIC (Optional - Unique)
                 </label>
                 <input
-                    {...register('cnic', {
+                    {...formRegister('cnic', {
                         pattern: {
                             value: /^[0-9]{5}-[0-9]{7}-[0-9]{1}$/,
                             message: 'CNIC format: XXXXX-XXXXXXX-X',
                         },
+                        onChange: (e) => handleChange(e)
                     })}
                     type="text"
                     className={`block w-full px-3 py-3 bg-gray-50 border ${errors.cnic ? 'border-red-300' : 'border-gray-300'
@@ -414,7 +364,9 @@ const RegisterForm = () => {
                     Address (Optional)
                 </label>
                 <textarea
-                    {...register('address')}
+                    {...formRegister('address', {
+                        onChange: (e) => handleChange(e)
+                    })}
                     rows={1}
                     className={`block w-full px-3 py-3 bg-gray-50 border ${errors.address ? 'border-red-300' : 'border-gray-300'
                         } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors resize-none`}
@@ -444,7 +396,7 @@ const RegisterForm = () => {
                     Verification Code
                 </label>
                 <input
-                    {...register('verificationCode', {
+                    {...formRegister('verificationCode', {
                         required: 'Verification code is required',
                         minLength: {
                             value: 6,
@@ -458,6 +410,7 @@ const RegisterForm = () => {
                             value: /^\d{6}$/,
                             message: 'Code must be 6 digits',
                         },
+                        onChange: (e) => handleChange(e)
                     })}
                     type="text"
                     className={`block w-full px-3 py-3 border ${errors.verificationCode ? 'border-red-300' : 'border-gray-300'
@@ -561,33 +514,24 @@ const RegisterForm = () => {
                         {step === 2 && renderStep2()}
                         {step === 3 && renderStep3()}
 
-                        {errors.root && (
+                        {error && (
                             <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                                <p className="text-sm text-red-600">{errors.root.message}</p>
+                                <p className="text-sm text-red-600">{error}</p>
                             </div>
                         )}
 
                         <button
                             type="submit"
-                            disabled={isSubmitting}
+                            disabled={loading}
                             className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
-                            {isSubmitting ? (
+                            {loading ? (
                                 <div className="flex items-center justify-center">
-                                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                    {step === 1 && 'Creating Account...'}
-                                    {step === 2 && 'Verifying...'}
-                                    {step === 3 && 'Completing...'}
+                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                                    Creating Account...
                                 </div>
                             ) : (
-                                <Fragment>
-                                    {step === 1 && 'Create Account'}
-                                    {step === 2 && 'Verify Email'}
-                                    {step === 3 && 'Complete Registration'}
-                                </Fragment>
+                                'Create Account'
                             )}
                         </button>
                     </form>
@@ -595,9 +539,9 @@ const RegisterForm = () => {
                     <div className="text-center mt-6">
                         <p className="text-sm text-gray-600">
                             Already have an account?{' '}
-                            <a href="/login" className="text-blue-600 hover:text-blue-700 font-medium">
+                            <Link href="/login" className="text-blue-600 hover:text-blue-700 font-medium">
                                 Sign in
-                            </a>
+                            </Link>
                         </p>
                     </div>
 
@@ -608,7 +552,6 @@ const RegisterForm = () => {
                     </div>
                 </div>
 
-                {/* Image Cropper Modal */}
                 {showCropper && selectedImage && (
                     <GlobalImageCropper
                         image={selectedImage}

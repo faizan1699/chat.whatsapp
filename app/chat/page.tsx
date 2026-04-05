@@ -11,7 +11,6 @@ import CallNotification from '@/components/video/CallNotification';
 import Sidebar from '@/components/global/Sidebar';
 import ResizableSidebar from '@/components/global/ResizableSidebar';
 import { getClientCookies } from '@/utils/cookies';
-import AuthOverlay from '@/components/global/AuthOverlay';
 import EditProfileModal from '@/components/global/EditProfileModal';
 import FullPageLoader from '@/components/global/FullPageLoader';
 import { SecureSession } from '@/utils/secureSession';
@@ -1666,41 +1665,6 @@ export default function ChatPage() {
                     onClose={() => setCallNotification(null)}
                 />
             )}
-
-            <AuthOverlay
-                username={username}
-                onUsernameCreated={(u, userId) => {
-                    setUsername(u);
-
-                    setTimeout(async () => {
-                        const cookies = getClientCookies();
-                        const userData = SecureSession.getUser();
-                        const finalUserId = userId || (cookies['user-id'] as string) || userData.userId;
-
-                        if (finalUserId) {
-                            try {
-                                await loadConversations(finalUserId);
-                            } catch (error) {
-                            }
-
-                            const failed = storageHelpers.getFailedMessages() || [];
-                            if (failed.length > 0) {
-                                setMessages(prev => {
-                                    const newMessages = failed.filter((fm: Message) => !prev.some(m => m.id === fm.id));
-                                    return [...prev, ...newMessages];
-                                });
-                            }
-                        } else {
-                        }
-                    }, 100);
-
-                    socketRef.current?.emit('join-user', u);
-                }}
-                onClearData={() => {
-                    SecureSession.clearSession();
-                    setUsername('');
-                }}
-            />
 
             <EditProfileModal
                 isOpen={showEditProfile}

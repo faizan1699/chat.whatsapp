@@ -2,6 +2,8 @@ import { useState, useCallback } from 'react';
 import api from '@/utils/api';
 import { frontendAuth } from '@/utils/frontendAuth';
 import { hasCookieAcceptance, getCookiePreferences } from '@/utils/cookieConsent';
+import AUTH_APIS from '@/libs/apis/auth.api';
+import { useRouter } from 'next/navigation';
 
 interface LoginCredentials {
   identifier: string;
@@ -58,44 +60,34 @@ interface UserSession {
 }
 
 export const useAuthHook = () => {
+
+  const router = useRouter();
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const login = useCallback(async (credentials: LoginCredentials): Promise<LoginResponse> => {
+
+  const login = useCallback(async (credentials: LoginCredentials) => {
+
     setLoading(true);
-    setError(null);
 
     try {
-      // Get cookie consent data if available
       const cookieConsent = hasCookieAcceptance() ? getCookiePreferences() : null;
 
-      const response = await api.post('/auth/login', {
+      const params = {
         identifier: credentials.identifier,
         password: credentials.password,
         termsAccepted: credentials.termsAccepted,
         cookieConsent: cookieConsent,
-      });
-
-      const responseData = response.data;
-      const user = responseData?.user;
-
-      if (user?.username && responseData?.accessToken && responseData?.refreshToken) {
-        frontendAuth.setSession(
-          responseData.accessToken,
-          responseData.refreshToken,
-          {
-            id: user.id,
-            username: user.username,
-            email: user.email,
-            phone: user.phoneNumber || ''
-          }
-        );
-
-        setLoading(false);
-        return responseData;
-      } else {
-        throw new Error('Invalid login response');
       }
+      const response = await AUTH_APIS.login(params);
+
+      if (response.status) {
+        getProfile();
+        router.push('/chat');
+        setLoading(false);
+      }
+
     } catch (err: any) {
       setLoading(false);
       const errorMessage = err.response?.data?.message || 'Login failed. Check your credentials.';
@@ -104,24 +96,15 @@ export const useAuthHook = () => {
     }
   }, []);
 
-  const register = useCallback(async (credentials: RegisterCredentials): Promise<LoginResponse> => {
+  const register = useCallback(async (credentials: RegisterCredentials): Promise<void> => {
     setLoading(true);
-    setError(null);
-
+   
     try {
-      // Get cookie consent data if available
+
       const cookieConsent = hasCookieAcceptance() ? getCookiePreferences() : null;
+      const response = await AUTH_APIS.register({ ...credentials, cookieConsent });
 
-      const response = await api.post('/auth/register', {
-        username: credentials.username,
-        email: credentials.email,
-        password: credentials.password,
-        phone_number: credentials.phoneNumber,
-        termsAccepted: credentials.termsAccepted,
-        cookieConsent: cookieConsent,
-      });
-
-      const responseData = response.data;
+      const responseData = response?.data;
       const user = responseData?.user;
 
       if (user?.username && responseData?.accessToken && responseData?.refreshToken) {
@@ -135,9 +118,9 @@ export const useAuthHook = () => {
             phone: user.phoneNumber || ''
           }
         );
-
         setLoading(false);
         return responseData;
+
       } else {
         throw new Error('Invalid registration response');
       }
@@ -151,10 +134,10 @@ export const useAuthHook = () => {
 
   const getProfile = useCallback(async (): Promise<UserProfile> => {
     setLoading(true);
-    setError(null);
+   
 
     try {
-      const response = await api.get('/auth/profile');
+      const response = await AUTH_APIS.getProfile();
       setLoading(false);
       return response.data;
     } catch (err: any) {
@@ -165,28 +148,13 @@ export const useAuthHook = () => {
     }
   }, []);
 
-  const loginWithProfile = useCallback(async (credentials: LoginCredentials): Promise<{ loginResponse: LoginResponse; profile: UserProfile }> => {
-    try {
-      const loginResponse = await login(credentials);
-
-      try {
-        const profile = await getProfile();
-        return { loginResponse, profile };
-      } catch (profileError) {
-        return { loginResponse, profile: {} as UserProfile };
-      }
-    } catch (error) {
-      throw error;
-    }
-  }, [login, getProfile]);
-
   const logout = useCallback(async (): Promise<void> => {
     setLoading(true);
-    setError(null);
+   
 
     try {
       try {
-        await api.post('/auth/logout');
+        await AUTH_APIS.logout();
       } catch (err) {
         console.warn('Logout API call failed:', err);
       }
@@ -203,10 +171,10 @@ export const useAuthHook = () => {
 
   const updateProfile = useCallback(async (profileData: Partial<UserProfile>): Promise<UserProfile> => {
     setLoading(true);
-    setError(null);
+   
 
     try {
-      const response = await api.patch('/auth/profile', profileData);
+      const response = await AUTH_APIS.updateProfile(profileData);
       setLoading(false);
       return response.data;
     } catch (err: any) {
@@ -219,10 +187,10 @@ export const useAuthHook = () => {
 
   const getSession = useCallback(async (): Promise<UserSession> => {
     setLoading(true);
-    setError(null);
+   
 
     try {
-      const response = await api.get('/auth/me');
+      const response = await AUTH_APIS.getSession();
       setLoading(false);
       return response.data.user;
     } catch (err: any) {
@@ -235,10 +203,10 @@ export const useAuthHook = () => {
 
   const forgotPassword = useCallback(async (email: string): Promise<void> => {
     setLoading(true);
-    setError(null);
+   
 
     try {
-      await api.post('/auth/forgot-password', { email });
+      await AUTH_APIS.forgotPassword({ email });
       setLoading(false);
     } catch (err: any) {
       setLoading(false);
@@ -250,10 +218,10 @@ export const useAuthHook = () => {
 
   const resetPassword = useCallback(async (token: string, newPassword: string): Promise<void> => {
     setLoading(true);
-    setError(null);
+   
 
     try {
-      await api.post('/auth/reset-password', { token, newPassword });
+      await AUTH_APIS.resetPassword({ token, newPassword });
       setLoading(false);
     } catch (err: any) {
       setLoading(false);
@@ -265,10 +233,10 @@ export const useAuthHook = () => {
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string): Promise<void> => {
     setLoading(true);
-    setError(null);
+   
 
     try {
-      await api.post('/auth/change-password', { currentPassword, newPassword });
+      await AUTH_APIS.changePassword({ currentPassword, newPassword });
       setLoading(false);
     } catch (err: any) {
       setLoading(false);
@@ -280,18 +248,10 @@ export const useAuthHook = () => {
 
   const uploadAvatar = useCallback(async (file: File): Promise<{ avatar: string }> => {
     setLoading(true);
-    setError(null);
+   
 
     try {
-      const formData = new FormData();
-      formData.append('avatar', file);
-
-      const response = await api.post('/auth/upload-avatar', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
+      const response = await AUTH_APIS.uploadAvatar(file);
       setLoading(false);
       return response.data;
     } catch (err: any) {
@@ -308,7 +268,6 @@ export const useAuthHook = () => {
     login,
     register,
     getProfile,
-    loginWithProfile,
     logout,
     updateProfile,
     getSession,

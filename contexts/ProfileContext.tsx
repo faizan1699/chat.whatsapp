@@ -84,13 +84,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     };
 
     useEffect(() => {
-        // Load profile from localStorage first
         const storedProfile = localStorage.getItem('user_data');
         const accessToken = localStorage.getItem('session_token');
         
         if (storedProfile && accessToken) {
             const parsedProfile = JSON.parse(storedProfile);
-            // Get avatar and bio from localStorage or set empty
             setProfile({
                 ...parsedProfile,
                 avatar: parsedProfile.avatar || '',
@@ -105,7 +103,6 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
             setLoading(false);
         }
         
-        // Then refresh from server if we have a token
         if (accessToken) {
             refreshProfile();
         } else {

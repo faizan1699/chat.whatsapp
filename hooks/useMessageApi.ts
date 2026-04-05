@@ -1,10 +1,10 @@
 import { useState, useCallback } from 'react';
-import axios from 'axios';
 import { supabaseAdmin } from '@/utils/supabase-server';
 import { uploadAudio } from '@/utils/supabase';
 import { getClientCookies } from '@/utils/cookies';
 import { Message } from '@/types/message';
 import { frontendAuth } from '@/utils/frontendAuth';
+import { MESSAGE_APIS } from '@/libs/apis/message.api';
 
 interface Conversation {
   id: string;
@@ -82,12 +82,7 @@ export const useMessageApi = () => {
         throw new Error('Selected user not found');
       }
 
-      const response = await axios.post('/api/conversations', {
-        participantIds: [currentUserId, selectedUserData.id]
-      }, {
-        headers: getAuthHeaders()
-      });
-
+      const response = await MESSAGE_APIS.createConversation([currentUserId, selectedUserData.id]);
       currentConversation = response.data;
     }
 
@@ -96,7 +91,7 @@ export const useMessageApi = () => {
     }
 
     return currentConversation;
-  }, [getAuthHeaders]);
+  }, []);
 
   const sendMessage = useCallback(async (
     content: string,
@@ -130,29 +125,19 @@ export const useMessageApi = () => {
       // If there's a file, upload it first
       let uploadedFile = null;
       if (file) {
-        const formData = new FormData();
         const response = await fetch(file.url);
         const blob = await response.blob();
-        formData.append('file', blob, file.filename);
-
-        const uploadResponse = await fetch('/api/upload/file', {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: formData
-        });
-
-        if (!uploadResponse.ok) {
-          throw new Error('Failed to upload file');
-        }
-
-        const uploadResult = await uploadResponse.json();
+        const fileName = file.filename || `file-${Date.now()}`;
+        const fileObj = new File([blob], fileName, { type: file.type });
+        
+        const uploadResult = await MESSAGE_APIS.uploadFile(fileObj);
         uploadedFile = {
-          ...uploadResult.file,
+          ...uploadResult.data,
           caption: file.caption
         };
       }
 
-      const response = await axios.post('/api/messages', {
+      const response = await MESSAGE_APIS.sendMessage({
         conversationId: currentConversation.id,
         senderId: userId,
         content,
@@ -160,8 +145,6 @@ export const useMessageApi = () => {
         from: username,
         replyTo: replyingTo?.id || null,
         file: uploadedFile
-      }, {
-        headers: getAuthHeaders()
       });
 
       setLoading(false);
@@ -196,7 +179,9 @@ export const useMessageApi = () => {
       const fileName = `voice-${Date.now()}-${userId}`;
       const publicUrl = await uploadAudio(audioBlob, fileName, userId);
 
-      const response = await axios.post('/api/messages', {
+      const response = await MESSAGE_APIS.uploadVoice(audioBlob, fileName, userId);
+      
+      const messageResponse = await MESSAGE_APIS.sendMessage({
         conversationId: currentConversation.id,
         senderId: userId,
         isVoice: true,
@@ -204,8 +189,6 @@ export const useMessageApi = () => {
         audioDuration: duration,
         to: selectedUser,
         from: username
-      }, {
-        headers: getAuthHeaders()
       });
 
       setLoading(false);
@@ -225,11 +208,9 @@ export const useMessageApi = () => {
     setError(null);
 
     try {
-      const response = await axios.put('/api/messages', {
+      const response = await MESSAGE_APIS.updateMessage({
         messageId,
         content
-      }, {
-        headers: getAuthHeaders()
       });
 
       setLoading(false);
@@ -249,10 +230,7 @@ export const useMessageApi = () => {
     setError(null);
 
     try {
-      await axios.delete('/api/messages', {
-        headers: getAuthHeaders(),
-        data: { messageId, type }
-      });
+      await MESSAGE_APIS.deleteMessage(messageId, type);
 
       setLoading(false);
     } catch (err: any) {
@@ -270,12 +248,7 @@ export const useMessageApi = () => {
     setError(null);
 
     try {
-      const response = await axios.patch('/api/messages', {
-        messageId,
-        isPinned
-      }, {
-        headers: getAuthHeaders()
-      });
+      const response = await MESSAGE_APIS.pinMessage(messageId, isPinned);
 
       setLoading(false);
       return response.data;
@@ -293,9 +266,7 @@ export const useMessageApi = () => {
     setError(null);
 
     try {
-      const response = await axios.get(`/api/conversations/${conversationId}/messages`, {
-        headers: getAuthHeaders()
-      });
+      const response = await MESSAGE_APIS.getMessages(conversationId);
       setLoading(false);
       return response.data;
     } catch (err: any) {
@@ -323,26 +294,29 @@ export const useMessageApi = () => {
         userId
       );
 
-      const response = await axios.post('/api/messages', {
+      const messageResponse = await MESSAGE_APIS.sendMessage({
         conversationId: currentConversation.id,
         senderId: userId,
-        content: failedMessage.message,
+        content: failedMessage.content || failedMessage.message,
         to: failedMessage.to,
         from: username,
+        replyTo: failedMessage.replyTo?.id || null,
+        file: failedMessage.file,
+        isVoice: failedMessage.isVoiceMessage,
+        audioUrl: failedMessage.audioUrl,
+        audioDuration: failedMessage.audioDuration,
         isRetry: true,
         originalMessageId: failedMessage.id
-      }, {
-        headers: getAuthHeaders()
       });
 
       setLoading(false);
-      return response.data;
+      return messageResponse.data;
     } catch (err: any) {
       setLoading(false);
       setError(err.message || 'Failed to retry message');
       throw err;
     }
-  }, [getCurrentUserId, getOrCreateConversation, getAuthHeaders]);
+  }, [getCurrentUserId, getOrCreateConversation]);
 
   return {
     loading,

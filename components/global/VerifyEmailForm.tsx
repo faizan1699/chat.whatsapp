@@ -41,7 +41,7 @@ export default function VerifyEmailForm({ email, onVerified }: VerifyEmailFormPr
                         id: responseData.user.id,
                         username: responseData.user.username,
                         email: email,
-                        phoneNumber: ''
+                        phone: ''
                     }
                 );
                 console.log('✅ Session stored in localStorage after email verification');
