@@ -18,7 +18,12 @@ interface HobbiesSelectorProps {
     sideClickClose?: boolean;
 }
 
-export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, className = '', sideClickClose = true }: HobbiesSelectorProps) {
+const HobbiesSelector = ({ 
+    selectedHobbies,
+    onHobbiesChange,
+    className = '', 
+    sideClickClose = true
+}: HobbiesSelectorProps) => {
 
     const [hobbies, setHobbies] = useState<Hobby[]>([]);
     const [loading, setLoading] = useState(true);
@@ -288,3 +293,5 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
         </div>
     );
 }
+
+export default HobbiesSelector

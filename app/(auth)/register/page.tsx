@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense, useEffect } from 'react';
+import { useState, Suspense, useEffect, FC, Fragment } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { Eye, EyeOff, MessageCircle, Lock, Mail, User, Camera, Upload, Check } from 'lucide-react';
@@ -11,7 +11,7 @@ import Cropper from 'react-easy-crop';
 import GlobalImageCropper from '@/components/global/GlobalImageCropper';
 import HobbiesSelector from '@/components/global/HobbiesSelector';
 
-interface RegisterFormData {
+interface Props {
     username: string;
     email: string;
     password: string;
@@ -27,7 +27,7 @@ interface RegisterFormData {
     hobbies?: string[];
 }
 
-function RegisterForm() {
+const RegisterForm = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [avatarPreview, setAvatarPreview] = useState<string>('');
@@ -70,7 +70,7 @@ function RegisterForm() {
         watch,
         setValue,
         trigger,
-    } = useForm<RegisterFormData>();
+    } = useForm<Props>();
 
     const password = watch('password');
 
@@ -82,7 +82,7 @@ function RegisterForm() {
     };
 
 
-    const onBasicInfoSubmit = async (data: RegisterFormData) => {
+    const onBasicInfoSubmit = async (data: Props) => {
         try {
             const response = await api.post('/auth/register', {
                 username: data.username,
@@ -107,7 +107,7 @@ function RegisterForm() {
         }
     };
 
-    const onVerificationSubmit = async (data: RegisterFormData) => {
+    const onVerificationSubmit = async (data: Props) => {
         try {
             const response = await api.post('/auth/verify-email', {
                 email: data.email,
@@ -137,7 +137,7 @@ function RegisterForm() {
         }
     };
 
-    const onFinalSubmit = async (data: RegisterFormData) => {
+    const onFinalSubmit = async (data: Props) => {
         try {
             const response = await api.post('/auth/complete-registration', {
                 username: data.username,
@@ -160,7 +160,7 @@ function RegisterForm() {
         }
     };
 
-    const onSubmit = (data: RegisterFormData) => {
+    const onSubmit = (data: Props) => {
         if (step === 1) {
             onBasicInfoSubmit(data);
         } else if (step === 2) {
@@ -415,7 +415,7 @@ function RegisterForm() {
                 </label>
                 <textarea
                     {...register('address')}
-                    rows={3}
+                    rows={1}
                     className={`block w-full px-3 py-3 bg-gray-50 border ${errors.address ? 'border-red-300' : 'border-gray-300'
                         } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors resize-none`}
                     placeholder="Enter your address"
@@ -423,14 +423,6 @@ function RegisterForm() {
                 {errors.address && (
                     <p className="mt-2 text-sm text-red-600">{errors.address.message}</p>
                 )}
-            </div>
-
-            <div className="md:col-span-2">
-                <HobbiesSelector
-                    selectedHobbies={watch('hobbies') || []}
-                    onHobbiesChange={(hobbyIds) => setValue('hobbies', hobbyIds)}
-                    sideClickClose={false}
-                />
             </div>
         </div>
     );
@@ -535,15 +527,13 @@ function RegisterForm() {
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-            <div className="w-full max-w-md md:max-w-lg lg:max-w-xl bg-white rounded-xl shadow-lg p-8">
+            <div className="w-full  max-w-[1000px] bg-white rounded-xl shadow-lg p-8 max-sm:px-2">
                 <div className="text-center mb-8">
                     <div className="mx-auto w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mb-4">
                         <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
                         </svg>
                     </div>
-                    <h1 className="text-2xl font-bold text-gray-800 mb-2">Video Calling App</h1>
-                    <p className="text-gray-600">Create your account</p>
                 </div>
 
                 <div className="mb-6">
@@ -564,11 +554,6 @@ function RegisterForm() {
                             ))}
                         </div>
                     </div>
-                    <p className="text-sm text-gray-600">
-                        {step === 1 && 'Fill in your details to get started'}
-                        {step === 2 && 'Enter the 6-digit code sent to your email'}
-                        {step === 3 && 'Add a profile picture (optional)'}
-                    </p>
                 </div>
 
                 <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
@@ -576,14 +561,12 @@ function RegisterForm() {
                         {step === 2 && renderStep2()}
                         {step === 3 && renderStep3()}
 
-                        {/* Error Message */}
                         {errors.root && (
                             <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                                 <p className="text-sm text-red-600">{errors.root.message}</p>
                             </div>
                         )}
 
-                        {/* Submit Button */}
                         <button
                             type="submit"
                             disabled={isSubmitting}
@@ -600,16 +583,16 @@ function RegisterForm() {
                                     {step === 3 && 'Completing...'}
                                 </div>
                             ) : (
-                                <>
+                                <Fragment>
                                     {step === 1 && 'Create Account'}
                                     {step === 2 && 'Verify Email'}
                                     {step === 3 && 'Complete Registration'}
-                                </>
+                                </Fragment>
                             )}
                         </button>
                     </form>
 
-                    <div className="text-center">
+                    <div className="text-center mt-6">
                         <p className="text-sm text-gray-600">
                             Already have an account?{' '}
                             <a href="/login" className="text-blue-600 hover:text-blue-700 font-medium">
@@ -644,10 +627,5 @@ function RegisterForm() {
     );
 }
 
-export default function RegisterPage() {
-    return (
-        <Suspense fallback={<div>Loading...</div>}>
-            <RegisterForm />
-        </Suspense>
-    );
-}
+
+export default RegisterForm;
