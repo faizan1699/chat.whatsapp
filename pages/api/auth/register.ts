@@ -89,7 +89,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                     return res.status(400).json({ error: 'Email is already registered' });
                 } else if (errorMessage.includes('users_phone_number_key')) {
                     return res.status(400).json({ error: 'Phone number is already registered' });
-                } else if (errorMessage.includes('UserMeta_cnic_key')) {
+                } else if (errorMessage.includes('users_meta_cnic_key')) {
                     return res.status(400).json({ error: 'CNIC is already registered' });
                 } else {
                     return res.status(400).json({ error: 'Username, email, phone or CNIC already exists' });
@@ -101,7 +101,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // Create UserMeta record if userMeta data is provided
         if (userMeta && Object.keys(userMeta).length > 0) {
             const { error: metaError } = await supabaseAdmin
-                .from('UserMeta')
+                .from('users_meta')
                 .insert({
                     userId: user.id,
                     dateOfBirth: userMeta.dateOfBirth || null,
@@ -126,7 +126,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             }));
 
             const { error: hobbiesError } = await supabaseAdmin
-                .from('UserHobby')
+                .from('user_hoby')
                 .insert(userHobbies);
 
             if (hobbiesError) {

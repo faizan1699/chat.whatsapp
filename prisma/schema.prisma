@@ -81,26 +81,26 @@ model UserMeta {
   updatedAt    DateTime  @updatedAt
   
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userHobbies  UserHobby[]
+  userHobbies  user_hoby[]
 }
 
-model Hobby {
+model hoby {
   id        String      @id @default(cuid())
   name      String      @unique
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
   
-  userHobbies UserHobby[]
+  userHobbies user_hoby[]
 }
 
-model UserHobby {
+model user_hoby {
   id        String   @id @default(cuid())
   userId    String
   hobbyId   String
   createdAt DateTime @default(now())
   
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  hobby Hobby @relation(fields: [hobbyId], references: [id], onDelete: Cascade)
+  hobby hoby  @relation(fields: [hobbyId], references: [id], onDelete: Cascade)
   
   @@unique([userId, hobbyId])
   @@index([userId])

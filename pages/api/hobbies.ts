@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         try {
             // Get all available hobbies
             const { data: hobbies, error } = await supabaseAdmin
-                .from('Hobby')
+                .from('hoby')
                 .select('id, name')
                 .order('name', { ascending: true });
 
@@ -23,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             // Get user's current hobbies
             const { data: userHobbies, error: userHobbiesError } = await supabaseAdmin
-                .from('UserHobby')
+                .from('user_hoby')
                 .select('hobbyId')
                 .eq('userId', authUser.userId);
 
@@ -56,7 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             // Check if hobby already exists
             const { data: existingHobby, error: checkError } = await supabaseAdmin
-                .from('Hobby')
+                .from('hoby')
                 .select('id, name')
                 .eq('name', trimmedName)
                 .single();
@@ -72,7 +72,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             // Create new hobby
             const { data: newHobby, error: createError } = await supabaseAdmin
-                .from('Hobby')
+                .from('hoby')
                 .insert({
                     name: trimmedName,
                     updatedAt: new Date().toISOString()

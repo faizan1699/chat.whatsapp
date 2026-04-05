@@ -19,22 +19,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             if (userError || !userData) return res.status(404).json({ error: 'User not found' });
 
-            // Get user meta data
             const { data: meta_data, error: metaError } = await supabaseAdmin
-                .from('UserMeta')
+                .from('users_meta')
                 .select('bio, dateOfBirth, fatherName, address, cnic, gender')
                 .eq('userId', authUser.userId)
                 .single();
 
             const meta: any = metaError ? {} : (meta_data || {});
 
-            // Get user hobbies
             const { data: userHobbies, error: hobbiesError } = await supabaseAdmin
-                .from('UserHobby')
-                .select('hobbyId')
+                .from('user_hoby')
+                .select('hobbyId, hoby(name)')
                 .eq('userId', authUser.userId);
 
-            const hobbyIds = hobbiesError ? [] : (userHobbies?.map((uh: any) => uh.hobbyId) || []);
+            const hobbies = hobbiesError ? [] : (userHobbies?.map((uh: any) => ({
+                id: uh.hobbyId,
+                name: uh.hoby?.name || 'Unknown'
+            })) || []);
 
             return res.status(200).json({
                 id: userData.id,
@@ -48,9 +49,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 address: meta.address || null,
                 cnic: meta.cnic || null,
                 gender: meta.gender || null,
-                hobbies: hobbyIds,
+                hobbies: hobbies,
             });
         } catch (err) {
+            console.error('Profile GET error:', err);
             return res.status(500).json({ error: 'Failed to fetch profile' });
         }
     }
@@ -136,7 +138,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (hasMetaUpdates) {
             // Check if user meta record exists
             const { data: existingMeta, error: existingMetaError } = await supabaseAdmin
-                .from('UserMeta')
+                .from('users_meta')
                 .select('id')
                 .eq('userId', authUser.userId)
                 .single();
@@ -149,7 +151,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             // Check CNIC uniqueness if it's being updated
             if (cnic !== undefined && cnic !== null && cnic !== '') {
                 const { data: existingCnic, error: cnicError } = await supabaseAdmin
-                    .from('UserMeta')
+                    .from('users_meta')
                     .select('id, userId')
                     .eq('cnic', cnic)
                     .neq('userId', authUser.userId)
@@ -176,7 +178,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             if (existingMeta) {
                 // Update existing record
                 const { data, error } = await supabaseAdmin
-                    .from('UserMeta')
+                    .from('users_meta')
                     .update(metaUpdates)
                     .eq('userId', authUser.userId)
                     .select('bio, dateOfBirth, fatherName, address, cnic, gender')
@@ -193,7 +195,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             } else {
                 // Create new record
                 const { data, error } = await supabaseAdmin
-                    .from('UserMeta')
+                    .from('users_meta')
                     .insert({ 
                         userId: authUser.userId, 
                         createdAt: new Date().toISOString(),
@@ -218,7 +220,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (hobbies !== undefined) {
             // Delete existing user hobbies
             const { error: deleteError } = await supabaseAdmin
-                .from('UserHobby')
+                .from('user_hoby')
                 .delete()
                 .eq('userId', authUser.userId);
 
@@ -229,15 +231,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             // Add new hobbies if any provided
             if (Array.isArray(hobbies) && hobbies.length > 0) {
-                const userHobbies = hobbies.map((hobbyId: string) => ({
+                const userHobbiesPayload = hobbies.map((hobbyId: string) => ({
                     userId: authUser.userId,
                     hobbyId,
                     createdAt: new Date().toISOString()
                 }));
 
                 const { error: insertError } = await supabaseAdmin
-                    .from('UserHobby')
-                    .insert(userHobbies);
+                    .from('user_hoby')
+                    .insert(userHobbiesPayload);
 
                 if (insertError) {
                     console.error('Error adding hobbies:', insertError);
@@ -287,18 +289,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             // Get updated meta data and hobbies
             const finalMeta: any = metaUpdateResult || {};
-            let finalHobbies: string[] = [];
+            let finalHobbies: any[] = [];
             
-            if (hobbies !== undefined) {
-                finalHobbies = hobbies;
-            } else {
-                // Fetch current hobbies if not updated
-                const { data: currentHobbies } = await supabaseAdmin
-                    .from('UserHobby')
-                    .select('hobbyId')
-                    .eq('userId', authUser.userId);
-                finalHobbies = currentHobbies?.map((uh: any) => uh.hobbyId) || [];
-            }
+            // Fetch updated hobbies with names
+            const { data: updatedHobbies, error: updatedHobbiesError } = await supabaseAdmin
+                .from('user_hoby')
+                .select('hobbyId, hoby(name)')
+                .eq('userId', authUser.userId);
+            
+            finalHobbies = updatedHobbies?.map((uh: any) => ({
+                id: uh.hobbyId,
+                name: uh.hoby?.name || 'Unknown'
+            })) || [];
             
             return res.status(200).json({
                 id: userData.id,

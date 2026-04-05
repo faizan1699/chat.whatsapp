@@ -15,7 +15,7 @@ interface UserProfile {
     address?: string;
     cnic?: string;
     gender?: string;
-    hobbies?: string[];
+    hobbies?: { id: string, name: string }[];
 }
 
 interface ProfileContextType {

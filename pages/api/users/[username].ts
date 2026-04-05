@@ -32,6 +32,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         const bio = metaError ? '' : (meta_data?.bio || '');
 
+        // Get user hobbies
+        const { data: userHobbies, error: hobbiesError } = await supabaseAdmin
+            .from('user_hoby')
+            .select('hobbyId, hoby(name)')
+            .eq('userId', user.id);
+
+        const hobbies = hobbiesError ? [] : (userHobbies?.map((uh: any) => ({
+            id: uh.hobbyId,
+            name: uh.hoby?.name || 'Unknown'
+        })) || []);
+
         return res.status(200).json({
             id: user.id,
             username: user.username,
@@ -39,6 +50,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             phone: user.phone_number,
             avatar: user.avatar,
             bio: bio,
+            hobbies: hobbies,
             createdAt: user.created_at,
             lastSeen: user.last_seen
         });

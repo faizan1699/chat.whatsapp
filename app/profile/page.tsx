@@ -9,6 +9,7 @@ import api from '@/utils/api';
 import { useImageCropper } from '@/hooks/useImageCropper';
 import GlobalImageCropper from '@/components/global/GlobalImageCropper';
 import HobbiesSelector from '@/components/global/HobbiesSelector';
+import { NumericFormat, PatternFormat } from 'react-number-format';
 
 interface UserProfile {
     id: string;
@@ -22,7 +23,7 @@ interface UserProfile {
     address?: string;
     cnic?: string;
     gender?: string;
-    hobbies?: string[];
+    hobbies?: { id: string, name: string }[];
     createdAt: string;
     lastSeen: string;
 }
@@ -79,6 +80,7 @@ export default function ProfilePage() {
         } else {
             setIsOwnProfile(true);
             if (ownProfile) {
+                const mappedHobbies = (ownProfile.hobbies || []).map((h: any) => typeof h === 'string' ? h : h.id);
                 setViewingProfile({
                     ...ownProfile,
                     bio: ownProfile.bio || '',
@@ -95,7 +97,7 @@ export default function ProfilePage() {
                     address: ownProfile.address || '',
                     cnic: ownProfile.cnic || '',
                     gender: ownProfile.gender || '',
-                    hobbies: ownProfile.hobbies || []
+                    hobbies: mappedHobbies
                 });
             }
             setLoading(false);
@@ -122,7 +124,7 @@ export default function ProfilePage() {
                     address: ownProfile.address || '',
                     cnic: ownProfile.cnic || '',
                     gender: ownProfile.gender || '',
-                    hobbies: ownProfile.hobbies || []
+                    hobbies: (ownProfile.hobbies || []).map((h: any) => typeof h === 'string' ? h : h.id)
                 });
             }
             resetCropper();
@@ -162,7 +164,8 @@ export default function ProfilePage() {
             if (editForm.gender !== ownProfile?.gender) {
                 changedFields.gender = editForm.gender || undefined;
             }
-            if (JSON.stringify(editForm.hobbies) !== JSON.stringify(ownProfile?.hobbies)) {
+            const currentHobbyIds = (ownProfile?.hobbies || []).map((h: any) => typeof h === 'string' ? h : h.id);
+            if (JSON.stringify(editForm.hobbies) !== JSON.stringify(currentHobbyIds)) {
                 changedFields.hobbies = editForm.hobbies;
             }
             
@@ -471,14 +474,16 @@ export default function ProfilePage() {
                                     </label>
                                     {isOwnProfile && isEditing ? (
                                         <div className="space-y-1">
-                                            <input
+                                            <PatternFormat
                                                 type="tel"
                                                 value={editForm.phone}
-                                                onChange={(e) => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
-                                                placeholder="+1234567890 (optional)"
+                                                onValueChange={(values: any) => setEditForm(prev => ({ ...prev, phone: values.value }))}
+                                                placeholder="+1 (234) 567-8900 (optional)"
+                                                format="+## (###) ###-####"
+                                                mask="_"
                                                 className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors"
                                             />
-                                            <p className="text-xs text-gray-500">Optional: Enter a unique phone number (min 10 digits)</p>
+                                            <p className="text-xs text-gray-500">Optional: Enter a unique phone number</p>
                                         </div>
                                     ) : (
                                         <p className="text-lg font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-lg min-h-[44px] flex items-center">
@@ -591,14 +596,14 @@ export default function ProfilePage() {
                                     </label>
                                     {isOwnProfile && isEditing ? (
                                         <div className="space-y-1">
-                                            <input
+                                            <PatternFormat
                                                 type="text"
                                                 value={editForm.cnic}
-                                                onChange={(e) => setEditForm(prev => ({ ...prev, cnic: e.target.value }))}
+                                                onValueChange={(values: any) => setEditForm(prev => ({ ...prev, cnic: values.value }))}
                                                 placeholder="XXXXX-XXXXXXX-X"
+                                                format="#####-#######-#"
+                                                mask="_"
                                                 className="w-full text-lg font-medium text-gray-900 border border-gray-300 rounded-lg px-3 py-2 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-colors"
-                                                maxLength={15}
-                                                pattern="[0-9]{5}-[0-9]{7}-[0-9]{1}"
                                             />
                                             <p className="text-xs text-gray-500">Optional: Format XXXXX-XXXXXXX-X (unique)</p>
                                         </div>
@@ -662,15 +667,16 @@ export default function ProfilePage() {
                                         <div className="space-y-2">
                                             {viewingProfile.hobbies && viewingProfile.hobbies.length > 0 ? (
                                                 <div className="flex flex-wrap gap-2">
-                                                    {viewingProfile.hobbies.map((hobbyId: string) => {
-                                                        // This is a simplified display - in real implementation, you'd fetch hobby names
+                                                    {viewingProfile.hobbies.map((hobby: any) => {
+                                                        const hobbyName = typeof hobby === 'object' ? hobby.name : `Hobby ${hobby.slice(0, 8)}`;
+                                                        const hobbyId = typeof hobby === 'object' ? hobby.id : hobby;
                                                         return (
                                                             <div
                                                                 key={hobbyId}
                                                                 className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm"
                                                             >
                                                                 <Tag size={14} />
-                                                                <span>Hobby {hobbyId.slice(0, 8)}</span>
+                                                                <span>{hobbyName}</span>
                                                             </div>
                                                         );
                                                     })}

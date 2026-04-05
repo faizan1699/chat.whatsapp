@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Plus, X, Tag, Search } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Plus, X, Tag } from 'lucide-react';
 import api from '@/utils/api';
+import { debounce } from '@/utils/debounce';
 
 interface Hobby {
     id: string;
@@ -24,10 +25,30 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
     const [addingHobby, setAddingHobby] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [showDropdown, setShowDropdown] = useState(false);
+    const [searchResults, setSearchResults] = useState<Hobby[]>([]);
 
     useEffect(() => {
         fetchHobbies();
     }, []);
+
+    const debouncedSearch = useCallback(
+        debounce((query: string) => {
+            if (query.trim() === '') {
+                setSearchResults([]);
+                return;
+            }
+            const filtered = hobbies.filter(hobby =>
+                hobby.name.toLowerCase().includes(query.toLowerCase()) &&
+                !selectedHobbies.includes(hobby.id)
+            );
+            setSearchResults(filtered);
+        }, 300),
+        [hobbies, selectedHobbies]
+    );
+
+    useEffect(() => {
+        debouncedSearch(searchTerm);
+    }, [searchTerm, debouncedSearch]);
 
     const fetchHobbies = async () => {
         try {
@@ -54,10 +75,41 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
             setHobbies([...hobbies, newHobby]);
             setNewHobbyName('');
             setShowAddNew(false);
-            
+
             // Auto-select the newly added hobby
             const updatedSelection = [...selectedHobbies, newHobby.id];
             onHobbiesChange(updatedSelection);
+
+            setSearchResults([]);
+            setSearchTerm('');
+        } catch (error: any) {
+            alert(error.response?.data?.error || 'Failed to add hobby');
+        } finally {
+            setAddingHobby(false);
+        }
+    };
+
+    // Add hobby from search input if not found
+    const handleAddFromSearch = async () => {
+        if (!searchTerm.trim()) return;
+
+        setAddingHobby(true);
+        try {
+            const response = await api.post('/hobbies', {
+                name: searchTerm.trim()
+            });
+
+            const newHobby = response.data;
+            setHobbies([...hobbies, newHobby]);
+
+            // Auto-select the newly added hobby
+            const updatedSelection = [...selectedHobbies, newHobby.id];
+            onHobbiesChange(updatedSelection);
+
+            // Clear search
+            setSearchTerm('');
+            setSearchResults([]);
+            setShowDropdown(false);
         } catch (error: any) {
             console.error('Error adding hobby:', error);
             alert(error.response?.data?.error || 'Failed to add hobby');
@@ -70,7 +122,7 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
         const updatedSelection = selectedHobbies.includes(hobbyId)
             ? selectedHobbies.filter(id => id !== hobbyId)
             : [...selectedHobbies, hobbyId];
-        
+
         onHobbiesChange(updatedSelection);
     };
 
@@ -92,19 +144,12 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
         );
     }
 
-    const filteredHobbies = hobbies.filter(hobby => 
-        hobby.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
     const selectedHobbyObjects = hobbies.filter(hobby => selectedHobbies.includes(hobby.id));
-    const availableHobbies = hobbies.filter(hobby => !selectedHobbies.includes(hobby.id) && 
-        hobby.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
 
     return (
         <div className={`space-y-3 ${className}`}>
             <label className="block text-sm font-medium text-gray-700">Hobbies (Optional)</label>
-            
+
             {/* Selected Hobbies */}
             {selectedHobbyObjects.length > 0 && (
                 <div className="flex flex-wrap gap-2">
@@ -127,7 +172,6 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
                 </div>
             )}
 
-            {/* Add Hobbies */}
             <div className="flex gap-2">
                 <div className="relative flex-1">
                     <input
@@ -142,27 +186,39 @@ export default function HobbiesSelector({ selectedHobbies, onHobbiesChange, clas
                         placeholder="Search or select a hobby..."
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     />
-                    
+
                     {/* Dropdown */}
-                    {showDropdown && filteredHobbies.length > 0 && (
+                    {showDropdown && (
                         <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                            {filteredHobbies.map((hobby) => (
-                                <button
-                                    key={hobby.id}
-                                    type="button"
-                                    onClick={() => {
-                                        handleHobbyToggle(hobby.id);
-                                        setSearchTerm('');
-                                        setShowDropdown(false);
-                                    }}
-                                    className="w-full px-3 py-2 text-left hover:bg-gray-100 transition-colors flex items-center justify-between"
-                                >
-                                    <span className="flex-1">{hobby.name}</span>
-                                    {selectedHobbies.includes(hobby.id) && (
+                            {searchResults.length > 0 ? (
+                                searchResults.map((hobby: Hobby) => (
+                                    <button
+                                        key={hobby.id}
+                                        type="button"
+                                        onClick={() => {
+                                            handleHobbyToggle(hobby.id);
+                                            setSearchTerm('');
+                                            setShowDropdown(false);
+                                        }}
+                                        className="w-full px-3 py-2 text-left hover:bg-gray-100 transition-colors flex items-center justify-between"
+                                    >
+                                        <span className="flex-1">{hobby.name}</span>
                                         <Tag size={14} className="text-green-600" />
-                                    )}
-                                </button>
-                            ))}
+                                    </button>
+                                ))
+                            ) : searchTerm.trim() && (
+                                <div className="p-3">
+                                    <p className="text-sm text-gray-500 mb-2">No hobbies found. Add "{searchTerm}" as a new hobby?</p>
+                                    <button
+                                        type="button"
+                                        onClick={handleAddFromSearch}
+                                        disabled={addingHobby}
+                                        className="w-full px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                                    >
+                                        {addingHobby ? 'Adding...' : `Add "${searchTerm}"`}
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
