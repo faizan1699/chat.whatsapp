@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, X, Tag } from 'lucide-react';
-import api from '@/utils/api';
 import { debounce } from '@/utils/debounce';
 import { useClickOutside } from '@/hooks/useClickOutside';
+import { HOBBIES_APIS } from '@/libs/apis';
 
 interface Hobby {
     id: string;
@@ -66,8 +66,8 @@ const HobbiesSelector = ({
 
     const fetchHobbies = async () => {
         try {
-            const response = await api.get('/hobbies');
-            setHobbies(response.data.hobbies);
+            const response = await HOBBIES_APIS.getHobbies();
+            setHobbies(response?.hobbies);
         } catch (error) {
         } finally {
             setLoading(false);
@@ -79,9 +79,7 @@ const HobbiesSelector = ({
 
         setAddingHobby(true);
         try {
-            const response = await api.post('/hobbies', {
-                name: newHobbyName.trim()
-            });
+            const response = await HOBBIES_APIS.addHobby(newHobbyName.trim());
 
             const newHobby = response.data;
             setHobbies([...hobbies, newHobby]);
@@ -104,9 +102,7 @@ const HobbiesSelector = ({
 
         setAddingHobby(true);
         try {
-            const response = await api.post('/hobbies', {
-                name: searchTerm.trim()
-            });
+            const response = await HOBBIES_APIS.addHobby(searchTerm.trim());
 
             const newHobby = response.data;
             setHobbies([...hobbies, newHobby]);

@@ -3,10 +3,10 @@ import { HobbyDTO, ApiResponseDTO } from '@/utils/helpers/models/auth.dto';
 
 export const HOBBIES_APIS = {
   getHobbies: (): Promise<ApiResponseDTO<{ hobbies: HobbyDTO[] }>> => 
-    getRequest('/hobbies'),
+    getRequest('/api/hobbies'),
 
   addHobby: (name: string): Promise<ApiResponseDTO<HobbyDTO>> => 
-    postRequest('/hobbies', { name })
+    postRequest('/api/hobbies', { name })
 };
 
 export default HOBBIES_APIS;

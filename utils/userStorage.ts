@@ -74,7 +74,6 @@ export const userStorage = {
             };
             
             localStorage.setItem('user_data', JSON.stringify(updatedData));
-            console.log('✅ User data saved to localStorage');
         } catch (error) {
             console.error('Error setting user data in localStorage:', error);
         }
